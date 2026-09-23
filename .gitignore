@@ -1,0 +1,27 @@
+
+.env
+.env.*
+!.env.example
+
+# Archivos de Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# Frontend (Node / React / Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backend (Python / FastAPI)
+backend/venv/
+backend/env/
+backend/.venv/
+backend/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage

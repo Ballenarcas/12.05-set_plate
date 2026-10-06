@@ -18,7 +18,7 @@ function MainLayout() {
       <main className="app-main"><Outlet /></main>
       <nav className="bottom-nav" aria-label="Primary navigation">
         {navigationItems.map(({ label, path, icon: Icon }) => (
-          <NavLink key={path} to={path} end={path === '/'} className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}>
+          <NavLink key={path} to={path} end={path === '/'} className={({ isActive }: { isActive: boolean }) => `nav-item${isActive ? ' is-active' : ''}`}>
             <Icon size={21} strokeWidth={2} aria-hidden="true" />
             <span>{label}</span>
           </NavLink>

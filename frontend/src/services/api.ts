@@ -29,3 +29,60 @@ export async function generateTrainerInsight(
   if (!response.ok) throw new Error('Unable to generate trainer insight')
   return response.json() as Promise<TrainerInsightResponse>
 }
+
+export type EntityType = 'food' | 'exercise' | 'routine' | 'meal'
+
+export interface MatchedEntity {
+  id: string
+  name: string
+  category: EntityType
+  score: number
+  matched_term: string
+  metadata: Record<string, unknown>
+}
+
+export interface ParseNaturalLanguageResponse {
+  original_text: string
+  detected_intent: string
+  foods: MatchedEntity[]
+  exercises: MatchedEntity[]
+  routines: MatchedEntity[]
+  meals: MatchedEntity[]
+}
+
+export interface ConversationalSetupRequest {
+  message: string
+  conversation_history?: Array<{ role: string; content: string }>
+}
+
+export interface ConversationalSetupResponse {
+  reply: string
+  detected_intent: string
+  matched_entities: ParseNaturalLanguageResponse
+}
+
+export async function parseNaturalLanguage(
+  text: string,
+  threshold = 0.65,
+): Promise<ParseNaturalLanguageResponse> {
+  const response = await fetch(`${API_URL}/api/v1/ai/parse-intent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, threshold }),
+  })
+  if (!response.ok) throw new Error('Failed to parse natural language')
+  return response.json() as Promise<ParseNaturalLanguageResponse>
+}
+
+export async function conversationalSetup(
+  request: ConversationalSetupRequest,
+): Promise<ConversationalSetupResponse> {
+  const response = await fetch(`${API_URL}/api/v1/ai/conversational-setup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!response.ok) throw new Error('Conversational setup request failed')
+  return response.json() as Promise<ConversationalSetupResponse>
+}
+

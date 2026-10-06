@@ -1,21 +1,40 @@
-from fastapi import FastAPI, Depends, HTTPException
-from supabase import Client
-from supabase_client import get_supabase, SUPABASE_URL
+from fastapi import APIRouter, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+from app.api import ai, nutrition, routines, stats, workouts
+from app.core.config import get_settings
+
+settings = get_settings()
+app = FastAPI(title=settings.app_name)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+api_router = APIRouter(prefix="/api/v1")
+
+
+@api_router.get("/health")
+def health_check() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+api_router.include_router(workouts.router)
+api_router.include_router(routines.router)
+api_router.include_router(nutrition.router)
+api_router.include_router(stats.router)
+api_router.include_router(ai.router)
+app.include_router(api_router)
 
 
 @app.get("/")
-def read_root():
+def read_root() -> dict[str, str | bool]:
     return {
-        "status": "AI Trainer API online",
-        "supabase_configured": bool(SUPABASE_URL),
+        "status": "SET&PLATE API online",
+        "supabase_configured": bool(settings.supabase_url),
     }
 
-
-@app.get("/supabase-status")
-def check_supabase_status(db: Client = Depends(get_supabase)):
-    try:
-        return {"status": "connected", "supabase_url": SUPABASE_URL}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

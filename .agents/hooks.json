@@ -1,0 +1,32 @@
+{
+  "safety-guard": {
+    "enabled": false,
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -Command \"Write-Output 'Pre-tool hook check passed'\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "post-edit-linter": {
+    "enabled": false,
+    "PostToolUse": [
+      {
+        "matcher": "replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -Command \"Write-Output 'File modified successfully'\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

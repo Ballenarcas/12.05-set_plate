@@ -12,7 +12,10 @@ class Settings(BaseSettings):
     groq_model: str = "llama-3.3-70b-versatile"
     cors_origins: str = "http://localhost:5173"
 
-    model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=("../.env", ".env", "backend/.env"),
+        extra="ignore",
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

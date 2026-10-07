@@ -1,4 +1,5 @@
 import { Camera, CircleUserRound, Lightbulb, Plus } from 'lucide-react'
+import { getCurrentUser } from '../services/api'
 
 const macros = [
   { label: 'Protein', value: '45 / 160g' },
@@ -7,14 +8,17 @@ const macros = [
 ]
 
 function Home() {
+  const user = getCurrentUser()
+  const userName = user?.name || 'Ruben'
+
   return (
     <div className="screen">
       <header className="screen-header">
         <div>
           <p className="eyebrow">Good morning</p>
-          <h1>Hello, Ruben</h1>
+          <h1>Hello, {userName}</h1>
         </div>
-        <div className="avatar" aria-label="Ruben's profile"><CircleUserRound size={23} aria-hidden="true" /></div>
+        <div className="avatar" aria-label={`${userName}'s profile`}><CircleUserRound size={23} aria-hidden="true" /></div>
       </header>
       <div className="date-badge">Tue, sept 22</div>
 

@@ -33,3 +33,37 @@ export interface ExerciseListResponse {
   limit: number
 }
 
+export type FitnessGoal = 'Lose Weight' | 'Strength' | 'Hypertrophy'
+
+export interface UserOnboardingFormData {
+  // Screen 1: Authentication
+  firstName: string
+  lastName: string
+  email: string
+  password: string
+  confirmPassword: string
+  agreedToTerms: boolean
+
+  // Screen 2: Fitness Profile
+  birthDate: string
+  gender: 'Male' | 'Female' | 'Other'
+  weight: string
+  height: string
+  mainGoal: FitnessGoal
+}
+
+export interface UserProfile {
+  id?: string
+  email: string
+  name: string
+  surname: string
+  is_premium?: boolean
+  birthDate?: string
+  age?: number
+  gender?: string
+  weight?: number
+  height?: number
+  objective?: FitnessGoal
+}
+
+

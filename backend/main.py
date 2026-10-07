@@ -1,7 +1,7 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, nutrition, routines, stats, workouts
+from app.api import ai, nutrition, routines, stats, users, workouts
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -23,6 +23,7 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
+api_router.include_router(users.router)
 api_router.include_router(workouts.router)
 api_router.include_router(routines.router)
 api_router.include_router(nutrition.router)

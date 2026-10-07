@@ -132,4 +132,93 @@ export async function triggerWgerImport(maxItems?: number) {
   return response.json()
 }
 
+export function calculateAgeFromBirthDate(birthDate: string): number | undefined {
+  if (!birthDate) return undefined
+  const birth = new Date(birthDate)
+  if (isNaN(birth.getTime())) return undefined
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--
+  }
+  return age >= 0 ? age : undefined
+}
+
+export async function submitUserOnboarding(formData: import('../types').UserOnboardingFormData): Promise<import('../types').UserProfile> {
+  const calculatedAge = calculateAgeFromBirthDate(formData.birthDate)
+  const ageInt = calculatedAge !== undefined ? Math.floor(calculatedAge) : undefined
+
+  const payload = {
+    name: formData.firstName.trim(),
+    surname: formData.lastName.trim(),
+    email: formData.email.trim(),
+    password: formData.password,
+    age: ageInt,
+    gender: formData.gender,
+    weight: formData.weight ? parseFloat(formData.weight) : undefined,
+    height: formData.height ? parseInt(formData.height, 10) : undefined,
+    objective: formData.mainGoal,
+  }
+
+  const localProfile: import('../types').UserProfile = {
+    name: payload.name,
+    surname: payload.surname,
+    email: payload.email,
+    birthDate: formData.birthDate,
+    age: calculatedAge,
+    gender: payload.gender,
+    weight: payload.weight,
+    height: payload.height,
+    objective: payload.objective,
+  }
+
+  try {
+    localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+
+  const response = await fetch(`${API_URL}/api/v1/users/onboarding`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    let errorMsg = `Server error (${response.status})`
+    try {
+      const errorData = await response.json()
+      if (errorData.detail) errorMsg = errorData.detail
+    } catch {
+      // Ignore json parse error
+    }
+    throw new Error(errorMsg)
+  }
+
+  const data = await response.json()
+  if (!data.saved_to_supabase) {
+    throw new Error('User was not saved to database. Please try again.')
+  }
+
+  localProfile.id = data.user_id
+  try {
+    localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
+  } catch {
+    // Ignore
+  }
+
+  return localProfile
+}
+
+export function getCurrentUser(): import('../types').UserProfile | null {
+  try {
+    const saved = localStorage.getItem('set_plate_user')
+    return saved ? JSON.parse(saved) : null
+  } catch {
+    return null
+  }
+}
+
+
 

@@ -44,17 +44,24 @@ function Onboarding() {
   const validateScreen1 = (): boolean => {
     const newErrors: Record<string, string> = {}
 
-    if (!formData.firstName.trim()) {
+    const trimmedFirstName = formData.firstName.trim()
+    if (!trimmedFirstName) {
       newErrors.firstName = 'First name is required'
+    } else if (trimmedFirstName.length > 15) {
+      newErrors.firstName = 'First name cannot exceed 15 characters'
     }
 
-    if (!formData.lastName.trim()) {
+    const trimmedLastName = formData.lastName.trim()
+    if (!trimmedLastName) {
       newErrors.lastName = 'Last name is required'
+    } else if (trimmedLastName.length > 25) {
+      newErrors.lastName = 'Last name cannot exceed 25 characters'
     }
 
-    if (!formData.email.trim()) {
+    const trimmedEmail = formData.email.trim()
+    if (!trimmedEmail) {
       newErrors.email = 'Email is required'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       newErrors.email = 'Please enter a valid email address'
     }
 
@@ -87,32 +94,50 @@ function Onboarding() {
     } else {
       const birth = new Date(formData.birthDate)
       const today = new Date()
-      let calculatedAge = today.getFullYear() - birth.getFullYear()
-      const monthDiff = today.getMonth() - birth.getMonth()
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-        calculatedAge--
-      }
-      if (isNaN(calculatedAge) || calculatedAge < 12 || calculatedAge > 120) {
-        newErrors.birthDate = 'Please enter a valid birth date (age 12 - 120)'
+      if (isNaN(birth.getTime()) || birth > today) {
+        newErrors.birthDate = 'Please enter a valid birth date'
+      } else {
+        let calculatedAge = today.getFullYear() - birth.getFullYear()
+        const monthDiff = today.getMonth() - birth.getMonth()
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+          calculatedAge--
+        }
+        if (isNaN(calculatedAge) || calculatedAge < 12 || calculatedAge > 120) {
+          newErrors.birthDate = 'Age must be between 12 and 120 years'
+        }
       }
     }
 
-    if (!formData.weight.trim()) {
+    if (!formData.gender) {
+      newErrors.gender = 'Gender is required'
+    }
+
+    const trimmedWeight = formData.weight.trim()
+    if (!trimmedWeight) {
       newErrors.weight = 'Weight is required'
     } else {
-      const parsedWeight = parseFloat(formData.weight)
-      if (isNaN(parsedWeight) || parsedWeight < 20 || parsedWeight > 350) {
-        newErrors.weight = 'Please enter a realistic weight (20 - 350 kg)'
+      const parsedWeight = parseFloat(trimmedWeight)
+      if (isNaN(parsedWeight) || !/^\d+(\.\d+)?$/.test(trimmedWeight)) {
+        newErrors.weight = 'Weight must be a valid number'
+      } else if (parsedWeight < 20 || parsedWeight > 350) {
+        newErrors.weight = 'Weight must be between 20 and 350 kg'
       }
     }
 
-    if (!formData.height.trim()) {
+    const trimmedHeight = formData.height.trim()
+    if (!trimmedHeight) {
       newErrors.height = 'Height is required'
     } else {
-      const parsedHeight = parseInt(formData.height, 10)
-      if (isNaN(parsedHeight) || parsedHeight < 80 || parsedHeight > 250) {
-        newErrors.height = 'Please enter a realistic height (80 - 250 cm)'
+      const parsedHeight = parseInt(trimmedHeight, 10)
+      if (isNaN(parsedHeight) || !/^\d+$/.test(trimmedHeight)) {
+        newErrors.height = 'Height must be a valid whole number'
+      } else if (parsedHeight < 80 || parsedHeight > 250) {
+        newErrors.height = 'Height must be between 80 and 250 cm'
       }
+    }
+
+    if (!formData.mainGoal) {
+      newErrors.mainGoal = 'Main goal is required'
     }
 
     setErrors(newErrors)
@@ -206,6 +231,7 @@ function Onboarding() {
                   <input
                     id="firstName"
                     type="text"
+                    maxLength={15}
                     className={`form-input${errors.firstName ? ' has-error' : ''}`}
                     placeholder="e.g. Alex"
                     value={formData.firstName}
@@ -223,6 +249,7 @@ function Onboarding() {
                   <input
                     id="lastName"
                     type="text"
+                    maxLength={25}
                     className={`form-input${errors.lastName ? ' has-error' : ''}`}
                     placeholder="e.g. Rivera"
                     value={formData.lastName}
@@ -373,6 +400,9 @@ function Onboarding() {
                   <label className="form-label">
                     Gender <span className="required-star" aria-hidden="true">*</span>
                   </label>
+                  <p className="field-hint">
+                    Used strictly to accurately estimate your basal metabolic rate (BMR) and daily energy expenditure.
+                  </p>
                   <div className="segmented-control" role="radiogroup" aria-label="Gender selection">
                     {(['Male', 'Female', 'Other'] as const).map((genderOption) => (
                       <button
@@ -389,6 +419,7 @@ function Onboarding() {
                       </button>
                     ))}
                   </div>
+                  {errors.gender && <span className="error-text">{errors.gender}</span>}
                 </div>
 
                 {/* Weight & Height Row */}
@@ -444,6 +475,7 @@ function Onboarding() {
                     <option value="Strength">Strength</option>
                     <option value="Hypertrophy">Hypertrophy</option>
                   </select>
+                  {errors.mainGoal && <span className="error-text">{errors.mainGoal}</span>}
                 </div>
 
                 {submitError && (

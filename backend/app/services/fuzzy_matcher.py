@@ -81,7 +81,7 @@ class FuzzyEntityMatcher:
         self.catalog: list[CatalogItem] = self._build_default_catalog()
 
     def _build_default_catalog(self) -> list[CatalogItem]:
-        return [
+        items: list[CatalogItem] = [
             # Exercises
             CatalogItem(
                 "ex_bench_press",
@@ -326,6 +326,30 @@ class FuzzyEntityMatcher:
             ),
         ]
 
+        try:
+            from app.services.wger_importer import load_cached_exercises
+
+            existing_ids = {item.id for item in items}
+            for ex in load_cached_exercises():
+                if ex.id not in existing_ids:
+                    items.append(
+                        CatalogItem(
+                            item_id=ex.id,
+                            name=ex.name,
+                            category=EntityType.EXERCISE,
+                            aliases=ex.aliases,
+                            metadata={
+                                "primary_muscle": ex.muscles[0] if ex.muscles else ex.category,
+                                "equipment": ex.equipment[0] if ex.equipment else "bodyweight",
+                                "wger_id": ex.wger_id,
+                            },
+                        )
+                    )
+        except Exception:
+            pass
+
+        return items
+
     def _extract_ngrams(self, text: str, min_n: int = 1, max_n: int = 4) -> list[str]:
         """Generate candidate n-gram tokens from the normalized text."""
         words = normalize_text(text).split()
@@ -341,13 +365,16 @@ class FuzzyEntityMatcher:
     def _detect_intent(self, text: str, foods: list, exercises: list, routines: list) -> str:
         """Heuristically identify the user's primary conversational intent."""
         norm = normalize_text(text)
+        strong_exercises = [e for e in exercises if getattr(e, "score", 0) >= 0.8]
+        strong_foods = [f for f in foods if getattr(f, "score", 0) >= 0.8]
+
         has_workout_words = bool(
-            exercises
+            strong_exercises
             or routines
             or any(w in norm for w in ["routine", "workout", "sets", "reps", "gym", "train", "rutina", "entreno"])
         )
         has_nutrition_words = bool(
-            foods
+            strong_foods
             or any(w in norm for w in ["meal", "eat", "food", "calorie", "lunch", "dinner", "breakfast", "comida", "calorias"])
         )
 

@@ -1,12 +1,18 @@
 from functools import lru_cache
+from typing import Any
 
-from groq import Groq
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
 
 from app.core.config import get_settings
 
 
 @lru_cache
-def get_groq_client() -> Groq:
+def get_groq_client() -> Any:
+    if Groq is None:
+        raise ValueError("Groq library is not installed. Install via pip install groq.")
     settings = get_settings()
     if not settings.groq_api_key:
         raise ValueError("Groq credentials missing. Set GROQ_API_KEY in your .env file.")

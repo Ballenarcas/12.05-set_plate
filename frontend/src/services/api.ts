@@ -86,3 +86,50 @@ export async function conversationalSetup(
   return response.json() as Promise<ConversationalSetupResponse>
 }
 
+export interface FetchExercisesParams {
+  q?: string
+  category?: string
+  muscle?: string
+  equipment?: string
+  page?: number
+  limit?: number
+}
+
+export async function fetchExercises(params: FetchExercisesParams = {}) {
+  const query = new URLSearchParams()
+  if (params.q) query.set('q', params.q)
+  if (params.category) query.set('category', params.category)
+  if (params.muscle) query.set('muscle', params.muscle)
+  if (params.equipment) query.set('equipment', params.equipment)
+  if (params.page) query.set('page', String(params.page))
+  if (params.limit) query.set('limit', String(params.limit))
+
+  const queryString = query.toString() ? `?${query.toString()}` : ''
+  const response = await fetch(`${API_URL}/api/v1/workouts/exercises${queryString}`)
+  if (!response.ok) throw new Error('Failed to fetch exercises')
+  return response.json()
+}
+
+export async function fetchExerciseCategories(): Promise<string[]> {
+  const response = await fetch(`${API_URL}/api/v1/workouts/exercises/categories`)
+  if (!response.ok) throw new Error('Failed to fetch categories')
+  const data = await response.json()
+  return data.categories ?? []
+}
+
+export async function fetchExerciseById(exerciseId: string) {
+  const response = await fetch(`${API_URL}/api/v1/workouts/exercises/${exerciseId}`)
+  if (!response.ok) throw new Error(`Failed to fetch exercise ${exerciseId}`)
+  return response.json()
+}
+
+export async function triggerWgerImport(maxItems?: number) {
+  const url = maxItems
+    ? `${API_URL}/api/v1/workouts/exercises/import-wger?max_items=${maxItems}`
+    : `${API_URL}/api/v1/workouts/exercises/import-wger`
+  const response = await fetch(url, { method: 'POST' })
+  if (!response.ok) throw new Error('Failed to import exercises from wger')
+  return response.json()
+}
+
+

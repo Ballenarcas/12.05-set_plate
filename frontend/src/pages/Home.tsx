@@ -1,6 +1,6 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { fetchDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, generateTrainerInsight, getCurrentUser, type DashboardSummary } from '../services/api'
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
@@ -8,6 +8,7 @@ function formatMacro(value: number): string {
 
 function Home() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [aiNotification, setAiNotification] = useState('Thinking...')
   const [error, setError] = useState<string | null>(null)
   const user = getCurrentUser()
 
@@ -18,6 +19,19 @@ function Home() {
       .then((data) => {
         if (!isMounted) return
         setSummary(data)
+
+        const currentUser = getCurrentUser()
+        generateTrainerInsight({
+          nutrition_summary: JSON.stringify(data.nutrition),
+          training_summary: JSON.stringify(data.workout),
+          user_goal: currentUser?.objective ?? '',
+        })
+          .then((response) => {
+            if (isMounted) setAiNotification(response.insight)
+          })
+          .catch(() => {
+            if (isMounted) setAiNotification('AI trainer insight is unavailable right now.')
+          })
       })
       .catch((requestError: Error) => {
         if (isMounted) setError(requestError.message)
@@ -60,7 +74,7 @@ function Home() {
         <h2 className="section-title" id="trainer-insight">AI Trainer</h2>
         <div className="card ai-banner">
           <Lightbulb size={21} aria-hidden="true" />
-          <p>AI trainer insights will appear here when this feature is enabled.</p>
+          <p>{aiNotification}</p>
         </div>
       </section>
 
@@ -73,7 +87,7 @@ function Home() {
         </div>
         <div className="action-row">
           <button className="action-button" type="button" disabled><Plus size={17} aria-hidden="true" /> Manual Register</button>
-          <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate</button>
+          <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">PRO</span></button>
         </div>
       </section>
 

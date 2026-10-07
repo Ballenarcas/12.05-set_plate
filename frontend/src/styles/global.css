@@ -48,6 +48,7 @@
 .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-top: 0.85rem; }
 .action-button, .primary-button { min-height: 2.9rem; border: 1px solid var(--line); border-radius: 0.7rem; color: #fff; background: var(--surface); cursor: pointer; font-size: 0.78rem; font-weight: 700; }
 .action-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; }
+.pro-badge { display: inline-flex; align-items: center; min-height: 1.15rem; padding: 0 0.35rem; border-radius: 0.3rem; color: #16120a; background: #d6b85a; font-size: 0.58rem; font-weight: 800; letter-spacing: 0.04em; }
 .action-button:disabled, .primary-button:disabled { cursor: not-allowed; opacity: 0.65; }
 .action-button:active, .primary-button:active { transform: translateY(1px); }
 .primary-button { width: 100%; margin-top: 1rem; border: 0; color: #071c0e; background: var(--green); }

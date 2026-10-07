@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_name: str = "SET&PLATE API"
     supabase_url: str = ""
     supabase_key: str = ""
+    supabase_service_role_key: str = ""
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
     cors_origins: str = "http://localhost:5173"

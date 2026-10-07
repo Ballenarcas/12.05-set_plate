@@ -1,4 +1,49 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const REQUEST_TIMEOUT_MS = 5000
+let dashboardRequest: Promise<DashboardSummary> | null = null
+const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
+
+export interface DashboardSummary {
+  user_name: string
+  current_date_formatted: string
+  ai_notification: string
+  nutrition: {
+    remaining_kcals: number
+    target_kcals: number
+    current_protein: number
+    target_protein: number
+    current_carbs: number
+    target_carbs: number
+    current_fat: number
+    target_fat: number
+  }
+  workout: {
+    title: string
+    exercise_count: number
+    estimated_duration_minutes: number
+  } | null
+}
+
+export async function fetchDashboardSummary(): Promise<DashboardSummary> {
+  if (dashboardRequest) return dashboardRequest
+
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before loading the dashboard')
+
+  dashboardRequest = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(user.id)}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Unable to load dashboard summary')
+      return response.json() as Promise<DashboardSummary>
+    })
+    .catch((error: unknown) => {
+      dashboardRequest = null
+      throw error
+    })
+
+  return dashboardRequest
+}
 
 export interface TrainerInsightRequest {
   nutrition_summary: string
@@ -13,21 +58,31 @@ export interface TrainerInsightResponse {
 
 export async function getHealth(): Promise<{ status: string }> {
   const response = await fetch(`${API_URL}/api/v1/health`)
-  if (!response.ok) throw new Error('Unable to reach Worki API')
+  if (!response.ok) throw new Error('Unable to reach SET&PLATE API')
   return response.json() as Promise<{ status: string }>
 }
 
 export async function generateTrainerInsight(
   request: TrainerInsightRequest,
 ): Promise<TrainerInsightResponse> {
-  const response = await fetch(`${API_URL}/api/v1/ai/trainer-insight`, {
+  const requestKey = JSON.stringify(request)
+  const existingRequest = insightRequests.get(requestKey)
+  if (existingRequest) return existingRequest
+
+  const insightRequest = fetch(`${API_URL}/api/v1/ai/trainer-insight`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
+    body: requestKey,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Unable to generate trainer insight')
+      return response.json() as Promise<TrainerInsightResponse>
+    })
+    .finally(() => insightRequests.delete(requestKey))
 
-  if (!response.ok) throw new Error('Unable to generate trainer insight')
-  return response.json() as Promise<TrainerInsightResponse>
+  insightRequests.set(requestKey, insightRequest)
+  return insightRequest
 }
 
 export type EntityType = 'food' | 'exercise' | 'routine' | 'meal'

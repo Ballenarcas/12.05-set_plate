@@ -29,4 +29,4 @@ npm run preview  # Preview the production build
 
 ## API Configuration
 
-Set `VITE_API_URL` in the project environment to point to the SET&PLATE FastAPI backend. The default value is `http://localhost:8000`.
+Set `VITE_API_URL` in the project environment to point to the SET&PLATE FastAPI backend. The default value is `http://localhost:8000`. The dashboard uses the `public.users.id` returned by onboarding and stored in the local profile.

@@ -15,6 +15,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"status": "ok", "message": f"{settings.app_name} is running"}
+
+
 api_router = APIRouter(prefix="/api/v1")
 
 

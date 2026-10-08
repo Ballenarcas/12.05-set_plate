@@ -68,6 +68,9 @@ function ActiveWorkout() {
   }, [])
 
   const durationSeconds = useMemo(() => session ? Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 1000)) : 0, [now, session])
+  const totalSets = session?.exercises.reduce((total, exercise) => total + exercise.sets.length, 0) ?? 0
+  const completedSets = session?.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => set.is_completed).length, 0) ?? 0
+  const progress = totalSets ? Math.round((completedSets / totalSets) * 100) : 0
 
   if (!session) return <div className="screen state-card" role="alert">No active workout selected.</div>
 
@@ -122,18 +125,27 @@ function ActiveWorkout() {
       <header className="active-workout-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
         <div><p className="eyebrow">Active workout</p><h1>{session.name}</h1></div>
-        <div className="session-timer">{formatTimer(durationSeconds)}</div>
         <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>FINISH</button>
       </header>
+
+      <section className="session-overview" aria-label="Workout progress">
+        <div className="session-overview-top">
+          <div><span className="overview-label">ELAPSED</span><strong className="session-timer">{formatTimer(durationSeconds)}</strong></div>
+          <div className="set-progress-copy"><strong>{completedSets}<span> / {totalSets}</span></strong><span>sets complete</span></div>
+        </div>
+        <div className="set-progress-track" role="progressbar" aria-label="Sets completed" aria-valuemin={0} aria-valuemax={Math.max(totalSets, 1)} aria-valuenow={completedSets}>
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      </section>
 
       <div className="active-exercise-list">
         {session.exercises.map((exercise, exerciseIndex) => (
           <article className="card exercise-card" key={`${exercise.exercise_id}-${exerciseIndex}`}>
             <div className="exercise-card-header"><h2>{exercise.name}</h2><span>{exercise.sets.length} sets</span></div>
             <div className="set-table">
-              <div className="set-row set-heading"><span>SERIE</span><span>ANTERIOR</span><span>KG</span><span>REPS</span><span>RPE</span><span /><span /></div>
+              <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
               {exercise.sets.map((set, setIndex) => (
-                <div className="set-row" key={set.set_number}>
+                <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}`} key={set.set_number}>
                   <select className={`set-kind-select set-kind-${session.setKinds[`${exerciseIndex}:${set.set_number}`] ?? 'normal'}`} value={session.setKinds[`${exerciseIndex}:${set.set_number}`] ?? 'normal'} onChange={(event) => updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)} aria-label={`Set ${set.set_number} type`} title="Set type">
                     <option value="normal">{set.set_number}</option>
                     <option value="warmup">W</option>

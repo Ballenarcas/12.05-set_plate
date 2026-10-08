@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import MainLayout from './components/layout/MainLayout'
 import Home from './pages/Home'
+import ActiveWorkout from './pages/ActiveWorkout'
+import ExercisePicker from './pages/ExercisePicker'
 import Nutrition from './pages/Nutrition'
 import Onboarding from './pages/Onboarding'
 import Settings from './pages/Settings'
@@ -21,6 +23,8 @@ function App() {
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/workouts" element={<Workouts />} />
+          <Route path="/workouts/active" element={<ActiveWorkout />} />
+          <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
           <Route path="/nutrition" element={<Nutrition />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

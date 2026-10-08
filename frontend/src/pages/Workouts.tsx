@@ -1,5 +1,74 @@
+import { ArrowRight, Dumbbell, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { fetchRoutines } from '../services/api'
+import type { ActiveExercise, Routine } from '../types/workout'
+
+function createActiveExercises(routine: Routine): ActiveExercise[] {
+  return routine.exercises.map((exercise) => ({
+    exercise_id: exercise.exercise_id,
+    name: exercise.name,
+    previous_weight_kg: null,
+    previous_reps: null,
+    sets: Array.from({ length: exercise.target_sets ?? 1 }, (_, index) => ({
+      set_number: index + 1,
+      weight_kg: 0,
+      reps: exercise.target_reps ?? 0,
+      is_completed: false,
+    })),
+  }))
+}
+
 function Workouts() {
-  return <div className="screen placeholder"><p className="eyebrow">Your movement</p><h1>Workouts</h1><p className="training-meta">Training plans and progress will live here.</p></div>
+  const navigate = useNavigate()
+  const [routines, setRoutines] = useState<Routine[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchRoutines()
+      .then(setRoutines)
+      .catch((requestError: Error) => setError(requestError.message))
+      .finally(() => setIsLoading(false))
+  }, [])
+
+  function startWorkout(routine?: Routine) {
+    navigate('/workouts/active', {
+      state: {
+        routineId: routine?.id,
+        name: routine?.name ?? 'Empty workout',
+        startedAt: new Date().toISOString(),
+        exercises: routine ? createActiveExercises(routine) : [],
+      },
+    })
+  }
+
+  return (
+    <div className="screen workouts-screen">
+      <header className="workouts-page-header">
+        <div><p className="eyebrow">Train with purpose</p><h1>Workouts</h1></div>
+        <button className="secondary-action" type="button" onClick={() => startWorkout()}><Plus size={16} /> Start empty workout</button>
+      </header>
+
+      {isLoading && <div className="card state-card" role="status">Loading routines...</div>}
+      {error && <div className="card state-card" role="alert">{error}</div>}
+      {!isLoading && !error && routines.length === 0 && <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No saved routines yet.</p></div>}
+
+      <div className="routine-list">
+        {routines.map((routine) => (
+          <article className="card routine-card" key={routine.id}>
+            <div className="routine-card-heading"><div><p className="eyebrow">Saved routine</p><h2>{routine.name}</h2></div><Dumbbell size={22} aria-hidden="true" /></div>
+            <div className="routine-meta"><span>{routine.exercises.length} exercises</span>{routine.estimated_duration_minutes !== null && <span>Est. {routine.estimated_duration_minutes} min</span>}</div>
+            <ul className="routine-preview">
+              {routine.exercises.slice(0, 3).map((exercise) => <li key={exercise.exercise_id}>{exercise.name}</li>)}
+              {routine.exercises.length > 3 && <li>+{routine.exercises.length - 3} more</li>}
+            </ul>
+            <button className="primary-button" type="button" onClick={() => startWorkout(routine)}>START WORKOUT <ArrowRight size={17} /></button>
+          </article>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export default Workouts

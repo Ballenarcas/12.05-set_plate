@@ -6,9 +6,60 @@ function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
 }
 
+function HomeSkeleton() {
+  return (
+    <div className="screen skeleton-screen" role="status" aria-busy="true" aria-label="Loading your dashboard">
+      <header className="screen-header">
+        <div className="profile-heading">
+          <span className="skeleton skeleton-circle" aria-hidden="true" />
+          <div className="skeleton-stack">
+            <span className="skeleton skeleton-line w-short" aria-hidden="true" />
+            <span className="skeleton skeleton-line w-mid tall" aria-hidden="true" />
+          </div>
+        </div>
+        <span className="skeleton skeleton-badge" aria-hidden="true" />
+      </header>
+
+      <section className="skeleton-section" aria-hidden="true">
+        <span className="skeleton skeleton-line w-short" />
+        <div className="skeleton-card ai-banner-skeleton">
+          <span className="skeleton skeleton-line w-long" />
+        </div>
+      </section>
+
+      <section className="skeleton-section" aria-hidden="true">
+        <span className="skeleton skeleton-line w-mid" />
+        <span className="skeleton skeleton-line w-long" />
+        <span className="skeleton skeleton-track" />
+        <div className="skeleton-card skeleton-macros">
+          <span className="skeleton skeleton-macro" />
+          <span className="skeleton skeleton-macro" />
+          <span className="skeleton skeleton-macro" />
+        </div>
+        <div className="skeleton-actions">
+          <span className="skeleton skeleton-button" />
+          <span className="skeleton skeleton-button" />
+        </div>
+      </section>
+
+      <section className="skeleton-section" aria-hidden="true">
+        <span className="skeleton skeleton-line w-mid" />
+        <div className="skeleton-card">
+          <span className="skeleton skeleton-line w-long tall" />
+          <div className="skeleton-list">
+            <span className="skeleton skeleton-meta" />
+            <span className="skeleton skeleton-meta" />
+          </div>
+          <span className="skeleton skeleton-button" />
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function Home() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
-  const [aiNotification, setAiNotification] = useState('Thinking...')
+  const [aiNotification, setAiNotification] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const user = getCurrentUser()
 
@@ -43,7 +94,7 @@ function Home() {
   }, [])
 
   if (error) return <div className="screen state-card" role="alert">{error}</div>
-  if (!summary) return <div className="screen state-card" role="status">Loading your dashboard...</div>
+  if (!summary) return <HomeSkeleton />
 
   const { nutrition, workout } = summary
   const calorieProgress = Math.max(
@@ -72,9 +123,13 @@ function Home() {
 
       <section className="section" aria-labelledby="trainer-insight">
         <h2 className="section-title" id="trainer-insight">AI Trainer</h2>
-        <div className="card ai-banner">
+        <div className="card ai-banner" aria-busy={aiNotification === null}>
           <Lightbulb size={21} aria-hidden="true" />
-          <p>{aiNotification}</p>
+          {aiNotification ? (
+            <p>{aiNotification}</p>
+          ) : (
+            <span className="skeleton skeleton-line w-long" aria-hidden="true" />
+          )}
         </div>
       </section>
 

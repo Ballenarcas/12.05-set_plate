@@ -2,6 +2,8 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const REQUEST_TIMEOUT_MS = 5000
 let dashboardRequest: Promise<DashboardSummary> | null = null
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
+import type { Routine } from '../types/workout'
+import type { WorkoutLogCreate } from '../types/workout'
 
 export interface DashboardSummary {
   user_name: string
@@ -43,6 +45,27 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     })
 
   return dashboardRequest
+}
+
+export async function fetchRoutines(): Promise<Routine[]> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before loading routines')
+  const response = await fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) throw new Error('Unable to load routines')
+  return response.json() as Promise<Routine[]>
+}
+
+export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate): Promise<{ status: string }> {
+  const response = await fetch(`${API_URL}/api/v1/workouts/logs?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) throw new Error('Unable to save workout')
+  return response.json() as Promise<{ status: string }>
 }
 
 export interface TrainerInsightRequest {

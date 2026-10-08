@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
@@ -7,9 +9,19 @@ from app.services.workout_service import (
     get_exercise_categories,
     get_programmed_workout,
     list_exercises,
+    save_workout_log,
 )
+from app.schemas.workout_log import WorkoutLogCreate, WorkoutLogResponse
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
+
+
+@router.post("/logs", response_model=WorkoutLogResponse)
+def create_workout_log(
+    payload: WorkoutLogCreate,
+    user_id: UUID = Query(..., description="Supabase users.id"),
+) -> WorkoutLogResponse:
+    return save_workout_log(user_id, payload)
 
 
 @router.get("/")

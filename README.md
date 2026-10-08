@@ -122,7 +122,8 @@ Set the real values for `SUPABASE_URL` and `SUPABASE_KEY` in `.env`.
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `SUPABASE_URL` | Supabase project URL | Empty |
-| `SUPABASE_KEY` | Supabase API key | Empty |
+| `SUPABASE_KEY` | Supabase anon key | Empty |
+| `SUPABASE_SERVICE_ROLE_KEY` | Backend-only key for protected Supabase reads | Empty |
 | `VITE_API_URL` | FastAPI base URL used by the frontend | `http://localhost:8000` |
 | `CORS_ORIGINS` | Comma-separated allowed frontend origins | `http://localhost:5173` |
 | `GROQ_API_KEY` | GroqCloud API key used by the AI trainer | Empty |
@@ -151,6 +152,7 @@ The API runs at `http://localhost:8000`.
 | `GET` | `/api/v1/nutrition/` | Nutrition data endpoint |
 | `GET` | `/api/v1/stats/` | Statistics data endpoint |
 | `POST` | `/api/v1/ai/trainer-insight` | Generate a personalized insight with GroqCloud |
+| `GET` | `/api/v1/dashboard/summary?user_id={uuid}` | Build the dashboard from Supabase data; the UUID comes from onboarding |
 
 Interactive API documentation is available at `http://localhost:8000/docs`.
 

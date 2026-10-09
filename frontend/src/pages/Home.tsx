@@ -1,5 +1,6 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { fetchDashboardSummary, generateTrainerInsight, getCurrentUser, type DashboardSummary } from '../services/api'
 
 function formatMacro(value: number): string {
@@ -62,6 +63,7 @@ function Home() {
   const [aiNotification, setAiNotification] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const user = getCurrentUser()
+  const navigate = useNavigate()
 
   useEffect(() => {
     let isMounted = true
@@ -152,7 +154,7 @@ function Home() {
           <div className="card training-card">
             <h3>{workout.title}</h3>
             <ul className="training-meta"><li>Volume: {workout.exercise_count} exercises</li><li>Est. duration: {workout.estimated_duration_minutes} minutes</li></ul>
-            <button className="primary-button" type="button" disabled>START TRAINING!</button>
+            <button className="primary-button" type="button" onClick={() => navigate('/workouts')}>START TRAINING!</button>
           </div>
         ) : (
           <div className="card training-card empty-state">No programmed training assigned.</div>

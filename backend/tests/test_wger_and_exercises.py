@@ -2,7 +2,13 @@ from fastapi.testclient import TestClient
 
 from app.schemas.exercise import Exercise
 from app.services.fuzzy_matcher import FuzzyEntityMatcher
-from app.services.wger_importer import clean_html, load_cached_exercises, parse_wger_exercise
+from app.services.wger_importer import (
+    clean_html,
+    load_cached_exercises,
+    parse_wger_exercise,
+    resolve_exercise_log_id,
+    supabase_uuid_for,
+)
 from app.services.workout_service import (
     get_exercise_by_id,
     get_exercise_categories,
@@ -82,6 +88,21 @@ def test_get_exercise_by_id():
     assert "Kettlebell" in exercise.name
 
 
+def test_resolve_exercise_log_id():
+    import uuid
+
+    exercise = get_exercise_by_id("wger_9")
+    resolved = resolve_exercise_log_id("wger_9")
+    assert resolved == supabase_uuid_for(exercise)
+    assert resolve_exercise_log_id(str(uuid.uuid4())) is not None
+    assert resolve_exercise_log_id("9") == resolved
+    try:
+        resolve_exercise_log_id("not_a_real_exercise")
+        raise AssertionError("Expected ValueError for unknown exercise")
+    except ValueError:
+        pass
+
+
 def test_get_exercise_categories():
     categories = get_exercise_categories()
     assert len(categories) > 0
@@ -110,6 +131,13 @@ def test_api_exercises_endpoints():
     # 404 for unknown exercise
     unknown_res = client.get("/api/v1/workouts/exercises/non_existent_id_12345")
     assert unknown_res.status_code == 404
+
+    compact_res = client.get("/api/v1/workouts/exercises?limit=5&compact=true")
+    assert compact_res.status_code == 200
+    compact_item = compact_res.json()["items"][0]
+    assert compact_item["description"] is None
+    assert compact_item["aliases"] == []
+    assert len(compact_item["images"]) <= 1
 
 
 def test_fuzzy_matcher_includes_imported_exercises():

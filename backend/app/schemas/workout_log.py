@@ -12,7 +12,7 @@ class SetLogItem(BaseModel):
 
 
 class ExerciseLogItem(BaseModel):
-    exercise_id: UUID
+    exercise_id: str = Field(min_length=1)
     sets: list[SetLogItem] = Field(default_factory=list)
 
 

@@ -12,7 +12,7 @@ class AIFacade:
     def parse_intent(self, text: str, threshold: float = 0.7, limit_per_category: int = 5) -> ParseNaturalLanguageResponse:
         return self.matcher.match(text=text, threshold=threshold, limit_per_category=limit_per_category)
 
-    def conversational_setup(self, message: str, history=None):
+    def conversational_setup(self, message: str, conversation_history=None):
         matched = self.matcher.match(message)
         intent = matched.detected_intent
         summary = _format_entities(matched)
@@ -34,8 +34,8 @@ class AIFacade:
             "Ground your concise, encouraging response in the verified database objects below. Prompt for missing quantities, sets, or reps.\n\n"
             f"Verified DB Objects:\n{summary}\nDetected Intent: {intent}")
         messages = [{"role": "system", "content": prompt}]
-        if history:
-            messages.extend(history[-4:])
+        if conversation_history:
+            messages.extend(conversation_history[-4:])
         messages.append({"role": "user", "content": message})
         try:
             response = self.groq_client_provider().chat.completions.create(model=settings.groq_model,

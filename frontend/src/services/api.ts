@@ -47,14 +47,24 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   return dashboardRequest
 }
 
+let routinesRequest: Promise<Routine[]> | null = null
+
 export async function fetchRoutines(): Promise<Routine[]> {
+  if (routinesRequest) return routinesRequest
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Complete onboarding before loading routines')
-  const response = await fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+  routinesRequest = fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
-  if (!response.ok) throw new Error('Unable to load routines')
-  return response.json() as Promise<Routine[]>
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Unable to load routines')
+      return response.json() as Promise<Routine[]>
+    })
+    .catch((error: unknown) => {
+      routinesRequest = null
+      throw error
+    })
+  return routinesRequest
 }
 
 export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate): Promise<{ status: string }> {
@@ -171,7 +181,12 @@ export interface FetchExercisesParams {
   equipment?: string
   page?: number
   limit?: number
+  compact?: boolean
 }
+
+const exerciseListCache = new Map<string, { at: number; data: import('../types').ExerciseListResponse }>()
+const exerciseListInflight = new Map<string, Promise<import('../types').ExerciseListResponse>>()
+const EXERCISE_LIST_TTL_MS = 30_000
 
 export async function fetchExercises(params: FetchExercisesParams = {}) {
   const query = new URLSearchParams()
@@ -181,11 +196,29 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   if (params.equipment) query.set('equipment', params.equipment)
   if (params.page) query.set('page', String(params.page))
   if (params.limit) query.set('limit', String(params.limit))
+  if (params.compact) query.set('compact', 'true')
 
-  const queryString = query.toString() ? `?${query.toString()}` : ''
-  const response = await fetch(`${API_URL}/api/v1/workouts/exercises${queryString}`)
-  if (!response.ok) throw new Error('Failed to fetch exercises')
-  return response.json()
+  const queryString = query.toString()
+  const cached = exerciseListCache.get(queryString)
+  if (cached && Date.now() - cached.at < EXERCISE_LIST_TTL_MS) return cached.data
+  const inflight = exerciseListInflight.get(queryString)
+  if (inflight) return inflight
+
+  const request = fetch(`${API_URL}/api/v1/workouts/exercises${queryString ? `?${queryString}` : ''}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Failed to fetch exercises')
+      const data = (await response.json()) as import('../types').ExerciseListResponse
+      exerciseListCache.set(queryString, { at: Date.now(), data })
+      return data
+    })
+    .finally(() => {
+      exerciseListInflight.delete(queryString)
+    })
+
+  exerciseListInflight.set(queryString, request)
+  return request
 }
 
 export async function fetchExerciseCategories(): Promise<string[]> {

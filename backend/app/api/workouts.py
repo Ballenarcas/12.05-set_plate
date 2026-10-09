@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
 from app.facades.workout_facade import workout_facade
@@ -29,12 +29,14 @@ def programmed_workout():
 
 @router.get("/exercises", response_model=ExerciseListResponse)
 def get_exercises(
+    response: Response,
     q: str | None = Query(None, description="Search term for exercise name or aliases"),
     category: str | None = Query(None, description="Filter by body part category"),
     muscle: str | None = Query(None, description="Filter by targeted muscle"),
     equipment: str | None = Query(None, description="Filter by required equipment"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    compact: bool = Query(False, description="Omit descriptions and extra images for faster payloads"),
 ) -> ExerciseListResponse:
     """Retrieve exercises with search and filtering support."""
     items, total = workout_facade.list_exercises(
@@ -45,6 +47,19 @@ def get_exercises(
         page=page,
         limit=limit,
     )
+    if compact:
+        items = [
+            item.model_copy(
+                update={
+                    "description": None,
+                    "aliases": [],
+                    "muscle_images": [],
+                    "images": item.images[:1],
+                }
+            )
+            for item in items
+        ]
+    response.headers["Cache-Control"] = "private, max-age=30"
     return ExerciseListResponse(items=items, total=total, page=page, limit=limit)
 
 

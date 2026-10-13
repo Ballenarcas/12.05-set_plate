@@ -1,6 +1,10 @@
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+// In development, send API requests through Vite so LAN devices use the
+// computer hosting the frontend instead of their own localhost.
+const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
-let dashboardRequest: Promise<DashboardSummary> | null = null
+const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
+const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
+const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
 import type { Routine } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
@@ -26,25 +30,50 @@ export interface DashboardSummary {
   } | null
 }
 
-export async function fetchDashboardSummary(): Promise<DashboardSummary> {
-  if (dashboardRequest) return dashboardRequest
+function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
+  try {
+    const saved = sessionStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+    if (!saved) return null
+    const cached = JSON.parse(saved) as { data: DashboardSummary; at: number }
+    return cached?.data && typeof cached.at === 'number' ? cached : null
+  } catch {
+    return null
+  }
+}
 
+export function getCachedDashboardSummary(): DashboardSummary | null {
+  const user = getCurrentUser()
+  return user?.id ? readDashboardCache(user.id)?.data ?? null : null
+}
+
+export async function fetchDashboardSummary(options: { forceRefresh?: boolean } = {}): Promise<DashboardSummary> {
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Complete onboarding before loading the dashboard')
+  const userId = user.id
+  const cached = readDashboardCache(userId)
+  if (!options.forceRefresh && cached && Date.now() - cached.at < DASHBOARD_CACHE_TTL_MS) return cached.data
+  const inflight = dashboardRequests.get(userId)
+  if (inflight) return inflight
 
-  dashboardRequest = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(user.id)}`, {
+  const request = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
       if (!response.ok) throw new Error('Unable to load dashboard summary')
-      return response.json() as Promise<DashboardSummary>
+      const data = await response.json() as DashboardSummary
+      try {
+        sessionStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now() }))
+      } catch {
+        // The fresh response remains usable when browser storage is unavailable.
+      }
+      return data
     })
-    .catch((error: unknown) => {
-      dashboardRequest = null
-      throw error
+    .finally(() => {
+      dashboardRequests.delete(userId)
     })
 
-  return dashboardRequest
+  dashboardRequests.set(userId, request)
+  return request
 }
 
 let routinesRequest: Promise<Routine[]> | null = null

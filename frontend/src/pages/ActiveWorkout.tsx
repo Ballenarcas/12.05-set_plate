@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, Dumbbell, Gauge, Plus, X } from 'lucide-react'
+import { Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExerciseById, fetchExercises, getCurrentUser, saveWorkoutLog } from '../services/api'
@@ -29,18 +29,17 @@ function ExerciseArtwork({ name, images }: { name: string; images?: string[] }) 
   return <img className="active-exercise-artwork" src={image} alt={`${name} demonstration`} onError={() => setImageFailed(true)} />
 }
 
-function formatTimer(seconds: number): string {
-  const hours = Math.floor(seconds / 3600).toString().padStart(2, '0')
-  const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0')
-  const remainingSeconds = (seconds % 60).toString().padStart(2, '0')
-  return hours === '00' ? `${minutes}:${remainingSeconds}` : `${hours}:${minutes}:${remainingSeconds}`
-}
-
 function formatDuration(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
   const remaining = seconds % 60
   if (minutes === 0) return `${remaining}s`
   return `${minutes}min ${remaining}s`
+}
+
+function formatClock(seconds: number): string {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0')
+  const remaining = (seconds % 60).toString().padStart(2, '0')
+  return `${minutes}:${remaining}`
 }
 
 function formatRest(seconds: number): string {
@@ -54,6 +53,21 @@ function reindexKeyedMap<T>(map: Record<string, T>, removedIndex: number): Recor
     const index = Number(indexPart)
     if (index === removedIndex) continue
     next[[index > removedIndex ? index - 1 : index, ...rest].join(':')] = value
+  }
+  return next
+}
+
+function removeSetFromKeyedMap<T>(map: Record<string, T>, exerciseIndex: number, removedSetNumber: number): Record<string, T> {
+  const next: Record<string, T> = {}
+  for (const [key, value] of Object.entries(map)) {
+    const [exercisePart, setPart, ...rest] = key.split(':')
+    const currentExerciseIndex = Number(exercisePart)
+    const currentSetNumber = Number(setPart)
+    if (currentExerciseIndex === exerciseIndex && currentSetNumber === removedSetNumber) continue
+    const nextSetNumber = currentExerciseIndex === exerciseIndex && currentSetNumber > removedSetNumber
+      ? currentSetNumber - 1
+      : currentSetNumber
+    next[[exercisePart, nextSetNumber, ...rest].join(':')] = value
   }
   return next
 }
@@ -82,6 +96,9 @@ function ActiveWorkout() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [rpeValues, setRpeValues] = useState<Record<string, number>>({})
+  const [restRemaining, setRestRemaining] = useState<Record<number, number>>({})
+  const [menuOpen, setMenuOpen] = useState<number | null>(null)
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
   const imageLookups = useRef(new Set<string>())
 
   useEffect(() => {
@@ -173,6 +190,22 @@ function ActiveWorkout() {
     }) : current)
   }
 
+  function removeSet(exerciseIndex: number, setIndex: number) {
+    const removedSetNumber = session?.exercises[exerciseIndex]?.sets[setIndex]?.set_number
+    if (removedSetNumber === undefined) return
+    setSession((current) => current ? ({
+      ...current,
+      exercises: current.exercises.map((exercise, index) => index !== exerciseIndex ? exercise : ({
+        ...exercise,
+        sets: exercise.sets
+          .filter((_, currentIndex) => currentIndex !== setIndex)
+          .map((set, currentIndex) => ({ ...set, set_number: currentIndex + 1 })),
+      })),
+      setKinds: removeSetFromKeyedMap(current.setKinds, exerciseIndex, removedSetNumber),
+    }) : current)
+    setRpeValues((current) => removeSetFromKeyedMap(current, exerciseIndex, removedSetNumber))
+  }
+
   function removeExercise(exerciseIndex: number) {
     setMenuOpen(null)
     setSession((current) => current ? ({
@@ -188,13 +221,15 @@ function ActiveWorkout() {
     setSession((current) => current ? ({ ...current, setKinds: { ...current.setKinds, [`${exerciseIndex}:${setNumber}`]: kind } }) : current)
   }
 
-  function updateRpe(exerciseIndex: number, setNumber: number) {
+  function updateRpe(exerciseIndex: number, setNumber: number, rpe: number) {
     const key = `${exerciseIndex}:${setNumber}`
-    setRpeValues((current) => ({ ...current, [key]: current[key] ? current[key] % 10 + 1 : 1 }))
+    setRpeValues((current) => ({ ...current, [key]: rpe }))
   }
 
   function toggleRest(exerciseIndex: number) {
-    const enable = !session.exercises[exerciseIndex]?.rest_enabled
+    const exercise = session?.exercises[exerciseIndex]
+    if (!exercise) return
+    const enable = !exercise.rest_enabled
     updateExercise(exerciseIndex, { rest_enabled: enable })
     if (!enable) {
       setRestRemaining((current) => {
@@ -208,7 +243,7 @@ function ActiveWorkout() {
 
   function toggleSetComplete(exerciseIndex: number, setIndex: number, isCompleted: boolean) {
     updateSet(exerciseIndex, setIndex, { is_completed: isCompleted })
-    const restOn = session.exercises[exerciseIndex]?.rest_enabled
+    const restOn = session?.exercises[exerciseIndex]?.rest_enabled
     if (isCompleted && restOn) setRestRemaining((current) => ({ ...current, [exerciseIndex]: 90 }))
   }
 
@@ -259,27 +294,68 @@ function ActiveWorkout() {
       <div className="active-exercise-list">
         {session.exercises.map((exercise, exerciseIndex) => (
           <article className="card exercise-card" key={`${exercise.exercise_id}-${exerciseIndex}`}>
+            <button className="icon-button ghost exercise-menu-trigger" type="button" aria-label={`Exercise options for ${exercise.name}`} aria-expanded={menuOpen === exerciseIndex} onClick={() => setMenuOpen(menuOpen === exerciseIndex ? null : exerciseIndex)}>
+              <MoreVertical size={19} aria-hidden="true" />
+            </button>
+            {menuOpen === exerciseIndex && <div className="exercise-menu">
+              <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />Remove exercise</button>
+            </div>}
             <div className="exercise-card-header">
               <div className="exercise-heading-main"><ExerciseArtwork name={exercise.name} images={exercise.images} /><h2>{exercise.name}</h2></div>
               <span>{exercise.sets.length} sets</span>
             </div>
+            <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} onClick={() => toggleRest(exerciseIndex)}>
+              <Clock3 size={15} aria-hidden="true" />
+              {restRemaining[exerciseIndex] ? `Rest ${formatRest(restRemaining[exerciseIndex])}` : `Rest timer ${exercise.rest_enabled ? 'on' : 'off'}`}
+            </button>
             <div className="set-table">
               <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
-              {exercise.sets.map((set, setIndex) => (
-                <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}`} key={set.set_number}>
-                  <select className={`set-kind-select set-kind-${session.setKinds[`${exerciseIndex}:${set.set_number}`] ?? 'normal'}`} value={session.setKinds[`${exerciseIndex}:${set.set_number}`] ?? 'normal'} onChange={(event) => updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)} aria-label={`Set ${set.set_number} type`} title="Set type">
-                    <option value="normal">{set.set_number}</option>
-                    <option value="warmup">W</option>
-                    <option value="drop">D</option>
-                    <option value="failure">F</option>
-                  </select>
-                  <span className="previous-cell">{exercise.previous_weight_kg !== null ? `${exercise.previous_weight_kg}kg x ${exercise.previous_reps}` : '-'}</span>
-                  <input aria-label={`${exercise.name} set ${set.set_number} weight`} type="number" min="0" step="0.5" value={set.weight_kg || ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { weight_kg: Number(event.target.value) })} />
-                  <input aria-label={`${exercise.name} set ${set.set_number} reps`} type="number" min="0" step="1" value={set.reps || ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { reps: Number(event.target.value) })} />
-                  <button className="rpe-button" type="button" onClick={() => updateRpe(exerciseIndex, set.set_number)} aria-label={`Set ${set.set_number} RPE`}>{rpeValues[`${exerciseIndex}:${set.set_number}`] ?? <Gauge size={17} />}</button>
-                  <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => updateSet(exerciseIndex, setIndex, { is_completed: !set.is_completed })} aria-label={`Toggle set ${set.set_number}`}><Check size={18} /></button>
+              {exercise.sets.map((set, setIndex) => {
+                const setKey = `${exerciseIndex}:${set.set_number}`
+                const kind = session.setKinds[setKey] ?? 'normal'
+                return <div className="set-row-group" key={set.set_number}>
+                  <div
+                    className="set-row-shell"
+                    onTouchStart={(event) => {
+                      const touch = event.touches[0]
+                      swipeStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null
+                    }}
+                    onTouchEnd={(event) => {
+                      const touch = event.changedTouches[0]
+                      if (swipeStart.current && touch) {
+                        const deltaX = touch.clientX - swipeStart.current.x
+                        const deltaY = touch.clientY - swipeStart.current.y
+                        if (deltaX < -80 && Math.abs(deltaY) < 60) removeSet(exerciseIndex, setIndex)
+                      }
+                      swipeStart.current = null
+                    }}
+                  >
+                    <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}`}>
+                      <select className={`set-kind-select set-kind-${kind}`} value={kind} onChange={(event) => {
+                        updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
+                      }} aria-label={`Set ${set.set_number} type`} title="Set type">
+                        <option value="normal">{set.set_number} — Normal set</option>
+                        <option value="warmup">W — Warm-up: prepare for heavier sets</option>
+                        <option value="drop">D — Drop set: lower weight, keep going</option>
+                        <option value="failure">F — Failure: no more good-form reps</option>
+                      </select>
+                      <span className="previous-cell">{exercise.previous_weight_kg !== null ? `${exercise.previous_weight_kg}kg x ${exercise.previous_reps}` : '-'}</span>
+                      <input aria-label={`${exercise.name} set ${set.set_number} weight`} type="number" min="0" step="0.5" value={set.weight_kg || ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { weight_kg: Number(event.target.value) })} />
+                      <input aria-label={`${exercise.name} set ${set.set_number} reps`} type="number" min="0" step="1" value={set.reps || ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { reps: Number(event.target.value) })} />
+                      <select className="rpe-select" aria-label={`Set ${set.set_number} RPE`} value={rpeValues[setKey] ?? ''} onChange={(event) => {
+                        const rpe = Number(event.target.value)
+                        if (!rpe) return
+                        updateRpe(exerciseIndex, set.set_number, rpe)
+                        if (!set.is_completed) toggleSetComplete(exerciseIndex, setIndex, true)
+                      }}>
+                        <option value="">—</option>
+                        {Array.from({ length: 10 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+                      </select>
+                      <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} /></button>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              })}
             </div>
             <button className="secondary-action" type="button" onClick={() => addSet(exerciseIndex)}><Plus size={16} /> Add Set</button>
           </article>

@@ -77,22 +77,31 @@ def _query_workout(user_id: UUID) -> WorkoutDashboard | None:
         return None
 
     routine = routines[0]
-    exercise_rows = (
-        get_supabase(admin=True)
-        .table("routine_exercises")
-        .select("id")
-        .eq("routine_id", routine["id"])
-        .execute()
-    ).data or []
-    workouts = (
-        get_supabase(admin=True)
-        .table("workouts")
-        .select("start_time,end_time")
-        .eq("user_id", str(user_id))
-        .eq("routine_id", routine["id"])
-        .not_.is_("end_time", "null")
-        .execute()
-    ).data or []
+    def query_exercise_rows():
+        return (
+            get_supabase(admin=True)
+            .table("routine_exercises")
+            .select("id")
+            .eq("routine_id", routine["id"])
+            .execute()
+        ).data or []
+
+    def query_completed_workouts():
+        return (
+            get_supabase(admin=True)
+            .table("workouts")
+            .select("start_time,end_time")
+            .eq("user_id", str(user_id))
+            .eq("routine_id", routine["id"])
+            .not_.is_("end_time", "null")
+            .execute()
+        ).data or []
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        exercise_future = executor.submit(query_exercise_rows)
+        workouts_future = executor.submit(query_completed_workouts)
+        exercise_rows = exercise_future.result()
+        workouts = workouts_future.result()
 
     durations = []
     for workout in workouts:
@@ -115,10 +124,11 @@ def get_dashboard_summary(user_id: UUID) -> DashboardSummary:
     if client is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
-    user = _query_user(user_id)
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        user_future = executor.submit(_query_user, user_id)
         meals_future = executor.submit(_query_today_meals, user_id)
         workout_future = executor.submit(_query_workout, user_id)
+        user = user_future.result()
         meals = meals_future.result()
         workout = workout_future.result()
 

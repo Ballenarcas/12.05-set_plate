@@ -1,7 +1,7 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchDashboardSummary, generateTrainerInsight, getCurrentUser, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, generateTrainerInsight, getCachedDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
@@ -59,7 +59,7 @@ function HomeSkeleton() {
 }
 
 function Home() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [summary, setSummary] = useState<DashboardSummary | null>(() => getCachedDashboardSummary())
   const [aiNotification, setAiNotification] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const user = getCurrentUser()
@@ -68,7 +68,7 @@ function Home() {
   useEffect(() => {
     let isMounted = true
 
-    fetchDashboardSummary()
+    fetchDashboardSummary({ forceRefresh: true })
       .then((data) => {
         if (!isMounted) return
         setSummary(data)
@@ -87,7 +87,7 @@ function Home() {
           })
       })
       .catch((requestError: Error) => {
-        if (isMounted) setError(requestError.message)
+        if (isMounted && !getCachedDashboardSummary()) setError(requestError.message)
       })
 
     return () => {

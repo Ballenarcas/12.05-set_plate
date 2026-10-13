@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { submitUserOnboarding } from '../services/api'
+import { formatBirthDateInput } from '../utils/birthDateInput.js'
 import type { FitnessGoal, UserOnboardingFormData } from '../types'
 import '../styles/onboarding.css'
 
@@ -23,6 +24,7 @@ function Onboarding() {
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [formData, setFormData] = useState<UserOnboardingFormData>(initialFormData)
+  const [birthDateInput, setBirthDateInput] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -386,11 +388,18 @@ function Onboarding() {
                   </label>
                   <input
                     id="birthDate"
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="bday"
+                    placeholder="DD/MM/YYYY"
+                    maxLength={10}
                     className={`form-input${errors.birthDate ? ' has-error' : ''}`}
-                    value={formData.birthDate}
-                    onChange={(e) => handleInputChange('birthDate', e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
+                    value={birthDateInput}
+                    onChange={(e) => {
+                      const parsed = formatBirthDateInput(e.target.value)
+                      setBirthDateInput(parsed.displayValue)
+                      handleInputChange('birthDate', parsed.isoValue)
+                    }}
                   />
                   {errors.birthDate && <span className="error-text">{errors.birthDate}</span>}
                 </div>

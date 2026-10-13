@@ -1,7 +1,7 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchDashboardSummary, generateTrainerInsight, getCurrentUser, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)

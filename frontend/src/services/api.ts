@@ -333,7 +333,7 @@ export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
   return response.json()
 }
 
-export async function addMealLog(payload: {
+export interface MealCreateRequest {
   user_id: string
   name: string
   calories?: number
@@ -342,7 +342,9 @@ export async function addMealLog(payload: {
   proteins?: number
   carbs?: number
   fats?: number
-}): Promise<MealLogItem> {
+}
+
+export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
   const response = await fetch(`${API_URL}/api/v1/nutrition/meals`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

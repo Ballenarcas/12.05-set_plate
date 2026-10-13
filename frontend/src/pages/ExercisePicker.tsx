@@ -8,12 +8,19 @@ function ExercisePicker() {
   const navigate = useNavigate()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
     let isCurrent = true
-    fetchExercises({ q: search.trim() || undefined, limit: 100 })
+    setIsLoading(true)
+    fetchExercises({ q: debouncedSearch || undefined, limit: 30, compact: true })
       .then((response) => {
         if (isCurrent) setExercises(response.items)
       })
@@ -27,10 +34,10 @@ function ExercisePicker() {
     return () => {
       isCurrent = false
     }
-  }, [search])
+  }, [debouncedSearch])
 
   function selectExercise(exercise: Exercise) {
-    sessionStorage.setItem('set_plate_pending_exercise', JSON.stringify(exercise))
+    sessionStorage.setItem('set_plate_pending_exercise', JSON.stringify({ id: exercise.id, name: exercise.name, images: exercise.images.slice(0, 1) }))
     navigate('/workouts/active')
   }
 

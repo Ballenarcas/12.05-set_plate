@@ -25,6 +25,8 @@ export interface ActiveExercise {
   images?: string[]
   previous_weight_kg: number | null
   previous_reps: number | null
+  notes?: string
+  rest_enabled?: boolean
   sets: WorkoutSet[]
 }
 

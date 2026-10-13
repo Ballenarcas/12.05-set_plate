@@ -7,7 +7,7 @@ from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
 from app.schemas.workout import RoutineExerciseSummary, RoutineSummary, WorkoutSummary
 from app.schemas.workout_log import WorkoutLogCreate, WorkoutLogResponse
-from app.services.wger_importer import load_cached_exercises
+from app.services.wger_importer import get_cached_exercise, load_cached_exercises, resolve_exercise_log_id
 
 
 def get_programmed_workout() -> WorkoutSummary:
@@ -64,12 +64,8 @@ def list_exercises(
 
 
 def get_exercise_by_id(exercise_id: str) -> Exercise | None:
-    """Find an exercise by ID or wger_id."""
-    exercises = load_cached_exercises()
-    for e in exercises:
-        if e.id == exercise_id or (e.wger_id and str(e.wger_id) == exercise_id):
-            return e
-    return None
+    """Find an exercise by ID or wger_id using the in-memory catalog index."""
+    return get_cached_exercise(exercise_id)
 
 
 def get_exercise_categories() -> list[str]:
@@ -85,27 +81,33 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
     routines = supabase.table("routines").select("id,name").eq("user_id", str(user_id)).execute().data or []
-    result = []
-    for routine in routines:
-        rows = (
-            supabase.table("routine_exercises")
-            .select("exercise_id,target_sets,target_reps,exercises(name)")
-            .eq("routine_id", routine["id"])
-            .order("set_order")
-            .execute()
-            .data or []
-        )
-        exercises = []
-        for row in rows:
-            exercise = row.get("exercises") or {}
-            exercises.append(RoutineExerciseSummary(
+    if not routines:
+        return []
+
+    routine_ids = [routine["id"] for routine in routines]
+    rows = (
+        supabase.table("routine_exercises")
+        .select("routine_id,exercise_id,target_sets,target_reps,set_order,exercises(name)")
+        .in_("routine_id", routine_ids)
+        .order("set_order")
+        .execute()
+        .data or []
+    )
+    grouped: dict[str, list[RoutineExerciseSummary]] = {str(routine_id): [] for routine_id in routine_ids}
+    for row in rows:
+        exercise = row.get("exercises") or {}
+        grouped.setdefault(str(row["routine_id"]), []).append(
+            RoutineExerciseSummary(
                 exercise_id=str(row["exercise_id"]),
                 name=exercise.get("name", "Exercise"),
                 target_sets=row.get("target_sets"),
                 target_reps=row.get("target_reps"),
-            ))
-        result.append(RoutineSummary(id=str(routine["id"]), name=routine["name"], exercises=exercises))
-    return result
+            )
+        )
+    return [
+        RoutineSummary(id=str(routine["id"]), name=routine["name"], exercises=grouped.get(str(routine["id"]), []))
+        for routine in routines
+    ]
 
 
 def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
@@ -121,17 +123,22 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
         "started_at": payload.started_at.isoformat(),
         "completed_at": payload.completed_at.isoformat(),
     }
-    set_records = [
-        {
-            "exercise_id": str(exercise.exercise_id),
-            "set_number": set_item.set_number,
-            "weight_kg": set_item.weight_kg,
-            "reps": set_item.reps,
-            "is_completed": set_item.is_completed,
-        }
-        for exercise in payload.exercises
-        for set_item in exercise.sets
-    ]
+    set_records = []
+    for exercise in payload.exercises:
+        try:
+            resolved_id = resolve_exercise_log_id(exercise.exercise_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown exercise '{exercise.exercise_id}'")
+        set_records.extend(
+            {
+                "exercise_id": resolved_id,
+                "set_number": set_item.set_number,
+                "weight_kg": set_item.weight_kg,
+                "reps": set_item.reps,
+                "is_completed": set_item.is_completed,
+            }
+            for set_item in exercise.sets
+        )
     response = supabase.rpc(
         "log_workout_transaction",
         {"p_user_id": str(user_id), "p_workout": workout_record, "p_sets": set_records},

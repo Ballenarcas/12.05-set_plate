@@ -328,7 +328,7 @@ export interface FoodSearchItem {
 export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
   const response = await fetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
   if (!response.ok) {
-    return []
+    throw new Error(`Food search unavailable (${response.status}). Try again.`)
   }
   return response.json()
 }

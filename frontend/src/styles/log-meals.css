@@ -484,6 +484,16 @@
   color: #ffffff;
 }
 
+.food-search-message {
+  margin: 0.35rem 0 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #383838;
+  border-radius: 10px;
+  background: #222222;
+  color: #a0a0a0;
+  font-size: 0.82rem;
+}
+
 .suggestion-name {
   color: #ffffff;
   font-weight: 500;

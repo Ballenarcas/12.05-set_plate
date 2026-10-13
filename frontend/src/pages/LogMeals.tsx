@@ -69,6 +69,8 @@ export function LogMeals() {
 
   // Food suggestions state
   const [suggestions, setSuggestions] = useState<FoodSearchItem[]>([])
+  const [isFoodSearchOpen, setIsFoodSearchOpen] = useState(false)
+  const [foodSearchMessage, setFoodSearchMessage] = useState<string | null>(null)
   const [isSearchingFoods, setIsSearchingFoods] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -102,17 +104,22 @@ export function LogMeals() {
 
   // 3. Search suggestions as user types in modal
   useEffect(() => {
-    if (!isModalOpen) return
+    if (!isModalOpen || !isFoodSearchOpen) return
 
     let isCurrent = true
     const timer = setTimeout(() => {
       setIsSearchingFoods(true)
+      setFoodSearchMessage(null)
       searchFoodItems(foodInput.trim())
         .then((items) => {
-          if (isCurrent) setSuggestions(items)
+          if (!isCurrent) return
+          setSuggestions(items)
+          setFoodSearchMessage(items.length === 0 ? 'No foods found. Try another search.' : null)
         })
-        .catch(() => {
-          if (isCurrent) setSuggestions([])
+        .catch((err: unknown) => {
+          if (!isCurrent) return
+          setSuggestions([])
+          setFoodSearchMessage(err instanceof Error ? err.message : 'Food search is unavailable.')
         })
         .finally(() => {
           if (isCurrent) setIsSearchingFoods(false)
@@ -123,7 +130,7 @@ export function LogMeals() {
       isCurrent = false
       clearTimeout(timer)
     }
-  }, [foodInput, isModalOpen])
+  }, [foodInput, isFoodSearchOpen, isModalOpen])
 
   // 4. Live Automatic Nutrition Calculation (User NEVER inputs calories manually)
   const calculatedNutrition = useMemo(() => {
@@ -144,6 +151,7 @@ export function LogMeals() {
   }
 
   const handleSelectSuggestion = (item: FoodSearchItem) => {
+    setIsFoodSearchOpen(false)
     setFoodInput(item.name)
     setSelectedFoodDensity({
       caloriesPer100g: item.calories_per_100g,
@@ -152,6 +160,7 @@ export function LogMeals() {
       fatPer100g: item.fats_per_100g,
     })
     setSuggestions([])
+    setFoodSearchMessage(null)
   }
 
   const handleAddFood = () => {
@@ -166,6 +175,8 @@ export function LogMeals() {
     setQuantityGrams('100')
     setSelectedFoodDensity({ caloriesPer100g: 130, proteinPer100g: 8, carbsPer100g: 15, fatPer100g: 3.5 })
     setSuggestions([])
+    setIsFoodSearchOpen(false)
+    setFoodSearchMessage(null)
   }
 
   const handleOpenModal = () => {
@@ -173,6 +184,9 @@ export function LogMeals() {
     setQuantityGrams('100')
     setPlateFoods([])
     setSelectedFoodDensity({ caloriesPer100g: 130, proteinPer100g: 8, carbsPer100g: 15, fatPer100g: 3.5 })
+    setIsFoodSearchOpen(false)
+    setSuggestions([])
+    setFoodSearchMessage(null)
     setErrorMessage(null)
     // Pre-select meal type based on hour
     const currentHour = new Date().getHours()
@@ -187,6 +201,7 @@ export function LogMeals() {
   const handleCloseModal = () => {
     if (!isSubmitting) {
       setIsModalOpen(false)
+      setIsFoodSearchOpen(false)
       setErrorMessage(null)
     }
   }
@@ -232,6 +247,7 @@ export function LogMeals() {
       })
 
       setIsModalOpen(false)
+      setIsFoodSearchOpen(false)
       setFoodInput('')
       setPlateFoods([])
     } catch (err: unknown) {
@@ -243,15 +259,15 @@ export function LogMeals() {
   }
 
   // 6. Delete meal item
-  const handleDeleteMeal = async (mealId: string, index: number) => {
-    const targetMeal = mealList[index]
+  const handleDeleteMeal = async (mealId: string) => {
+    const targetMeal = mealList.find((meal) => meal.id === mealId)
     if (!targetMeal) return
 
     try {
       if (mealId) {
         await deleteMealLog(mealId)
       }
-      setMealList((prev) => prev.filter((_, i) => i !== index))
+      setMealList((prev) => prev.filter((meal) => meal.id !== mealId))
       setNutritionData((prev) => {
         if (!prev) return null
         const newConsumed = Math.max(0, prev.consumed_calories - (targetMeal.item_calories || 0))
@@ -269,8 +285,9 @@ export function LogMeals() {
   }
 
   // Search filter for today's logs
-  const filteredMeals = mealList.filter((m) =>
-    m.meal_name.toLowerCase().includes(searchQuery.toLowerCase())
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
+  const filteredMeals = mealList.filter((meal) =>
+    `${meal.meal_name} ${meal.meal_type}`.toLocaleLowerCase().includes(normalizedSearchQuery)
   )
 
   const consumedCaloriesText = nutritionData ? nutritionData.consumed_calories.toLocaleString() : '-'
@@ -416,7 +433,7 @@ export function LogMeals() {
                     <button
                       type="button"
                       className="btn-delete-item"
-                      onClick={() => handleDeleteMeal(meal.id, index)}
+                      onClick={() => handleDeleteMeal(meal.id)}
                       aria-label={`Delete ${meal.meal_name}`}
                     >
                       <Trash2 size={16} />
@@ -466,10 +483,17 @@ export function LogMeals() {
                     value={foodInput}
                     onChange={(e) => {
                       setFoodInput(e.target.value)
+                      setIsFoodSearchOpen(true)
+                      setFoodSearchMessage(null)
                       setSelectedFoodDensity({ caloriesPer100g: 130, proteinPer100g: 8, carbsPer100g: 15, fatPer100g: 3.5 })
                     }}
+                    onFocus={() => setIsFoodSearchOpen(true)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape') setSuggestions([])
+                      if (e.key === 'Escape') {
+                        setIsFoodSearchOpen(false)
+                        setSuggestions([])
+                        setFoodSearchMessage(null)
+                      }
                     }}
                     autoFocus
                     autoComplete="off"
@@ -480,10 +504,13 @@ export function LogMeals() {
                 </div>
 
                 {/* Suggestions Dropdown */}
-                {suggestions.length > 0 && (
+                {isFoodSearchOpen && suggestions.length > 0 && (
                   <ul className="suggestions-list">
                     <li className="suggestions-dismiss-row">
-                      <button type="button" onClick={() => setSuggestions([])}>
+                      <button type="button" onClick={() => {
+                        setIsFoodSearchOpen(false)
+                        setSuggestions([])
+                      }}>
                         Close suggestions <X size={14} aria-hidden="true" />
                       </button>
                     </li>
@@ -498,6 +525,9 @@ export function LogMeals() {
                       </li>
                     ))}
                   </ul>
+                )}
+                {isFoodSearchOpen && foodSearchMessage && (
+                  <p className="food-search-message" role="status">{foodSearchMessage}</p>
                 )}
               </div>
 

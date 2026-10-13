@@ -2,6 +2,7 @@ import logging
 import uuid
 from fastapi import APIRouter, HTTPException
 
+from app.core.security import hash_password
 from app.db.supabase_client import get_supabase
 from app.schemas.user import UserOnboardingRequest, UserOnboardingResponse
 
@@ -74,6 +75,24 @@ def submit_onboarding(payload: UserOnboardingRequest) -> UserOnboardingResponse:
                 "objective": payload.objective,
                 "calorie_goal": calorie_goal,
             }
+
+            # Onboarding upserts on email, so a repeat signup would otherwise
+            # overwrite the password of an existing account without proving
+            # ownership of that email. Only set it when the email is new.
+            if payload.password:
+                existing = (
+                    supabase.table("users")
+                    .select("id")
+                    .eq("email", payload.email)
+                    .limit(1)
+                    .execute()
+                )
+                if not existing.data:
+                    record["password"] = hash_password(payload.password)
+                else:
+                    logger.info(
+                        "Email already registered; keeping the stored password untouched."
+                    )
             res = (
                 supabase.table("users")
                 .upsert(record, on_conflict="email")

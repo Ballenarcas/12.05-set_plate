@@ -1,7 +1,7 @@
-import { Check, ChevronLeft, Gauge, Plus, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Check, ChevronLeft, Dumbbell, Gauge, Plus, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getCurrentUser, saveWorkoutLog } from '../services/api'
+import { fetchExerciseById, fetchExercises, getCurrentUser, saveWorkoutLog } from '../services/api'
 import type { Exercise } from '../types'
 import type { ActiveExercise, WorkoutLogCreate, WorkoutSet } from '../types/workout'
 
@@ -14,6 +14,20 @@ type ActiveSession = {
 }
 
 type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
+
+function ExerciseArtwork({ name, images }: { name: string; images?: string[] }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const image = images?.find(Boolean)
+
+  if (!image || imageFailed) {
+    return <div className="active-exercise-artwork active-exercise-artwork-fallback" role="img" aria-label={`${name} image unavailable`}>
+      <Dumbbell size={25} aria-hidden="true" />
+      <span>EXERCISE</span>
+    </div>
+  }
+
+  return <img className="active-exercise-artwork" src={image} alt={`${name} demonstration`} onError={() => setImageFailed(true)} />
+}
 
 function formatTimer(seconds: number): string {
   const hours = Math.floor(seconds / 3600).toString().padStart(2, '0')
@@ -46,6 +60,7 @@ function ActiveWorkout() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [rpeValues, setRpeValues] = useState<Record<string, number>>({})
+  const imageLookups = useRef(new Set<string>())
 
   useEffect(() => {
     if (session) sessionStorage.setItem('set_plate_active_workout', JSON.stringify(session))
@@ -57,11 +72,32 @@ function ActiveWorkout() {
   }, [])
 
   useEffect(() => {
+    session?.exercises.forEach((exercise) => {
+      if (exercise.images?.length || imageLookups.current.has(exercise.exercise_id)) return
+      imageLookups.current.add(exercise.exercise_id)
+      fetchExerciseById(exercise.exercise_id)
+        .catch(() => fetchExercises({ q: exercise.name, limit: 100 }).then((result: { items: Exercise[] }) =>
+          result.items.find((item) => item.name.trim().toLowerCase() === exercise.name.trim().toLowerCase()) ?? null))
+        .then((catalogExercise: Exercise | null) => {
+          if (!catalogExercise) return
+          if (!catalogExercise.images?.length) return
+          setSession((current) => current ? ({
+            ...current,
+            exercises: current.exercises.map((item) => item.exercise_id === exercise.exercise_id
+              ? { ...item, images: catalogExercise.images }
+              : item),
+          }) : current)
+        })
+        .catch(() => undefined)
+    })
+  }, [session])
+
+  useEffect(() => {
     const pending = sessionStorage.getItem('set_plate_pending_exercise')
     if (!pending) return
     try {
       const exercise = JSON.parse(pending) as Exercise
-      setSession((current) => current ? ({ ...current, exercises: [...current.exercises, { exercise_id: exercise.id, name: exercise.name, previous_weight_kg: null, previous_reps: null, sets: [createSet(1)] }] }) : current)
+      setSession((current) => current ? ({ ...current, exercises: [...current.exercises, { exercise_id: exercise.id, name: exercise.name, images: exercise.images, previous_weight_kg: null, previous_reps: null, sets: [createSet(1)] }] }) : current)
     } finally {
       sessionStorage.removeItem('set_plate_pending_exercise')
     }
@@ -141,7 +177,10 @@ function ActiveWorkout() {
       <div className="active-exercise-list">
         {session.exercises.map((exercise, exerciseIndex) => (
           <article className="card exercise-card" key={`${exercise.exercise_id}-${exerciseIndex}`}>
-            <div className="exercise-card-header"><h2>{exercise.name}</h2><span>{exercise.sets.length} sets</span></div>
+            <div className="exercise-card-header">
+              <div className="exercise-heading-main"><ExerciseArtwork name={exercise.name} images={exercise.images} /><h2>{exercise.name}</h2></div>
+              <span>{exercise.sets.length} sets</span>
+            </div>
             <div className="set-table">
               <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
               {exercise.sets.map((set, setIndex) => (

@@ -118,6 +118,11 @@
 .exercise-card { border: 1px solid #303030; background: linear-gradient(145deg, #222, #1b1b1b); }
 .exercise-card-header { align-items: center; margin-bottom: 0.75rem; }
 .exercise-card-header h2 { font-size: 1rem; }
+.exercise-heading-main { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
+.active-exercise-artwork { display: block; width: 4.25rem; height: 3.5rem; flex: 0 0 4.25rem; overflow: hidden; border: 1px solid #3a3d37; border-radius: 0.7rem; object-fit: cover; background: #171a17; }
+.active-exercise-artwork-fallback { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 0.15rem; color: #a5c5aa; background: radial-gradient(ellipse at 50% 25%, #39483b 0, #222a23 58%, #191d19 100%); }
+.active-exercise-artwork-fallback span { color: #aab7aa; font-size: 0.48rem; font-weight: 800; letter-spacing: 0.12em; }
+.exercise-heading-main h2 { min-width: 0; white-space: normal; }
 .exercise-card-header span { padding: 0.3rem 0.55rem; border-radius: 99px; color: #c9d8c9; background: #2a322a; font-variant-numeric: tabular-nums; }
 .set-table { margin-inline: 0; }
 .set-row { grid-template-columns: minmax(1.8rem, 0.65fr) minmax(2.45rem, 1fr) minmax(2.65rem, 1.1fr) minmax(2.45rem, 1fr) 2.3rem 2.4rem; gap: 0.25rem; }

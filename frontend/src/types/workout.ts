@@ -22,6 +22,7 @@ export interface WorkoutSet {
 export interface ActiveExercise {
   exercise_id: string
   name: string
+  images?: string[]
   previous_weight_kg: number | null
   previous_reps: number | null
   sets: WorkoutSet[]

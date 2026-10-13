@@ -1,0 +1,68 @@
+.login-container {
+  justify-content: center;
+}
+
+.login-content {
+  justify-content: center;
+}
+
+.login-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 3rem;
+  color: #a78bfa;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.login-header {
+  margin-bottom: 2rem;
+}
+
+.login-lookup-note {
+  margin: 0.8rem 0 0;
+  color: #888;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.login-form {
+  gap: 1.1rem;
+  margin-bottom: 0;
+}
+
+.login-actions {
+  margin-top: 0.65rem;
+  padding-top: 0;
+}
+
+.login-back-link {
+  color: #a0a0a0;
+}
+
+.login-notice {
+  margin: 0;
+  color: #d6c5ff;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.login-create-prompt {
+  margin: 2rem 0 0;
+  color: #a0a0a0;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.login-create-prompt a {
+  color: #c4b5fd;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.login-create-prompt a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

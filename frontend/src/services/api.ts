@@ -45,6 +45,34 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   return dashboardRequest
 }
 
+export async function findUserProfileByEmail(email: string): Promise<import('../types').UserProfile> {
+  const response = await fetch(`${API_URL}/api/v1/users/lookup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim() }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+
+  if (!response.ok) {
+    let errorMessage = `Server error (${response.status})`
+    try {
+      const errorData = await response.json()
+      if (typeof errorData.detail === 'string') errorMessage = errorData.detail
+    } catch {
+      // Keep the status-based error when the server response is not JSON.
+    }
+    throw new Error(errorMessage)
+  }
+
+  const profile = await response.json() as import('../types').UserProfile
+  try {
+    localStorage.setItem('set_plate_user', JSON.stringify(profile))
+  } catch {
+    throw new Error('Could not save the profile in this browser')
+  }
+  return profile
+}
+
 export interface TrainerInsightRequest {
   nutrition_summary: string
   training_summary: string
@@ -274,6 +302,5 @@ export function getCurrentUser(): import('../types').UserProfile | null {
     return null
   }
 }
-
 
 

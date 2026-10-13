@@ -3,11 +3,64 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from app.db.supabase_client import get_supabase
-from app.schemas.user import UserOnboardingRequest, UserOnboardingResponse
+from app.schemas.user import (
+    UserLookupRequest,
+    UserLookupResponse,
+    UserOnboardingRequest,
+    UserOnboardingResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.post("/lookup", response_model=UserLookupResponse)
+def lookup_user(payload: UserLookupRequest) -> UserLookupResponse:
+    """Looks up a saved profile by email without verifying a password."""
+    try:
+        supabase = get_supabase(admin=True)
+        if supabase is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Database client is not configured. Please ensure SUPABASE_URL and SUPABASE_KEY are set.",
+            )
+
+        email_pattern = (
+            payload.email.strip()
+            .replace("\\", "\\\\")
+            .replace("%", r"\%")
+            .replace("_", r"\_")
+        )
+        result = (
+            supabase.table("users")
+            .select("id,email,Name,Surname,is_premium,age,gender,weight,height,objective")
+            .ilike("email", email_pattern)
+            .limit(1)
+            .execute()
+        )
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.error("Could not look up user profile: %s", err, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not look up profile") from err
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="No profile found for this email")
+
+    user = result.data[0]
+    return UserLookupResponse(
+        id=str(user["id"]),
+        email=user["email"],
+        name=user.get("Name") or "",
+        surname=user.get("Surname") or "",
+        is_premium=user.get("is_premium"),
+        age=user.get("age"),
+        gender=user.get("gender"),
+        weight=user.get("weight"),
+        height=user.get("height"),
+        objective=user.get("objective"),
+    )
 
 
 @router.post("/onboarding", response_model=UserOnboardingResponse)

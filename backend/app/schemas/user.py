@@ -21,3 +21,26 @@ class UserOnboardingResponse(BaseModel):
     email: str
     message: str
     saved_to_supabase: bool
+
+
+class UserLookupRequest(BaseModel):
+    email: str = Field(
+        ...,
+        min_length=3,
+        max_length=255,
+        pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$",
+        description="Email address",
+    )
+
+
+class UserLookupResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    surname: str
+    is_premium: bool | None = None
+    age: int | None = None
+    gender: str | None = None
+    weight: float | None = None
+    height: int | None = None
+    objective: str | None = None

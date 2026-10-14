@@ -4,7 +4,9 @@
 .welcome-kicker { margin-bottom: 1rem; color: var(--green); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .welcome-hero h1 { max-width: 19rem; margin: 0 0 1rem; color: #fff; font-size: clamp(2.3rem, 11vw, 3.4rem); line-height: 0.98; letter-spacing: 0; }
 .welcome-hero p { max-width: 21rem; margin: 0; color: var(--text-muted); font-size: 1rem; line-height: 1.55; }
-.welcome-cta { display: inline-flex; min-height: 3.1rem; align-items: center; gap: 0.55rem; margin-top: 1.75rem; padding: 0 1rem; border-radius: 0.75rem; color: #071c0e; background: var(--green); font-size: 0.85rem; font-weight: 800; text-decoration: none; }
+.welcome-actions { display: grid; justify-items: start; gap: 0.65rem; margin-top: 1.75rem; }
+.welcome-cta, .welcome-existing-cta { display: inline-flex; min-height: 3.1rem; align-items: center; justify-content: center; padding: 0 1rem; border-radius: 0.75rem; font-size: 0.85rem; font-weight: 800; text-decoration: none; }
+.welcome-cta { gap: 0.55rem; color: #071c0e; background: var(--green); }
 .welcome-features { display: grid; gap: 0.7rem; }
 .welcome-feature { display: flex; align-items: center; gap: 0.8rem; padding: 0.9rem; border: 1px solid var(--line); border-radius: 0.85rem; background: var(--surface); }
 .welcome-feature-icon { display: grid; flex: 0 0 auto; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 0.65rem; color: var(--green); background: #293a2e; }

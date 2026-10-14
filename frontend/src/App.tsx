@@ -6,6 +6,8 @@ import { getCurrentUser } from './services/api'
 const Home = lazy(() => import('./pages/Home'))
 const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
+const Login = lazy(() => import('./pages/Login'))
+const LogMeals = lazy(() => import('./pages/LogMeals'))
 const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -22,7 +24,9 @@ function App() {
       <Suspense fallback={<div className="screen state-card" role="status">Loading screen…</div>}>
         <Routes>
           <Route path="/welcome" element={<Welcome />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/log-meals" element={<LogMeals />} />
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/workouts" element={<Workouts />} />

@@ -10,7 +10,10 @@ function Welcome() {
         <div className="welcome-kicker">Your adaptive wellness system</div>
         <h1 id="welcome-title">Train with purpose. Eat with clarity.</h1>
         <p>SET&PLATE brings your workouts, nutrition, and AI coaching into one daily rhythm built around your goals.</p>
-        <Link className="welcome-cta" to="/onboarding">Create your profile <ArrowRight size={18} aria-hidden="true" /></Link>
+        <div className="welcome-actions">
+          <Link className="welcome-cta" to="/onboarding">Create your profile <ArrowRight size={18} aria-hidden="true" /></Link>
+          <Link className="welcome-cta" to="/login">Existing profile <ArrowRight size={18} aria-hidden="true" /></Link>
+        </div>
       </section>
       <section className="welcome-features" aria-label="SET&PLATE features">
         <article className="welcome-feature"><div className="welcome-feature-icon"><Dumbbell size={19} aria-hidden="true" /></div><div><h2>Train smarter</h2><p>Workouts that respond to your progress.</p></div></article>

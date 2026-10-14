@@ -143,7 +143,13 @@ function Home() {
           {macros.map((macro) => <div className="macro" key={macro.label}><span className="macro-label">{macro.label}</span><span className="macro-value">{macro.value}</span></div>)}
         </div>
         <div className="action-row">
-          <button className="action-button" type="button" disabled><Plus size={17} aria-hidden="true" /> Manual Register</button>
+          <button
+            className="action-button"
+            type="button"
+            onClick={() => navigate('/log-meals')}
+          >
+            <Plus size={17} aria-hidden="true" /> Manual Register
+          </button>
           <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">PRO</span></button>
         </div>
       </section>

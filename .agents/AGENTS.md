@@ -56,6 +56,7 @@ Use this guide with the concise repository-level `AGENTS.md`. Prefer accurate, f
   - `token-budget`: Low-context search and slice inspection procedures.
   - `dev-workflows`: Build, run, and test procedures with suppressed output.
   - `surgical-editing`: Minimal-diff patch techniques.
+  - `poteto-mode`: Entry point for non-trivial engineering tasks; choose its matching playbook and follow its verification and reporting steps. Project rules above remain authoritative when instructions conflict.
 
 ---
 

@@ -41,6 +41,10 @@ function readDashboardCache(userId: string): { data: DashboardSummary; at: numbe
   }
 }
 
+export function clearDashboardCache(): void {
+  dashboardRequests.clear()
+}
+
 export function getCachedDashboardSummary(): DashboardSummary | null {
   const user = getCurrentUser()
   return user?.id ? readDashboardCache(user.id)?.data ?? null : null
@@ -105,6 +109,34 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
   })
   if (!response.ok) throw new Error('Unable to save workout')
   return response.json() as Promise<{ status: string }>
+}
+
+export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
+  const response = await fetch(`${API_URL}/api/v1/users/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), password }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+
+  if (!response.ok) {
+    let errorMessage = `Server error (${response.status})`
+    try {
+      const errorData = await response.json()
+      if (typeof errorData.detail === 'string') errorMessage = errorData.detail
+    } catch {
+      // Keep the status-based error when the server response is not JSON.
+    }
+    throw new Error(errorMessage)
+  }
+
+  const profile = await response.json() as import('../types').UserProfile
+  try {
+    localStorage.setItem('set_plate_user', JSON.stringify(profile))
+  } catch {
+    throw new Error('Could not save the signed-in profile in this browser')
+  }
+  return profile
 }
 
 export interface TrainerInsightRequest {
@@ -342,6 +374,9 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
   }
 
   localProfile.id = data.user_id
+  if (data.calorie_goal) {
+    localProfile.calorie_goal = data.calorie_goal
+  }
   try {
     localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
   } catch {
@@ -360,5 +395,87 @@ export function getCurrentUser(): import('../types').UserProfile | null {
   }
 }
 
+export interface MealLogItem {
+  id: string
+  user_id: string
+  meal_name: string
+  meal_type: string
+  portion_amount: string
+  weight_g: string
+  item_calories: number
+  consumed_at?: string
+  proteins_g?: number
+  carbs_g?: number
+  fats_g?: number
+}
 
+export interface TodayNutritionData {
+  consumed_calories: number
+  daily_goal: number
+  active_calories: number
+  calories_progress_percentage: number
+  carbs_g: number
+  proteins_g: number
+  fats_g: number
+  meals: MealLogItem[]
+}
 
+export async function fetchTodayNutrition(userId: string): Promise<TodayNutritionData> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}`)
+  if (!response.ok) {
+    throw new Error('Failed to fetch today nutrition from database')
+  }
+  return response.json()
+}
+
+export interface FoodSearchItem {
+  id: string
+  name: string
+  calories_per_100g: number
+  proteins_per_100g: number
+  carbs_per_100g: number
+  fats_per_100g: number
+  category?: string
+}
+
+export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
+  if (!response.ok) {
+    throw new Error(`Food search unavailable (${response.status}). Try again.`)
+  }
+  return response.json()
+}
+
+export interface MealCreateRequest {
+  user_id: string
+  name: string
+  calories?: number
+  quantity_g?: number
+  meal_type?: string
+  proteins?: number
+  carbs?: number
+  fats?: number
+}
+
+export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    throw new Error('Failed to save meal to database')
+  }
+  clearDashboardCache()
+  return response.json()
+}
+
+export async function deleteMealLog(mealId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${mealId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    throw new Error('Failed to delete meal from database')
+  }
+  clearDashboardCache()
+}

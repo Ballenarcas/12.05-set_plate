@@ -37,8 +37,8 @@ class FakeSupabase:
 
 def test_login_user_returns_profile_for_correct_password(monkeypatch) -> None:
     monkeypatch.setattr(
-        users,
-        "get_supabase",
+        users.onboarding_facade,
+        "supabase_provider",
         lambda admin: FakeSupabase(
             [
                 {
@@ -67,8 +67,8 @@ def test_login_user_returns_profile_for_correct_password(monkeypatch) -> None:
 
 def test_login_user_rejects_incorrect_password(monkeypatch) -> None:
     monkeypatch.setattr(
-        users,
-        "get_supabase",
+        users.onboarding_facade,
+        "supabase_provider",
         lambda admin: FakeSupabase(
             [{"id": "profile-id", "password": hash_password("secure-pass")}]
         ),
@@ -83,7 +83,7 @@ def test_login_user_rejects_incorrect_password(monkeypatch) -> None:
 
 
 def test_login_user_rejects_unknown_email(monkeypatch) -> None:
-    monkeypatch.setattr(users, "get_supabase", lambda admin: FakeSupabase([]))
+    monkeypatch.setattr(users.onboarding_facade, "supabase_provider", lambda admin: FakeSupabase([]))
 
     response = client.post(
         "/api/v1/users/login",

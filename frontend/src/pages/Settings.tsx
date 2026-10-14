@@ -9,7 +9,7 @@ function Settings() {
   const [weight, setWeight] = useState(user?.weight?.toString() || '')
   const [height, setHeight] = useState(user?.height?.toString() || '')
   const [gender, setGender] = useState(user?.gender || 'Male')
-  const [objective, setObjective] = useState(user?.objective || 'Hypertrophy')
+  const [objective, setObjective] = useState<string>(user?.objective || 'Hypertrophy')
 
   useEffect(() => {
     if (user) {

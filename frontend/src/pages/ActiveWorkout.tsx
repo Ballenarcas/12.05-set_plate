@@ -333,7 +333,7 @@ function ActiveWorkout() {
 
   function moveExercise(exerciseIndex: number, direction: -1 | 1) {
     const targetIndex = exerciseIndex + direction
-    if (targetIndex < 0 || targetIndex >= session.exercises.length) return
+    if (!session || targetIndex < 0 || targetIndex >= session.exercises.length) return
     setMenuOpen(null)
     setSession((current) => {
       if (!current || targetIndex >= current.exercises.length) return current

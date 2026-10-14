@@ -464,7 +464,8 @@ export async function addMealLog(payload: MealCreateRequest): Promise<MealLogIte
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    throw new Error('Failed to save meal to database')
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || 'Failed to save meal to database')
   }
   clearDashboardCache()
   return response.json()

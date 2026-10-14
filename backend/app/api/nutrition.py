@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.nutrition import (
@@ -6,14 +8,10 @@ from app.schemas.nutrition import (
     MealCreateRequest,
     MealItem,
 )
-from app.services.nutrition_service import (
-    create_user_meal,
-    delete_user_meal,
-    get_user_nutrition_today,
-    search_foods,
-)
+from app.facades.nutrition_facade import nutrition_facade
 
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_model=dict[str, list])
@@ -26,7 +24,7 @@ def search_food_items(
     q: str = Query("", description="Food name search query"),
 ) -> list[FoodSearchItem]:
     try:
-        return search_foods(q)
+        return nutrition_facade.search_foods(q)
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Failed to search foods: {err}")
 
@@ -36,7 +34,7 @@ def get_today_nutrition(
     user_id: str = Query(..., description="User ID"),
 ) -> DailyNutritionResponse:
     try:
-        return get_user_nutrition_today(user_id)
+        return nutrition_facade.get_today(user_id)
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Failed to fetch nutrition data: {err}")
 
@@ -44,15 +42,16 @@ def get_today_nutrition(
 @router.post("/meals", response_model=MealItem)
 def add_meal(payload: MealCreateRequest) -> MealItem:
     try:
-        return create_user_meal(payload)
+        return nutrition_facade.create_meal(payload)
     except Exception as err:
+        logger.exception("Failed to save meal")
         raise HTTPException(status_code=500, detail=f"Failed to save meal: {err}")
 
 
 @router.delete("/meals/{meal_id}")
 def remove_meal(meal_id: str) -> dict[str, str]:
     try:
-        delete_user_meal(meal_id)
+        nutrition_facade.delete_meal(meal_id)
         return {"status": "success", "deleted_id": meal_id}
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Failed to delete meal: {err}")

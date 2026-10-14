@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import logging
 
 import httpx
-from app.api.users import calculate_calorie_goal
+from app.services.user_profile_service import calculate_calorie_goal
 from app.db.supabase_client import get_supabase
 from app.schemas.nutrition import (
     DailyNutritionResponse,

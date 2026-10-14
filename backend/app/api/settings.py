@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from app.schemas.settings import UserSettingsUpdate
-from app.services.settings_service import update_user_settings_db
+from app.facades.settings_facade import settings_facade
 
 # C'est CETTE variable 'router' que main.py cherche !
 router = APIRouter(prefix="/settings", tags=["Settings"])
@@ -12,7 +12,7 @@ async def update_settings(
 ):
     try:
         # Appel à Supabase via le service
-        await update_user_settings_db(user_id, settings)
+        await settings_facade.update(user_id, settings)
         
         # Retourne la confirmation exacte
         return {

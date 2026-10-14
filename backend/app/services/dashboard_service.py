@@ -5,9 +5,9 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from app.api.users import calculate_calorie_goal
 from app.db.supabase_client import get_supabase
 from app.schemas.dashboard import DashboardSummary, NutritionDashboard, WorkoutDashboard
+from app.services.user_profile_service import calculate_calorie_goal
 
 
 def _query_user(user_id: UUID) -> dict:

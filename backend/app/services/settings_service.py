@@ -1,5 +1,5 @@
 import os
-from supabase_client import get_supabase
+from app.db.supabase_client import get_supabase
 from app.schemas.settings import UserSettingsUpdate
 
 TABLE_NAME = os.getenv("USERS_TABLE_NAME", "users")

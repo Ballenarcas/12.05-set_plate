@@ -12,6 +12,10 @@
   padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem calc(6rem + env(safe-area-inset-bottom));
 }
 
+.app-shell:has(.workout-progress-bar) .app-main {
+  padding-bottom: calc(9rem + env(safe-area-inset-bottom));
+}
+
 .session-main {
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
 }
@@ -71,6 +75,15 @@
 .workouts-page-header h1 { margin: 0; font-size: 1.7rem; }
 .secondary-action { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: 0.4rem; padding: 0 0.8rem; border: 1px solid var(--line); border-radius: 0.7rem; color: #fff; background: var(--surface); cursor: pointer; font-size: 0.72rem; font-weight: 700; }
 .routine-list { display: grid; gap: 0.9rem; }
+.workout-history-section { margin-bottom: 1.5rem; }
+.workout-history-list { display: grid; gap: 0.75rem; }
+.workout-history-card { padding: 0.95rem; }
+.workout-history-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.65rem; }
+.history-delete-button { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 1px solid rgba(255, 105, 105, 0.3); border-radius: 0.7rem; color: #ff9c9c; background: rgba(255, 105, 105, 0.08); cursor: pointer; }
+.history-delete-button:disabled { cursor: wait; opacity: 0.55; }
+.workout-history-card .routine-meta { flex-wrap: wrap; gap: 0.55rem 0.9rem; }
+.workout-history-card .routine-meta span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.workout-history-card .routine-preview { margin-top: 0.65rem; }
 .routine-card { padding: 1.05rem; }
 .routine-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .routine-card-heading h2 { margin: 0; font-size: 1.2rem; }
@@ -98,8 +111,14 @@
 .icon-button.ghost { min-width: 2.2rem; min-height: 2.2rem; border-color: transparent; background: transparent; color: var(--text-muted); }
 .exercise-menu { position: absolute; z-index: 3; top: 2.8rem; right: 0.7rem; min-width: 8.5rem; padding: 0.35rem; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--surface-raised); }
 .exercise-menu button { display: flex; width: 100%; align-items: center; gap: 0.4rem; min-height: 2.3rem; padding: 0 0.55rem; border: 0; border-radius: 0.5rem; color: #ffb1b1; background: transparent; cursor: pointer; font: inherit; font-size: 0.78rem; }
+.exercise-menu button.replace-exercise-action { color: #fff; }
+.exercise-menu button.exercise-order-action { color: #fff; }
+.exercise-menu button:disabled { cursor: default; opacity: 0.4; }
 .rest-toggle { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 1.8rem; margin-bottom: 0.45rem; padding: 0; border: 0; color: var(--text-muted); background: transparent; cursor: pointer; font: inherit; font-size: 0.72rem; font-weight: 700; }
 .rest-toggle.is-on { color: var(--green); }
+.rest-controls { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.25rem; }
+.rest-duration-field { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--text-muted); font-size: 0.68rem; font-weight: 700; }
+.rest-duration-input { width: 4.5rem; min-height: 2rem; padding: 0.2rem 0.4rem; border: 1px solid var(--line); border-radius: 0.55rem; color: var(--text); background: var(--surface); font: inherit; font-size: 0.75rem; text-align: center; }
 .exercise-notes input { width: 100%; min-height: 2.2rem; margin-bottom: 0.7rem; padding: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: #d8d8d8; background: transparent; font: inherit; font-size: 0.82rem; }
 .exercise-notes input::placeholder { color: #6f6f6f; }
 .set-table { overflow-x: auto; margin-inline: -0.25rem; }
@@ -159,6 +178,9 @@
 .confirmation-modal { position: relative; width: min(100%, 28rem); padding: 1.4rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); }
 .confirmation-modal h2 { margin: 0 0 0.5rem; font-size: 1.3rem; }
 .confirmation-modal > p:not(.eyebrow):not(.form-error) { margin: 0; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; }
+.workout-name-field { display: grid; gap: 0.4rem; margin-top: 1rem; }
+.workout-name-field label { color: var(--text-muted); font-size: 0.76rem; font-weight: 700; }
+.workout-name-field input { width: 100%; min-height: 2.8rem; padding: 0 0.75rem; border: 1px solid var(--line); border-radius: 0.65rem; color: #fff; background: #151615; font: inherit; font-size: 0.85rem; }
 .modal-close { position: absolute; top: 0.8rem; right: 0.8rem; min-width: 2.4rem; min-height: 2.4rem; }
 .modal-actions { display: grid; gap: 0.55rem; margin-top: 1.2rem; }
 .modal-actions .primary-button { margin-top: 0; }

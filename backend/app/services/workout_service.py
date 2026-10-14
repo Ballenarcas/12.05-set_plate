@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -6,8 +7,17 @@ from fastapi import HTTPException
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
 from app.schemas.workout import RoutineExerciseSummary, RoutineSummary, WorkoutSummary
-from app.schemas.workout_log import WorkoutLogCreate, WorkoutLogResponse
+from app.schemas.workout_log import (
+    WorkoutHistoryEntry,
+    WorkoutHistoryExercise,
+    WorkoutHistoryResponse,
+    WorkoutHistorySet,
+    WorkoutLogCreate,
+    WorkoutLogResponse,
+)
 from app.services.wger_importer import get_cached_exercise, load_cached_exercises, resolve_exercise_log_id
+
+logger = logging.getLogger(__name__)
 
 
 def get_programmed_workout() -> WorkoutSummary:
@@ -115,14 +125,6 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
-    workout_record = {
-        "user_id": str(user_id),
-        "routine_id": str(payload.routine_id) if payload.routine_id else None,
-        "name": payload.name,
-        "duration_seconds": payload.duration_seconds,
-        "started_at": payload.started_at.isoformat(),
-        "completed_at": payload.completed_at.isoformat(),
-    }
     set_records = []
     for exercise in payload.exercises:
         try:
@@ -133,17 +135,126 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
             {
                 "exercise_id": resolved_id,
                 "set_number": set_item.set_number,
-                "weight_kg": set_item.weight_kg,
+                "weight": set_item.weight_kg,
                 "reps": set_item.reps,
-                "is_completed": set_item.is_completed,
+                "rpe": set_item.rpe,
+                "is_done": set_item.is_completed,
             }
             for set_item in exercise.sets
         )
-    response = supabase.rpc(
-        "log_workout_transaction",
-        {"p_user_id": str(user_id), "p_workout": workout_record, "p_sets": set_records},
-    ).execute()
-    data = response.data
-    log_id = data.get("id") if isinstance(data, dict) else data
-    return WorkoutLogResponse(id=log_id, status="saved")
+
+    workout_id = None
+    try:
+        response = (
+            supabase.table("workouts")
+            .insert({
+                "user_id": str(user_id),
+                "routine_id": str(payload.routine_id) if payload.routine_id else None,
+                "name": payload.name.strip(),
+                "start_time": payload.started_at.isoformat(),
+                "end_time": payload.completed_at.isoformat(),
+            })
+            .select("id")
+            .execute()
+        )
+        inserted = response.data
+        workout_row = inserted[0] if isinstance(inserted, list) and inserted else inserted
+        if not isinstance(workout_row, dict) or not workout_row.get("id"):
+            raise RuntimeError("Supabase did not return the saved workout ID")
+        workout_id = workout_row["id"]
+        if set_records:
+            for record in set_records:
+                record["workout_id"] = workout_id
+            supabase.table("workout_sets").insert(set_records).execute()
+    except Exception as err:
+        logger.exception("Failed to persist workout and workout sets")
+        if workout_id:
+            try:
+                supabase.table("workouts").delete().eq("id", workout_id).execute()
+            except Exception:
+                pass
+        raise HTTPException(status_code=502, detail="Could not save workout history") from err
+
+    return WorkoutLogResponse(id=workout_id, status="saved")
+
+
+def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryResponse:
+    supabase = get_supabase(admin=True)
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Supabase is not configured")
+
+    rows = (
+        supabase.table("workouts")
+        .select(
+            "id,routine_id,name,start_time,end_time,routines(name),"
+            "workout_sets(exercise_id,set_number,reps,weight,rpe,is_done,exercises(name))"
+        )
+        .eq("user_id", str(user_id))
+        .not_.is_("end_time", "null")
+        .order("start_time", desc=True)
+        .limit(limit)
+        .execute()
+        .data or []
+    )
+
+    history = []
+    for row in rows:
+        started_at = datetime.fromisoformat(row["start_time"].replace("Z", "+00:00"))
+        completed_at = datetime.fromisoformat(row["end_time"].replace("Z", "+00:00")) if row.get("end_time") else None
+        exercises: dict[str, dict] = {}
+        for set_row in row.get("workout_sets") or []:
+            exercise_id = str(set_row["exercise_id"])
+            exercise = set_row.get("exercises") or {}
+            if isinstance(exercise, list):
+                exercise = exercise[0] if exercise else {}
+            item = exercises.setdefault(exercise_id, {
+                "exercise_id": exercise_id,
+                "name": exercise.get("name") or "Exercise",
+                "sets": [],
+            })
+            item["sets"].append(WorkoutHistorySet(
+                set_number=set_row["set_number"],
+                reps=set_row["reps"],
+                weight_kg=float(set_row.get("weight") or 0),
+                rpe=set_row.get("rpe"),
+                is_completed=bool(set_row.get("is_done")),
+            ))
+
+        routine = row.get("routines") or {}
+        if isinstance(routine, list):
+            routine = routine[0] if routine else {}
+        history.append(WorkoutHistoryEntry(
+            id=row["id"],
+            routine_id=row.get("routine_id"),
+            name=row.get("name") or routine.get("name") or "Custom workout",
+            started_at=started_at,
+            completed_at=completed_at,
+            duration_seconds=max(0, int((completed_at - started_at).total_seconds())) if completed_at else 0,
+            exercises=[WorkoutHistoryExercise(**exercise) for exercise in exercises.values()],
+        ))
+    return WorkoutHistoryResponse(items=history)
+
+
+def delete_workout_history_entry(user_id: UUID, workout_id: UUID) -> None:
+    supabase = get_supabase(admin=True)
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Supabase is not configured")
+
+    workout = (
+        supabase.table("workouts")
+        .select("id")
+        .eq("id", str(workout_id))
+        .eq("user_id", str(user_id))
+        .execute()
+        .data or []
+    )
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout history entry not found")
+
+    try:
+        supabase.table("workout_sets").delete().eq("workout_id", str(workout_id)).execute()
+        supabase.table("workouts").delete().eq("id", str(workout_id)).eq("user_id", str(user_id)).execute()
+    except Exception as err:
+        logger.exception("Failed to delete workout history entry")
+        raise HTTPException(status_code=502, detail="Could not delete workout history entry") from err
 

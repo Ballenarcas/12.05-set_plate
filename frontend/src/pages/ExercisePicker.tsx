@@ -1,6 +1,6 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExercises } from '../services/api'
 import type { Exercise } from '../types'
 
@@ -8,6 +8,8 @@ const PAGE_SIZE = 30
 
 function ExercisePicker() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const replaceExerciseIndex = (location.state as { replaceExerciseIndex?: number } | null)?.replaceExerciseIndex
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -52,7 +54,12 @@ function ExercisePicker() {
     .filter((pageNumber) => pageNumber >= 1 && pageNumber <= pageCount)))
 
   function selectExercise(exercise: Exercise) {
-    sessionStorage.setItem('set_plate_pending_exercise', JSON.stringify({ id: exercise.id, name: exercise.name, images: exercise.images.slice(0, 1) }))
+    sessionStorage.setItem('set_plate_pending_exercise', JSON.stringify({
+      id: exercise.id,
+      name: exercise.name,
+      images: exercise.images.slice(0, 1),
+      replaceExerciseIndex,
+    }))
     navigate('/workouts/active')
   }
 
@@ -60,7 +67,7 @@ function ExercisePicker() {
     <div className="screen exercise-picker-screen">
       <header className="picker-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts/active')} aria-label="Back to active workout"><ArrowLeft size={21} /></button>
-        <div><p className="eyebrow">Active workout</p><h1>Add exercise</h1></div>
+        <div><p className="eyebrow">Active workout</p><h1>{replaceExerciseIndex === undefined ? 'Add exercise' : 'Replace exercise'}</h1></div>
       </header>
 
       <label className="picker-search"><Search size={18} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search exercises" aria-label="Search exercises" /></label>

@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
 from app.facades.workout_facade import workout_facade
-from app.schemas.workout_log import WorkoutLogCreate, WorkoutLogResponse
+from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
@@ -15,6 +15,23 @@ def create_workout_log(
     user_id: UUID = Query(..., description="Supabase users.id"),
 ) -> WorkoutLogResponse:
     return workout_facade.save_log(user_id, payload)
+
+
+@router.get("/history", response_model=WorkoutHistoryResponse)
+def get_workout_history(
+    user_id: UUID = Query(..., description="Supabase users.id"),
+    limit: int = Query(30, ge=1, le=100),
+) -> WorkoutHistoryResponse:
+    return workout_facade.list_history(user_id, limit)
+
+
+@router.delete("/history/{workout_id}")
+def delete_workout_history(
+    workout_id: UUID,
+    user_id: UUID = Query(..., description="Supabase users.id"),
+) -> dict[str, str]:
+    workout_facade.delete_history_entry(user_id, workout_id)
+    return {"status": "deleted"}
 
 
 @router.get("/")

@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExerciseById, fetchExercises, getCurrentUser, saveWorkoutLog } from '../services/api'
@@ -15,6 +15,7 @@ type ActiveSession = {
 
 type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
 const EXTREME_WEIGHT_WARNING_KG = 600
+const DEFAULT_REST_SECONDS = 90
 type PendingSetRemoval = {
   exerciseIndex: number
   setIndex: number
@@ -68,6 +69,17 @@ function reindexKeyedMap<T>(map: Record<string, T>, removedIndex: number): Recor
   return next
 }
 
+function swapKeyedMapIndexes<T>(map: Record<string, T>, firstIndex: number, secondIndex: number): Record<string, T> {
+  const next: Record<string, T> = {}
+  for (const [key, value] of Object.entries(map)) {
+    const [indexPart, ...rest] = key.split(':')
+    const index = Number(indexPart)
+    const nextIndex = index === firstIndex ? secondIndex : index === secondIndex ? firstIndex : index
+    next[[nextIndex, ...rest].join(':')] = value
+  }
+  return next
+}
+
 function removeSetFromKeyedMap<T>(map: Record<string, T>, exerciseIndex: number, removedSetNumber: number): Record<string, T> {
   const next: Record<string, T> = {}
   for (const [key, value] of Object.entries(map)) {
@@ -117,6 +129,7 @@ function ActiveWorkout() {
     const saved = sessionStorage.getItem('set_plate_active_workout')
     return saved ? getSession(JSON.parse(saved)) : null
   })
+  const [workoutName, setWorkoutName] = useState(() => session?.name ?? '')
   const [now, setNow] = useState(() => Date.now())
   const [showFinish, setShowFinish] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -185,8 +198,26 @@ function ActiveWorkout() {
     const pending = sessionStorage.getItem('set_plate_pending_exercise')
     if (!pending) return
     try {
-      const exercise = JSON.parse(pending) as Exercise
-      setSession((current) => current ? ({ ...current, exercises: [...current.exercises, { exercise_id: exercise.id, name: exercise.name, images: exercise.images, previous_weight_kg: null, previous_reps: null, sets: [createSet(1)] }] }) : current)
+      const selection = JSON.parse(pending) as Exercise & { replaceExerciseIndex?: number }
+      setSession((current) => {
+        if (!current) return current
+        const replacement = {
+          exercise_id: selection.id,
+          name: selection.name,
+          images: selection.images,
+          previous_weight_kg: null,
+          previous_reps: null,
+        }
+        if (selection.replaceExerciseIndex !== undefined && current.exercises[selection.replaceExerciseIndex]) {
+          return {
+            ...current,
+            exercises: current.exercises.map((exercise, index) => index === selection.replaceExerciseIndex
+              ? { ...exercise, ...replacement }
+              : exercise),
+          }
+        }
+        return { ...current, exercises: [...current.exercises, { ...replacement, sets: [createSet(1)] }] }
+      })
     } finally {
       sessionStorage.removeItem('set_plate_pending_exercise')
     }
@@ -295,6 +326,34 @@ function ActiveWorkout() {
     setRestRemaining((current) => reindexKeyedMap(current, exerciseIndex))
   }
 
+  function replaceExercise(exerciseIndex: number) {
+    setMenuOpen(null)
+    navigate('/workouts/active/exercises', { state: { replaceExerciseIndex: exerciseIndex } })
+  }
+
+  function moveExercise(exerciseIndex: number, direction: -1 | 1) {
+    const targetIndex = exerciseIndex + direction
+    if (targetIndex < 0 || targetIndex >= session.exercises.length) return
+    setMenuOpen(null)
+    setSession((current) => {
+      if (!current || targetIndex >= current.exercises.length) return current
+      const exercises = [...current.exercises]
+      ;[exercises[exerciseIndex], exercises[targetIndex]] = [exercises[targetIndex], exercises[exerciseIndex]]
+      return { ...current, exercises, setKinds: swapKeyedMapIndexes(current.setKinds, exerciseIndex, targetIndex) }
+    })
+    setRpeValues((current) => swapKeyedMapIndexes(current, exerciseIndex, targetIndex))
+    setRestRemaining((current) => {
+      const next = { ...current }
+      const firstValue = current[exerciseIndex]
+      const secondValue = current[targetIndex]
+      if (secondValue === undefined) delete next[exerciseIndex]
+      else next[exerciseIndex] = secondValue
+      if (firstValue === undefined) delete next[targetIndex]
+      else next[targetIndex] = firstValue
+      return next
+    })
+  }
+
   function updateSetKind(exerciseIndex: number, setNumber: number, kind: SetKind) {
     setSession((current) => current ? ({ ...current, setKinds: { ...current.setKinds, [`${exerciseIndex}:${setNumber}`]: kind } }) : current)
   }
@@ -321,8 +380,15 @@ function ActiveWorkout() {
 
   function toggleSetComplete(exerciseIndex: number, setIndex: number, isCompleted: boolean) {
     updateSet(exerciseIndex, setIndex, { is_completed: isCompleted })
-    const restOn = session?.exercises[exerciseIndex]?.rest_enabled
-    if (isCompleted && restOn) setRestRemaining((current) => ({ ...current, [exerciseIndex]: 90 }))
+    const exercise = session?.exercises[exerciseIndex]
+    if (isCompleted && exercise?.rest_enabled) {
+      setRestRemaining((current) => ({ ...current, [exerciseIndex]: exercise.rest_seconds ?? DEFAULT_REST_SECONDS }))
+    }
+  }
+
+  function updateRestDuration(exerciseIndex: number, seconds: number) {
+    updateExercise(exerciseIndex, { rest_seconds: seconds })
+    setRestRemaining((current) => exerciseIndex in current ? { ...current, [exerciseIndex]: seconds } : current)
   }
 
   async function finishWorkout() {
@@ -333,16 +399,22 @@ function ActiveWorkout() {
     setSaveError(null)
     const payload: WorkoutLogCreate = {
       routine_id: currentSession.routineId,
-      name: currentSession.name,
+      name: workoutName.trim() || currentSession.name,
       duration_seconds: durationSeconds,
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
-      exercises: currentSession.exercises.map(({ exercise_id, sets }) => ({ exercise_id, sets })),
+      exercises: currentSession.exercises.map(({ exercise_id, sets }, exerciseIndex) => ({
+        exercise_id,
+        sets: sets.map((set) => ({
+          ...set,
+          rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? null,
+        })),
+      })),
     }
     try {
       await saveWorkoutLog(user.id, payload)
       sessionStorage.removeItem('set_plate_active_workout')
-      navigate('/')
+      navigate('/workouts')
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Unable to save workout')
       setIsSaving(false)
@@ -376,16 +448,37 @@ function ActiveWorkout() {
               <MoreVertical size={19} aria-hidden="true" />
             </button>
             {menuOpen === exerciseIndex && <div className="exercise-menu">
+              <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, -1)} disabled={exerciseIndex === 0}><ArrowUp size={15} aria-hidden="true" />Move up</button>
+              <button className="exercise-order-action" type="button" onClick={() => moveExercise(exerciseIndex, 1)} disabled={exerciseIndex === session.exercises.length - 1}><ArrowDown size={15} aria-hidden="true" />Move down</button>
+              <button className="replace-exercise-action" type="button" onClick={() => replaceExercise(exerciseIndex)}><Repeat2 size={15} aria-hidden="true" />Replace exercise</button>
               <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />Remove exercise</button>
             </div>}
             <div className="exercise-card-header">
               <div className="exercise-heading-main"><ExerciseArtwork name={exercise.name} images={exercise.images} /><h2>{exercise.name}</h2></div>
               <span>{exercise.sets.length} sets</span>
             </div>
-            <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} onClick={() => toggleRest(exerciseIndex)}>
-              <Clock3 size={15} aria-hidden="true" />
-              {restRemaining[exerciseIndex] ? `Rest ${formatRest(restRemaining[exerciseIndex])}` : `Rest timer ${exercise.rest_enabled ? 'on' : 'off'}`}
-            </button>
+            <div className="rest-controls">
+              <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} onClick={() => toggleRest(exerciseIndex)}>
+                <Clock3 size={15} aria-hidden="true" />
+                {restRemaining[exerciseIndex] ? `Rest ${formatRest(restRemaining[exerciseIndex])}` : `Rest timer ${exercise.rest_enabled ? 'on' : 'off'}`}
+              </button>
+              <label className="rest-duration-field">
+                <span>seconds</span>
+                <input
+                  className="rest-duration-input"
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  aria-label={`Rest duration in seconds for ${exercise.name}`}
+                  value={exercise.rest_seconds ?? DEFAULT_REST_SECONDS}
+                  onChange={(event) => {
+                    const seconds = Number(event.target.value)
+                    if (Number.isInteger(seconds) && seconds > 0) updateRestDuration(exerciseIndex, seconds)
+                  }}
+                />
+              </label>
+            </div>
             <div className="set-table">
               <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
               {exercise.sets.map((set, setIndex) => {
@@ -464,6 +557,18 @@ function ActiveWorkout() {
             <p className="eyebrow">Session complete</p>
             <h2 id="finish-title">Finish workout?</h2>
             <p>{formatDuration(durationSeconds)} tracked. Save your completed sets or discard this session.</p>
+            <div className="workout-name-field">
+              <label htmlFor="completed-workout-name">Workout name (e.g. Best chest day)</label>
+              <input
+                id="completed-workout-name"
+                type="text"
+                maxLength={120}
+                placeholder="Best chest day"
+                value={workoutName}
+                onChange={(event) => setWorkoutName(event.target.value)}
+                disabled={isSaving}
+              />
+            </div>
             {saveError && <p className="form-error">{saveError}</p>}
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={() => setShowFinish(false)} disabled={isSaving}>Keep training</button>

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { submitUserOnboarding } from '../services/api'
-import { formatBirthDateInput } from '../utils/birthDateInput.js'
 import type { FitnessGoal, UserOnboardingFormData } from '../types'
 import '../styles/onboarding.css'
 
@@ -24,7 +23,6 @@ function Onboarding() {
   const navigate = useNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [formData, setFormData] = useState<UserOnboardingFormData>(initialFormData)
-  const [birthDateInput, setBirthDateInput] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -94,7 +92,8 @@ function Onboarding() {
     if (!formData.birthDate) {
       newErrors.birthDate = 'Birth date is required'
     } else {
-      const birth = new Date(formData.birthDate)
+      const [year, month, day] = formData.birthDate.split('-').map(Number)
+      const birth = new Date(year, month - 1, day)
       const today = new Date()
       if (isNaN(birth.getTime()) || birth > today) {
         newErrors.birthDate = 'Please enter a valid birth date'
@@ -388,18 +387,11 @@ function Onboarding() {
                   </label>
                   <input
                     id="birthDate"
-                    type="text"
-                    inputMode="numeric"
+                    type="date"
                     autoComplete="bday"
-                    placeholder="DD/MM/YYYY"
-                    maxLength={10}
                     className={`form-input${errors.birthDate ? ' has-error' : ''}`}
-                    value={birthDateInput}
-                    onChange={(e) => {
-                      const parsed = formatBirthDateInput(e.target.value)
-                      setBirthDateInput(parsed.displayValue)
-                      handleInputChange('birthDate', parsed.isoValue)
-                    }}
+                    value={formData.birthDate}
+                    onChange={(e) => handleInputChange('birthDate', e.target.value)}
                   />
                   {errors.birthDate && <span className="error-text">{errors.birthDate}</span>}
                 </div>

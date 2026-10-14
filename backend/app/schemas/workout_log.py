@@ -8,6 +8,7 @@ class SetLogItem(BaseModel):
     set_number: int = Field(ge=1)
     weight_kg: float = Field(ge=0)
     reps: int = Field(ge=0)
+    rpe: float | None = Field(default=None, ge=1, le=10)
     is_completed: bool = False
 
 
@@ -28,3 +29,31 @@ class WorkoutLogCreate(BaseModel):
 class WorkoutLogResponse(BaseModel):
     id: UUID | None = None
     status: str
+
+
+class WorkoutHistorySet(BaseModel):
+    set_number: int
+    reps: int
+    weight_kg: float
+    rpe: float | None = None
+    is_completed: bool
+
+
+class WorkoutHistoryExercise(BaseModel):
+    exercise_id: UUID
+    name: str
+    sets: list[WorkoutHistorySet]
+
+
+class WorkoutHistoryEntry(BaseModel):
+    id: UUID
+    routine_id: UUID | None = None
+    name: str
+    started_at: datetime
+    completed_at: datetime | None = None
+    duration_seconds: int
+    exercises: list[WorkoutHistoryExercise]
+
+
+class WorkoutHistoryResponse(BaseModel):
+    items: list[WorkoutHistoryEntry]

@@ -2,6 +2,7 @@ import logging
 import uuid
 from fastapi import APIRouter, HTTPException
 
+from app.core.security import hash_password
 from app.db.supabase_client import get_supabase
 from app.schemas.user import (
     UserLookupRequest,
@@ -63,11 +64,53 @@ def lookup_user(payload: UserLookupRequest) -> UserLookupResponse:
     )
 
 
+def calculate_calorie_goal(
+    weight: float | None,
+    height: int | None,
+    age: int | None,
+    gender: str | None,
+    objective: str | None,
+) -> int:
+    """Calculates scientifically tailored daily calorie goal based on Mifflin-St Jeor formula."""
+    w = weight if weight and weight > 0 else 75.0
+    h = height if height and height > 0 else 175.0
+    a = age if age and age > 0 else 25
+    g = (gender or "male").lower()
+
+    # Mifflin-St Jeor BMR
+    gender_offset = 5 if "male" in g else (-161 if "female" in g else -78)
+    bmr = (10.0 * w) + (6.25 * h) - (5.0 * a) + gender_offset
+
+    # TDEE activity baseline (light/moderate training: 1.25x)
+    tdee = bmr * 1.25
+
+    # Fitness objective calibration
+    obj = (objective or "").lower()
+    if "lose" in obj:
+        target = tdee - 500
+    elif "hypertrophy" in obj:
+        target = tdee + 400
+    elif "strength" in obj:
+        target = tdee + 250
+    else:
+        target = tdee
+
+    return max(1200, min(5000, round(target)))
+
+
 @router.post("/onboarding", response_model=UserOnboardingResponse)
 def submit_onboarding(payload: UserOnboardingRequest) -> UserOnboardingResponse:
-    """Stores user onboarding profile into public.users in Supabase."""
+    """Stores user onboarding profile with tailored calorie_goal into public.users in Supabase."""
     user_id = str(uuid.uuid4())
     saved_to_supabase = False
+
+    calorie_goal = calculate_calorie_goal(
+        weight=payload.weight,
+        height=payload.height,
+        age=payload.age,
+        gender=payload.gender,
+        objective=payload.objective,
+    )
 
     try:
         supabase = get_supabase(admin=True)
@@ -83,7 +126,26 @@ def submit_onboarding(payload: UserOnboardingRequest) -> UserOnboardingResponse:
                 "age": int(payload.age) if payload.age is not None else None,
                 "gender": payload.gender,
                 "objective": payload.objective,
+                "calorie_goal": calorie_goal,
             }
+
+            # Onboarding upserts on email, so a repeat signup would otherwise
+            # overwrite the password of an existing account without proving
+            # ownership of that email. Only set it when the email is new.
+            if payload.password:
+                existing = (
+                    supabase.table("users")
+                    .select("id")
+                    .eq("email", payload.email)
+                    .limit(1)
+                    .execute()
+                )
+                if not existing.data:
+                    record["password"] = hash_password(payload.password)
+                else:
+                    logger.info(
+                        "Email already registered; keeping the stored password untouched."
+                    )
             res = (
                 supabase.table("users")
                 .upsert(record, on_conflict="email")
@@ -113,6 +175,7 @@ def submit_onboarding(payload: UserOnboardingRequest) -> UserOnboardingResponse:
         name=payload.name,
         surname=payload.surname,
         email=payload.email,
+        calorie_goal=calorie_goal,
         message=f"Welcome to SET&PLATE, {payload.name}!",
         saved_to_supabase=saved_to_supabase,
     )

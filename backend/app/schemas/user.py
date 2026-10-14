@@ -19,6 +19,7 @@ class UserOnboardingResponse(BaseModel):
     name: str
     surname: str
     email: str
+    calorie_goal: int | None = None
     message: str
     saved_to_supabase: bool
 

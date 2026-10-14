@@ -64,6 +64,7 @@ export interface UserProfile {
   weight?: number
   height?: number
   objective?: FitnessGoal
+  calorie_goal?: number
 }
 
 

@@ -24,25 +24,29 @@ export interface DashboardSummary {
   } | null
 }
 
-export async function fetchDashboardSummary(): Promise<DashboardSummary> {
-  if (dashboardRequest) return dashboardRequest
+export function clearDashboardCache(): void {
+  dashboardRequest = null
+}
+
+export async function fetchDashboardSummary(force = false): Promise<DashboardSummary> {
+  if (dashboardRequest && !force) return dashboardRequest
 
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Complete onboarding before loading the dashboard')
 
-  dashboardRequest = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(user.id)}`, {
+  const request = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(user.id)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
       if (!response.ok) throw new Error('Unable to load dashboard summary')
       return response.json() as Promise<DashboardSummary>
     })
-    .catch((error: unknown) => {
+    .finally(() => {
       dashboardRequest = null
-      throw error
     })
 
-  return dashboardRequest
+  dashboardRequest = request
+  return request
 }
 
 export async function findUserProfileByEmail(email: string): Promise<import('../types').UserProfile> {
@@ -285,6 +289,9 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
   }
 
   localProfile.id = data.user_id
+  if (data.calorie_goal) {
+    localProfile.calorie_goal = data.calorie_goal
+  }
   try {
     localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
   } catch {
@@ -301,6 +308,91 @@ export function getCurrentUser(): import('../types').UserProfile | null {
   } catch {
     return null
   }
+}
+
+export interface MealLogItem {
+  id: string
+  user_id: string
+  meal_name: string
+  meal_type: string
+  portion_amount: string
+  weight_g: string
+  item_calories: number
+  consumed_at?: string
+  proteins_g?: number
+  carbs_g?: number
+  fats_g?: number
+}
+
+export interface TodayNutritionData {
+  consumed_calories: number
+  daily_goal: number
+  active_calories: number
+  calories_progress_percentage: number
+  carbs_g: number
+  proteins_g: number
+  fats_g: number
+  meals: MealLogItem[]
+}
+
+export async function fetchTodayNutrition(userId: string): Promise<TodayNutritionData> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}`)
+  if (!response.ok) {
+    throw new Error('Failed to fetch today nutrition from database')
+  }
+  return response.json()
+}
+
+export interface FoodSearchItem {
+  id: string
+  name: string
+  calories_per_100g: number
+  proteins_per_100g: number
+  carbs_per_100g: number
+  fats_per_100g: number
+  category?: string
+}
+
+export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
+  if (!response.ok) {
+    throw new Error(`Food search unavailable (${response.status}). Try again.`)
+  }
+  return response.json()
+}
+
+export interface MealCreateRequest {
+  user_id: string
+  name: string
+  calories?: number
+  quantity_g?: number
+  meal_type?: string
+  proteins?: number
+  carbs?: number
+  fats?: number
+}
+
+export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    throw new Error('Failed to save meal to database')
+  }
+  clearDashboardCache()
+  return response.json()
+}
+
+export async function deleteMealLog(mealId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${mealId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    throw new Error('Failed to delete meal from database')
+  }
+  clearDashboardCache()
 }
 
 

@@ -5,25 +5,16 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.api.users import calculate_calorie_goal
 from app.db.supabase_client import get_supabase
 from app.schemas.dashboard import DashboardSummary, NutritionDashboard, WorkoutDashboard
-
-
-OBJECTIVE_ADJUSTMENTS = {
-    "lose": -500,
-    "loss": -500,
-    "cut": -500,
-    "gain": 300,
-    "muscle": 300,
-    "bulk": 300,
-}
 
 
 def _query_user(user_id: UUID) -> dict:
     response = (
         get_supabase(admin=True)
         .table("users")
-        .select("Name,Surname,weight,height,age,gender,objective")
+        .select("calorie_goal,Name,Surname,weight,height,age,gender,objective")
         .eq("id", str(user_id))
         .single()
         .execute()
@@ -34,15 +25,23 @@ def _query_user(user_id: UUID) -> dict:
 
 
 def _calculate_target_calories(user: dict) -> int:
+    if user.get("calorie_goal") is not None:
+        try:
+            return int(float(user["calorie_goal"]))
+        except (ValueError, TypeError):
+            pass
+
     missing_fields = [field for field in ("weight", "height", "age") if user.get(field) is None]
     if missing_fields:
         raise HTTPException(status_code=422, detail=f"User profile is missing: {', '.join(missing_fields)}")
 
-    gender_adjustment = {"male": 5, "female": -161}.get(str(user.get("gender", "")).lower(), 0)
-    basal_metabolic_rate = 10 * user["weight"] + 6.25 * user["height"] - 5 * user["age"] + gender_adjustment
-    objective = str(user.get("objective", "")).lower()
-    adjustment = next((value for keyword, value in OBJECTIVE_ADJUSTMENTS.items() if keyword in objective), 0)
-    return max(0, round(basal_metabolic_rate * 1.2 + adjustment))
+    return calculate_calorie_goal(
+        weight=user.get("weight"),
+        height=user.get("height"),
+        age=user.get("age"),
+        gender=user.get("gender"),
+        objective=user.get("objective"),
+    )
 
 
 def _query_today_meals(user_id: UUID) -> dict[str, float]:

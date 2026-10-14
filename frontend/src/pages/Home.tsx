@@ -1,12 +1,14 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { fetchDashboardSummary, generateTrainerInsight, getCurrentUser, type DashboardSummary } from '../services/api'
+import { useNavigate } from 'react-router-dom'
+import { fetchDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
 }
 
 function Home() {
+  const navigate = useNavigate()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [aiNotification, setAiNotification] = useState('Thinking...')
   const [error, setError] = useState<string | null>(null)
@@ -15,30 +17,24 @@ function Home() {
   useEffect(() => {
     let isMounted = true
 
-    fetchDashboardSummary()
-      .then((data) => {
-        if (!isMounted) return
-        setSummary(data)
-
-        const currentUser = getCurrentUser()
-        generateTrainerInsight({
-          nutrition_summary: JSON.stringify(data.nutrition),
-          training_summary: JSON.stringify(data.workout),
-          user_goal: currentUser?.objective ?? '',
+    const loadDashboard = () => {
+      fetchDashboardSummary(true)
+        .then((data) => {
+          if (!isMounted) return
+          setSummary(data)
+          setAiNotification('AI Trainer insights will be configured soon.')
         })
-          .then((response) => {
-            if (isMounted) setAiNotification(response.insight)
-          })
-          .catch(() => {
-            if (isMounted) setAiNotification('AI trainer insight is unavailable right now.')
-          })
-      })
-      .catch((requestError: Error) => {
-        if (isMounted) setError(requestError.message)
-      })
+        .catch((requestError: Error) => {
+          if (isMounted) setError(requestError.message)
+        })
+    }
+
+    loadDashboard()
+    window.addEventListener('focus', loadDashboard)
 
     return () => {
       isMounted = false
+      window.removeEventListener('focus', loadDashboard)
     }
   }, [])
 
@@ -86,7 +82,13 @@ function Home() {
           {macros.map((macro) => <div className="macro" key={macro.label}><span className="macro-label">{macro.label}</span><span className="macro-value">{macro.value}</span></div>)}
         </div>
         <div className="action-row">
-          <button className="action-button" type="button" disabled><Plus size={17} aria-hidden="true" /> Manual Register</button>
+          <button
+            className="action-button"
+            type="button"
+            onClick={() => navigate('/log-meals')}
+          >
+            <Plus size={17} aria-hidden="true" /> Manual Register
+          </button>
           <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">PRO</span></button>
         </div>
       </section>

@@ -1,28 +1,39 @@
-import { ArrowLeft, Search } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchExercises } from '../services/api'
 import type { Exercise } from '../types'
+
+const PAGE_SIZE = 30
 
 function ExercisePicker() {
   const navigate = useNavigate()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+      setPage(1)
+    }, 250)
     return () => window.clearTimeout(timer)
   }, [search])
 
   useEffect(() => {
     let isCurrent = true
     setIsLoading(true)
-    fetchExercises({ q: debouncedSearch || undefined, limit: 30, compact: true })
+    setError(null)
+    fetchExercises({ q: debouncedSearch || undefined, page, limit: PAGE_SIZE, compact: true })
       .then((response) => {
-        if (isCurrent) setExercises(response.items)
+        if (isCurrent) {
+          setExercises(response.items)
+          setTotal(response.total)
+        }
       })
       .catch((requestError: Error) => {
         if (isCurrent) setError(requestError.message)
@@ -34,7 +45,11 @@ function ExercisePicker() {
     return () => {
       isCurrent = false
     }
-  }, [debouncedSearch])
+  }, [debouncedSearch, page])
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const pageNumbers = Array.from(new Set([1, page - 1, page, page + 1, pageCount]
+    .filter((pageNumber) => pageNumber >= 1 && pageNumber <= pageCount)))
 
   function selectExercise(exercise: Exercise) {
     sessionStorage.setItem('set_plate_pending_exercise', JSON.stringify({ id: exercise.id, name: exercise.name, images: exercise.images.slice(0, 1) }))
@@ -62,6 +77,24 @@ function ExercisePicker() {
           </button>
         ))}
       </div>
+
+      {!isLoading && !error && pageCount > 1 && <nav className="exercise-pagination" aria-label="Exercise pages">
+        <button className="pagination-arrow" type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1} aria-label="Previous page">
+          <ChevronLeft size={17} aria-hidden="true" /> Previous
+        </button>
+        <div className="pagination-pages">
+          {pageNumbers.map((pageNumber, index) => <span className="pagination-page-slot" key={pageNumber}>
+            {index > 0 && pageNumber - pageNumbers[index - 1] > 1 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
+            <button className={`pagination-page${pageNumber === page ? ' is-current' : ''}`} type="button" onClick={() => setPage(pageNumber)} aria-current={pageNumber === page ? 'page' : undefined} aria-label={`Page ${pageNumber}`}>
+              {pageNumber}
+            </button>
+          </span>)}
+        </div>
+        <button className="pagination-arrow" type="button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount} aria-label="Next page">
+          Next <ChevronRight size={17} aria-hidden="true" />
+        </button>
+        <span className="pagination-count">Page {page} of {pageCount}</span>
+      </nav>}
     </div>
   )
 }

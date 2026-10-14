@@ -103,9 +103,16 @@
 .exercise-notes input { width: 100%; min-height: 2.2rem; margin-bottom: 0.7rem; padding: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: #d8d8d8; background: transparent; font: inherit; font-size: 0.82rem; }
 .exercise-notes input::placeholder { color: #6f6f6f; }
 .set-table { overflow-x: auto; margin-inline: -0.25rem; }
-.set-row-group { position: relative; margin-top: 0.4rem; overflow: hidden; border-radius: 0.75rem; }
+.set-row-group { position: relative; max-height: 3.25rem; margin-top: 0.4rem; overflow: hidden; border-radius: 0.75rem; opacity: 1; transform: translateX(0); transition: max-height 240ms ease, margin 240ms ease, opacity 180ms ease, transform 200ms ease; }
+.set-row-group.is-removing { max-height: 0; margin-top: 0; opacity: 0; transform: translateX(-1.5rem); }
 .set-row-shell { position: relative; overflow: hidden; border-radius: 0.75rem; touch-action: pan-y; }
-.set-row-shell > .set-row { margin-top: 0; padding: 0.05rem; border-radius: 0.75rem; background: #1d1e1d; }
+.set-delete-action { position: absolute; top: 0; right: 0; bottom: 0; display: grid; width: 3.25rem; place-items: center; border: 0; border-radius: 0.65rem; color: #fff; background: #c83d3d; cursor: pointer; }
+.set-delete-action:active { background: #a82d2d; }
+.set-row-shell > .set-row { position: relative; z-index: 1; margin-top: 0; padding: 0.05rem; border-radius: 0.75rem; background: #1d1e1d; transition: transform 200ms ease; }
+.set-row-shell.is-revealed > .set-row { transform: translateX(-3.25rem); }
+.set-removal-undo { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-top: 0.35rem; padding: 0.45rem 0.65rem; border: 1px solid #454545; border-radius: 0.65rem; color: #eee; background: #292a29; font-size: 0.72rem; }
+.set-removal-undo button { padding: 0.2rem 0.35rem; border: 0; color: #8edf9c; background: transparent; cursor: pointer; font: inherit; font-weight: 800; }
+.high-weight-warning { margin: 0.3rem 0.15rem 0; padding: 0.45rem 0.55rem; border: 1px solid rgba(238, 184, 82, 0.3); border-radius: 0.55rem; color: #f0ca78; background: rgba(150, 105, 24, 0.12); font-size: 0.68rem; line-height: 1.4; }
 .set-row { display: grid; grid-template-columns: 2.8rem minmax(0, 4.3rem) minmax(0, 4.1rem) minmax(0, 4.1rem) 2.8rem 2.8rem; align-items: center; gap: 0.35rem; width: 100%; color: #e5e5e5; font-size: 0.72rem; }
 .set-row + .set-row { margin-top: 0.4rem; }
 .set-heading { padding-bottom: 0.4rem; color: var(--text-muted); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; }
@@ -169,6 +176,14 @@
 .exercise-picker-item span { display: grid; gap: 0.25rem; min-width: 0; }
 .exercise-picker-item strong { overflow: hidden; font-size: 0.88rem; text-overflow: ellipsis; white-space: nowrap; }
 .exercise-picker-item small { overflow: hidden; color: var(--text-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.exercise-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.4rem; margin-top: 1rem; padding: 0.65rem 0; }
+.pagination-pages { display: flex; align-items: center; gap: 0.25rem; }
+.pagination-page-slot { display: contents; }
+.pagination-page, .pagination-arrow { display: inline-flex; min-width: 2.35rem; min-height: 2.35rem; align-items: center; justify-content: center; gap: 0.2rem; padding: 0 0.45rem; border: 1px solid var(--line); border-radius: 0.6rem; color: #ddd; background: var(--surface); cursor: pointer; font: inherit; font-size: 0.75rem; }
+.pagination-page.is-current { border-color: var(--green); color: #101510; background: var(--green); font-weight: 800; }
+.pagination-arrow:disabled { cursor: not-allowed; opacity: 0.4; }
+.pagination-ellipsis { padding: 0 0.15rem; color: var(--text-muted); }
+.pagination-count { flex-basis: 100%; color: var(--text-muted); font-size: 0.7rem; text-align: center; }
 
 .skeleton-screen { display: grid; gap: 1.35rem; }
 .skeleton { position: relative; overflow: hidden; border-radius: 0.55rem; background: #242424; }

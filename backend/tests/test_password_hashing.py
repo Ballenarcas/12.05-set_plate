@@ -37,7 +37,7 @@ def _upserted_record(supabase):
 
 def test_password_is_hashed_not_stored_in_plaintext():
     supabase = _mock_supabase()
-    with patch("app.api.users.get_supabase", return_value=supabase):
+    with patch("app.facades.onboarding_facade.get_supabase", return_value=supabase):
         response = client.post("/api/v1/users/onboarding", json=PAYLOAD)
 
     assert response.status_code == 200
@@ -48,7 +48,7 @@ def test_password_is_hashed_not_stored_in_plaintext():
 
 def test_existing_email_does_not_overwrite_stored_password():
     supabase = _mock_supabase(existing_rows=[{"id": "existing-id"}])
-    with patch("app.api.users.get_supabase", return_value=supabase):
+    with patch("app.facades.onboarding_facade.get_supabase", return_value=supabase):
         response = client.post("/api/v1/users/onboarding", json=PAYLOAD)
 
     assert response.status_code == 200
@@ -88,7 +88,7 @@ def test_verify_password_rejects_malformed_stored_hash():
 
 def test_password_hash_is_never_returned_to_the_client():
     supabase = _mock_supabase()
-    with patch("app.api.users.get_supabase", return_value=supabase):
+    with patch("app.facades.onboarding_facade.get_supabase", return_value=supabase):
         response = client.post("/api/v1/users/onboarding", json=PAYLOAD)
 
     assert response.status_code == 200
@@ -100,7 +100,7 @@ def test_password_hash_is_never_returned_to_the_client():
 def test_omitted_password_writes_no_password_column():
     payload = {k: v for k, v in PAYLOAD.items() if k != "password"}
     supabase = _mock_supabase()
-    with patch("app.api.users.get_supabase", return_value=supabase):
+    with patch("app.facades.onboarding_facade.get_supabase", return_value=supabase):
         response = client.post("/api/v1/users/onboarding", json=payload)
 
     assert response.status_code == 200
@@ -110,7 +110,7 @@ def test_omitted_password_writes_no_password_column():
 def test_short_password_is_rejected_by_schema():
     payload = {**PAYLOAD, "password": "abc"}
     supabase = _mock_supabase()
-    with patch("app.api.users.get_supabase", return_value=supabase):
+    with patch("app.facades.onboarding_facade.get_supabase", return_value=supabase):
         response = client.post("/api/v1/users/onboarding", json=payload)
 
     assert response.status_code == 422

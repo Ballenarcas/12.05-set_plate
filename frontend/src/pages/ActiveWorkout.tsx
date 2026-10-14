@@ -14,6 +14,17 @@ type ActiveSession = {
 }
 
 type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
+const EXTREME_WEIGHT_WARNING_KG = 600
+type PendingSetRemoval = {
+  exerciseIndex: number
+  setIndex: number
+  setNumber: number
+  key: string
+  set: WorkoutSet
+  kind?: SetKind
+  rpe?: number
+  removed: boolean
+}
 
 function ExerciseArtwork({ name, images }: { name: string; images?: string[] }) {
   const [imageFailed, setImageFailed] = useState(false)
@@ -72,6 +83,21 @@ function removeSetFromKeyedMap<T>(map: Record<string, T>, exerciseIndex: number,
   return next
 }
 
+function insertSetIntoKeyedMap<T>(map: Record<string, T>, exerciseIndex: number, setNumber: number, value?: T): Record<string, T> {
+  const next: Record<string, T> = {}
+  for (const [key, currentValue] of Object.entries(map)) {
+    const [exercisePart, setPart, ...rest] = key.split(':')
+    const currentExerciseIndex = Number(exercisePart)
+    const currentSetNumber = Number(setPart)
+    const nextSetNumber = currentExerciseIndex === exerciseIndex && currentSetNumber >= setNumber
+      ? currentSetNumber + 1
+      : currentSetNumber
+    next[[exercisePart, nextSetNumber, ...rest].join(':')] = currentValue
+  }
+  if (value !== undefined) next[`${exerciseIndex}:${setNumber}`] = value
+  return next
+}
+
 function createSet(setNumber: number, source?: WorkoutSet): WorkoutSet {
   return { set_number: setNumber, weight_kg: source?.weight_kg ?? 0, reps: source?.reps ?? 0, is_completed: false }
 }
@@ -98,12 +124,24 @@ function ActiveWorkout() {
   const [rpeValues, setRpeValues] = useState<Record<string, number>>({})
   const [restRemaining, setRestRemaining] = useState<Record<number, number>>({})
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
+  const [removingSetKey, setRemovingSetKey] = useState<string | null>(null)
+  const [revealedSetKey, setRevealedSetKey] = useState<string | null>(null)
+  const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const removeSetTimer = useRef<number | null>(null)
+  const removeSetAnimationTimer = useRef<number | null>(null)
   const imageLookups = useRef(new Set<string>())
+  const sessionRef = useRef(session)
+  sessionRef.current = session
 
   useEffect(() => {
     if (session) sessionStorage.setItem('set_plate_active_workout', JSON.stringify(session))
   }, [session])
+
+  useEffect(() => () => {
+    if (removeSetTimer.current !== null) window.clearTimeout(removeSetTimer.current)
+    if (removeSetAnimationTimer.current !== null) window.clearTimeout(removeSetAnimationTimer.current)
+  }, [])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -191,7 +229,7 @@ function ActiveWorkout() {
   }
 
   function removeSet(exerciseIndex: number, setIndex: number) {
-    const removedSetNumber = session?.exercises[exerciseIndex]?.sets[setIndex]?.set_number
+    const removedSetNumber = sessionRef.current?.exercises[exerciseIndex]?.sets[setIndex]?.set_number
     if (removedSetNumber === undefined) return
     setSession((current) => current ? ({
       ...current,
@@ -206,7 +244,47 @@ function ActiveWorkout() {
     setRpeValues((current) => removeSetFromKeyedMap(current, exerciseIndex, removedSetNumber))
   }
 
+  function scheduleSetRemoval(removal: PendingSetRemoval) {
+    if (removeSetTimer.current !== null) return
+    setPendingSetRemoval(removal)
+    setRemovingSetKey(removal.key)
+    setRevealedSetKey(null)
+    removeSetAnimationTimer.current = window.setTimeout(() => {
+      removeSet(removal.exerciseIndex, removal.setIndex)
+      setPendingSetRemoval((current) => current ? { ...current, removed: true } : current)
+      setRemovingSetKey(null)
+      removeSetAnimationTimer.current = null
+    }, 240)
+    removeSetTimer.current = window.setTimeout(() => {
+      setPendingSetRemoval(null)
+      removeSetTimer.current = null
+    }, 2800)
+  }
+
+  function undoSetRemoval() {
+    if (removeSetTimer.current !== null) window.clearTimeout(removeSetTimer.current)
+    if (removeSetAnimationTimer.current !== null) window.clearTimeout(removeSetAnimationTimer.current)
+    removeSetTimer.current = null
+    removeSetAnimationTimer.current = null
+    if (pendingSetRemoval?.removed) {
+      const { exerciseIndex, setIndex, set, kind, rpe } = pendingSetRemoval
+      setSession((current) => current ? ({
+        ...current,
+        exercises: current.exercises.map((exercise, index) => index !== exerciseIndex ? exercise : ({
+          ...exercise,
+          sets: [...exercise.sets.slice(0, setIndex), set, ...exercise.sets.slice(setIndex)]
+            .map((currentSet, index) => ({ ...currentSet, set_number: index + 1 })),
+        })),
+        setKinds: insertSetIntoKeyedMap(current.setKinds, exerciseIndex, set.set_number, kind),
+      }) : current)
+      setRpeValues((current) => insertSetIntoKeyedMap(current, exerciseIndex, set.set_number, rpe))
+    }
+    setRemovingSetKey(null)
+    setPendingSetRemoval(null)
+  }
+
   function removeExercise(exerciseIndex: number) {
+    if (removeSetTimer.current !== null) undoSetRemoval()
     setMenuOpen(null)
     setSession((current) => current ? ({
       ...current,
@@ -313,23 +391,30 @@ function ActiveWorkout() {
               {exercise.sets.map((set, setIndex) => {
                 const setKey = `${exerciseIndex}:${set.set_number}`
                 const kind = session.setKinds[setKey] ?? 'normal'
-                return <div className="set-row-group" key={set.set_number}>
+                const isRemoving = removingSetKey === setKey
+                const hasHighWeightWarning = set.weight_kg > EXTREME_WEIGHT_WARNING_KG
+                return <div className="set-row-entry" key={set.set_number}>
+                  <div className={`set-row-group${isRemoving ? ' is-removing' : ''}`}>
                   <div
-                    className="set-row-shell"
+                    className={`set-row-shell${revealedSetKey === setKey ? ' is-revealed' : ''}`}
                     onTouchStart={(event) => {
                       const touch = event.touches[0]
-                      swipeStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null
+                      swipeStart.current = touch && !pendingSetRemoval ? { x: touch.clientX, y: touch.clientY } : null
                     }}
                     onTouchEnd={(event) => {
                       const touch = event.changedTouches[0]
                       if (swipeStart.current && touch) {
                         const deltaX = touch.clientX - swipeStart.current.x
                         const deltaY = touch.clientY - swipeStart.current.y
-                        if (deltaX < -80 && Math.abs(deltaY) < 60) removeSet(exerciseIndex, setIndex)
+                        if (deltaX < -55 && Math.abs(deltaY) < 60) setRevealedSetKey(setKey)
+                        else if (deltaX > 45) setRevealedSetKey(null)
                       }
                       swipeStart.current = null
                     }}
                   >
+                    <button className="set-delete-action" type="button" onClick={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })} aria-label={`Delete set ${set.set_number}`} disabled={pendingSetRemoval !== null}>
+                      <Trash2 size={19} aria-hidden="true" />
+                    </button>
                     <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}`}>
                       <select className={`set-kind-select set-kind-${kind}`} value={kind} onChange={(event) => {
                         updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
@@ -354,9 +439,15 @@ function ActiveWorkout() {
                       <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} /></button>
                     </div>
                   </div>
+                  </div>
+                  {hasHighWeightWarning && <p className="high-weight-warning" role="status">⚠ This weight is extremely high. Check that you entered it correctly.</p>}
                 </div>
               })}
             </div>
+            {pendingSetRemoval?.exerciseIndex === exerciseIndex && <div className="set-removal-undo" role="status">
+              <span>Set {pendingSetRemoval.setNumber} deleted</span>
+              <button type="button" onClick={undoSetRemoval}>Undo</button>
+            </div>}
             <button className="secondary-action" type="button" onClick={() => addSet(exerciseIndex)}><Plus size={16} /> Add Set</button>
           </article>
         ))}

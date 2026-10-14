@@ -7,42 +7,41 @@ from fastapi import HTTPException
 
 from app.db.supabase_client import get_supabase
 from app.schemas.dashboard import DashboardSummary, NutritionDashboard, WorkoutDashboard
-
-
-OBJECTIVE_ADJUSTMENTS = {
-    "lose": -500,
-    "loss": -500,
-    "cut": -500,
-    "gain": 300,
-    "muscle": 300,
-    "bulk": 300,
-}
+from app.services.user_profile_service import calculate_calorie_goal
 
 
 def _query_user(user_id: UUID) -> dict:
     response = (
         get_supabase(admin=True)
         .table("users")
-        .select("Name,Surname,weight,height,age,gender,objective")
+        .select("calorie_goal,Name,Surname,weight,height,age,gender,objective")
         .eq("id", str(user_id))
-        .single()
+        .limit(1)
         .execute()
     )
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
-    return response.data
+    return response.data[0]
 
 
 def _calculate_target_calories(user: dict) -> int:
+    if user.get("calorie_goal") is not None:
+        try:
+            return int(float(user["calorie_goal"]))
+        except (ValueError, TypeError):
+            pass
+
     missing_fields = [field for field in ("weight", "height", "age") if user.get(field) is None]
     if missing_fields:
         raise HTTPException(status_code=422, detail=f"User profile is missing: {', '.join(missing_fields)}")
 
-    gender_adjustment = {"male": 5, "female": -161}.get(str(user.get("gender", "")).lower(), 0)
-    basal_metabolic_rate = 10 * user["weight"] + 6.25 * user["height"] - 5 * user["age"] + gender_adjustment
-    objective = str(user.get("objective", "")).lower()
-    adjustment = next((value for keyword, value in OBJECTIVE_ADJUSTMENTS.items() if keyword in objective), 0)
-    return max(0, round(basal_metabolic_rate * 1.2 + adjustment))
+    return calculate_calorie_goal(
+        weight=user.get("weight"),
+        height=user.get("height"),
+        age=user.get("age"),
+        gender=user.get("gender"),
+        objective=user.get("objective"),
+    )
 
 
 def _query_today_meals(user_id: UUID) -> dict[str, float]:
@@ -77,22 +76,31 @@ def _query_workout(user_id: UUID) -> WorkoutDashboard | None:
         return None
 
     routine = routines[0]
-    exercise_rows = (
-        get_supabase(admin=True)
-        .table("routine_exercises")
-        .select("id")
-        .eq("routine_id", routine["id"])
-        .execute()
-    ).data or []
-    workouts = (
-        get_supabase(admin=True)
-        .table("workouts")
-        .select("start_time,end_time")
-        .eq("user_id", str(user_id))
-        .eq("routine_id", routine["id"])
-        .not_.is_("end_time", "null")
-        .execute()
-    ).data or []
+    def query_exercise_rows():
+        return (
+            get_supabase(admin=True)
+            .table("routine_exercises")
+            .select("id")
+            .eq("routine_id", routine["id"])
+            .execute()
+        ).data or []
+
+    def query_completed_workouts():
+        return (
+            get_supabase(admin=True)
+            .table("workouts")
+            .select("start_time,end_time")
+            .eq("user_id", str(user_id))
+            .eq("routine_id", routine["id"])
+            .not_.is_("end_time", "null")
+            .execute()
+        ).data or []
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        exercise_future = executor.submit(query_exercise_rows)
+        workouts_future = executor.submit(query_completed_workouts)
+        exercise_rows = exercise_future.result()
+        workouts = workouts_future.result()
 
     durations = []
     for workout in workouts:
@@ -115,10 +123,11 @@ def get_dashboard_summary(user_id: UUID) -> DashboardSummary:
     if client is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
-    user = _query_user(user_id)
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        user_future = executor.submit(_query_user, user_id)
         meals_future = executor.submit(_query_today_meals, user_id)
         workout_future = executor.submit(_query_workout, user_id)
+        user = user_future.result()
         meals = meals_future.result()
         workout = workout_future.result()
 

@@ -1,21 +1,24 @@
-# SET&PLATE Agent Directives & Token Optimization
+# SET&PLATE — Agent Instructions
 
-> **Full Configuration**: See detailed rules and skills in [`.agents/`](file:///C:/Users/rumuq/OneDrive/Escritorio/set&plate/12.05-set_plate/.agents/).
+## Project
+- Backend: FastAPI, Python 3.10+, and Supabase (`backend/`).
+- Frontend: React 19, TypeScript, and Vite (`frontend/`).
+- Product areas: nutrition, workouts, and the AI Trainer.
 
-## Essential Directives
+## Before working
+- Follow [.agents/AGENTS.md](.agents/AGENTS.md), `.agents/.agentsignore`, and the applicable rules in `.agents/rules/`.
+- Read only the relevant skill in `.agents/skills/` when a task calls for one.
+- Search first, then inspect bounded sections of relevant files. Never scan ignored dependencies, generated output, caches, or lockfiles unless the task requires it.
 
-1. **Token Efficiency**:
-   - Inspect files with slice parameters (`StartLine`/`EndLine`). Never read large files in full.
-   - Respect [`.agents/.agentsignore`](file:///C:/Users/rumuq/OneDrive/Escritorio/set&plate/12.05-set_plate/.agents/.agentsignore) (never scan `node_modules`, `venv`, lockfiles, dist).
-   - Filter command output (`Select-Object -First 25` / `head -n 25`). Run tests with `-q`.
-   - Use targeted code edits (`replace_file_content`), never rewrite entire files.
-   - Keep conversational answers direct, concise, and high signal.
+## Changes and verification
+- Make focused edits and preserve unrelated user changes, including staged work.
+- Keep API routing, business logic, persistence, and frontend API calls in their established layers; see `.agents/rules/architecture.md`.
+- Protect credentials: do not print `.env` contents, tokens, or private keys. Use dummy values in `.env.example`.
+- Find the project's existing build or test command before using it. Do not add or run tests unless the user asks for testing or verification.
+- Report what changed and what was actually verified. Never claim a check passed unless it ran successfully.
 
-2. **Project Context**:
-   - **Backend**: FastAPI in `backend/` (`app/api/`, `app/services/`, `app/schemas/`, `app/db/`).
-   - **Frontend**: React 19 + TypeScript + Vite in `frontend/` (`src/pages/`, `src/components/`, `src/services/api.ts`).
-   - **AI Trainer**: Adaptive feedback loop connecting nutrition & workout metrics.
+## AI Trainer availability
+- AI model calls are temporarily disabled to conserve tokens. Keep the Home AI tip as a static placeholder; do not call or re-enable a model until the user explicitly asks.
 
-3. **Workspace Customizations**:
-   - Rules: [`.agents/rules/`](file:///C:/Users/rumuq/OneDrive/Escritorio/set&plate/12.05-set_plate/.agents/rules/)
-   - Skills: [`.agents/skills/`](file:///C:/Users/rumuq/OneDrive/Escritorio/set&plate/12.05-set_plate/.agents/skills/)
+## Coordination
+- Delegate only when parallel work materially helps. Assign clear file ownership, coordinate shared contracts, and integrate the results before reporting completion.

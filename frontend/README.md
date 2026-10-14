@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-The development server runs at `http://localhost:5173`.
+The development server runs at `http://localhost:5173`. To test from another device on the same network, start it with `npm run dev -- --host 0.0.0.0` and open the Network URL printed by Vite. Keep the FastAPI backend running on port `8000`; Vite proxies `/api` requests to it, so the other device does not need to connect to `localhost:8000` directly.
 
 ## Available Commands
 
@@ -29,4 +29,4 @@ npm run preview  # Preview the production build
 
 ## API Configuration
 
-Set `VITE_API_URL` in the project environment to point to the SET&PLATE FastAPI backend. The default value is `http://localhost:8000`. The dashboard uses the `public.users.id` returned by onboarding and stored in the local profile.
+In development, API requests are proxied to `http://127.0.0.1:8000` by Vite. For production builds, set `VITE_API_URL` to the public FastAPI backend URL (or leave it empty when the API is served from the same origin). The dashboard uses the `public.users.id` returned by onboarding and stored in the local profile.

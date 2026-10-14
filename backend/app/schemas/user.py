@@ -19,5 +19,30 @@ class UserOnboardingResponse(BaseModel):
     name: str
     surname: str
     email: str
+    calorie_goal: int | None = None
     message: str
     saved_to_supabase: bool
+
+
+class UserLoginRequest(BaseModel):
+    email: str = Field(
+        ...,
+        min_length=3,
+        max_length=255,
+        pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$",
+        description="Email address",
+    )
+    password: str = Field(..., min_length=1, max_length=1024)
+
+
+class UserLoginResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    surname: str
+    is_premium: bool | None = None
+    age: int | None = None
+    gender: str | None = None
+    weight: float | None = None
+    height: int | None = None
+    objective: str | None = None

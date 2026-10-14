@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 WGER_BASE_URL = "https://wger.de/api/v2"
 CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "exercises_catalog.json"
+_cached_exercises: list[Exercise] | None = None
+_cached_mtime: float | None = None
+_cached_by_key: dict[str, Exercise] | None = None
 
 
 def _force_ipv4():
@@ -167,6 +170,7 @@ class WgerImporter:
         data = [e.model_dump() for e in exercises]
         with open(CATALOG_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        invalidate_catalog_cache()
         return CATALOG_PATH
 
     def sync_to_supabase(
@@ -182,13 +186,10 @@ class WgerImporter:
                 logger.info("Supabase not configured or client not available. Skipping Supabase sync.")
                 return 0
 
-            def make_uuid(item: Exercise) -> str:
-                return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"wger:{item.wger_id or item.id}"))
-
             if rich_schema:
                 records = [
                     {
-                        "id": make_uuid(e),
+                        "id": supabase_uuid_for(e),
                         "name": e.name,
                         "name_es": e.name_es,
                         "muscle_group": e.category or (e.muscles[0] if e.muscles else "General"),
@@ -204,7 +205,7 @@ class WgerImporter:
                 # Matches public.exercises (id uuid, name text, muscle_group text, equipment text)
                 records = [
                     {
-                        "id": make_uuid(e),
+                        "id": supabase_uuid_for(e),
                         "name": e.name,
                         "muscle_group": e.category or (e.muscles[0] if e.muscles else "General"),
                         "equipment": e.equipment[0] if e.equipment else "Bodyweight",
@@ -240,17 +241,66 @@ class WgerImporter:
             return 0
 
 
+def invalidate_catalog_cache() -> None:
+    global _cached_exercises, _cached_mtime, _cached_by_key
+    _cached_exercises = None
+    _cached_mtime = None
+    _cached_by_key = None
+
+
 def load_cached_exercises() -> list[Exercise]:
-    """Loads exercises from local catalog JSON file."""
+    """Loads exercises from local catalog JSON, keeping a process-wide cache."""
+    global _cached_exercises, _cached_mtime, _cached_by_key
     if not CATALOG_PATH.exists():
         return []
     try:
+        mtime = CATALOG_PATH.stat().st_mtime
+        if _cached_exercises is not None and _cached_mtime == mtime:
+            return _cached_exercises
         with open(CATALOG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return [Exercise(**item) for item in data]
+        exercises = [Exercise(**item) for item in data]
+        index: dict[str, Exercise] = {}
+        for exercise in exercises:
+            index[exercise.id] = exercise
+            if exercise.wger_id is not None:
+                index[str(exercise.wger_id)] = exercise
+                index[f"wger_{exercise.wger_id}"] = exercise
+        _cached_exercises = exercises
+        _cached_mtime = mtime
+        _cached_by_key = index
+        return exercises
     except Exception as err:
         logger.error(f"Error reading exercises catalog: {err}")
         return []
+
+
+def get_cached_exercise(exercise_id: str) -> Exercise | None:
+    load_cached_exercises()
+    if not _cached_by_key:
+        return None
+    return _cached_by_key.get(exercise_id)
+
+
+def supabase_uuid_for(exercise: Exercise) -> str:
+    """Deterministic Supabase UUID for a catalog exercise (matches sync_to_supabase)."""
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"wger:{exercise.wger_id or exercise.id}"))
+
+
+def resolve_exercise_log_id(exercise_id: str) -> str:
+    """Resolve a catalog id (wger_*) or raw wger id to the Supabase exercise UUID.
+
+    Passes through values that are already UUIDs (e.g. routine exercises from Supabase).
+    Raises ValueError for unknown exercise ids.
+    """
+    try:
+        return str(uuid.UUID(exercise_id))
+    except ValueError:
+        pass
+    exercise = get_cached_exercise(exercise_id)
+    if exercise is None:
+        raise ValueError(f"Unknown exercise '{exercise_id}'")
+    return supabase_uuid_for(exercise)
 
 
 def run_import(

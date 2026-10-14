@@ -1,32 +1,27 @@
-# SET&PLATE Agent System Guide & Token Economy
+# SET&PLATE Engineering Guide
 
-Welcome to SET&PLATE. You are acting as an expert autonomous engineering agent. Every token matters: prioritize efficiency, precision, and low context overhead.
+Use this guide with the concise repository-level `AGENTS.md`. Prefer accurate, focused changes over broad rewrites.
 
 ---
 
-## 1. Prime Directive: Token Economy & Context Optimization
+## 1. Efficient engineering workflow
 
-1. **Slice, Never Ingest Wholesale**:
-   - Never view large files from start to finish without line bounds.
-   - Use `StartLine` and `EndLine` (keeping ranges under 80 lines).
-   - Locate targets first using regex/symbol search before reading.
+### Inspect
+- Search for relevant symbols or text before opening files.
+- Inspect only relevant sections of large files; keep reads bounded (about 80 lines where practical).
+- Reuse unchanged context instead of re-reading files.
+- Respect `.agents/.agentsignore`; avoid lockfiles, generated bundles, caches, logs, and dependencies unless the task requires them.
+- Keep command output bounded with PowerShell `Select-Object -First 25` or an equivalent.
 
-2. **Strict File Ignore Policy**:
-   - Respect `.agents/.agentsignore` unconditionally.
-   - NEVER read lockfiles (`package-lock.json`), build bundles (`dist/`, `.vite/`), caches (`__pycache__`), logs, or dependencies (`backend/venv/`, `frontend/node_modules/`).
+### Edit and communicate
+- Make focused patches, preserve unrelated changes, and use the repository's available editing tools.
+- Keep progress and completion notes concise. Link to changed files instead of reproducing large code sections.
 
-3. **Output Restraint**:
-   - Filter all command executions. Pipe through line limits (`head`, `Select-Object -First 25`).
-   - Suppress command noise (`pytest -q`, quiet package managers).
-   - For long-running processes (e.g. dev servers), launch as background daemons with short wait times.
-
-4. **Surgical Modifications**:
-   - Make targeted edits via `replace_file_content`. Never rewrite entire files for localized modifications.
-   - Ensure exact character and indentation match before making replacement calls.
-
-5. **Concise Communication**:
-   - Omit conversational preamble and unnecessary code re-printing.
-   - Use file links (`[File](file:///path/to/file#L1-L10)`) instead of duplicating code in chat.
+### Verify
+- Discover the existing project command before running a build or test.
+- Do not add or run tests unless the user asks for testing or verification.
+- Clearly distinguish checks that ran from checks that could not be run.
+- Run persistent development servers in the background.
 
 ---
 
@@ -34,6 +29,7 @@ Welcome to SET&PLATE. You are acting as an expert autonomous engineering agent. 
 
 - **`backend/`** (FastAPI + Python 3.10+):
   - `app/api/`: Routing endpoints (`ai.py`, `nutrition.py`, `workouts.py`, `routines.py`, `stats.py`).
+  - `app/facades/`: Use-case orchestration between routers and internal services.
   - `app/services/`: Business logic and AI trainer calculations (`ai_service.py`, `nutrition_service.py`, `workout_service.py`).
   - `app/schemas/`: Pydantic request and response models.
   - `app/db/`: Supabase database client and queries.
@@ -42,11 +38,15 @@ Welcome to SET&PLATE. You are acting as an expert autonomous engineering agent. 
   - `src/pages/`: `Home.tsx`, `Nutrition.tsx`, `Workouts.tsx`, `Settings.tsx`.
   - `src/components/layout/`: `MainLayout.tsx` and mobile navigation.
   - `src/services/api.ts`: Centralized backend API client.
-  - `src/types/index.ts`: Data types and models.
+  - `src/types/`: Data types and models.
 
 ---
 
-## 3. Skill & Rule Directory Reference
+## 3. Current product constraint
+
+- AI model calls are temporarily disabled to conserve tokens. Keep the Home AI tip as a static placeholder; do not call or re-enable an AI provider unless the user explicitly asks.
+
+## 4. Skill & Rule Directory Reference
 
 - **Token Rules**: `.agents/rules/token_optimization.md`
 - **Code Standards**: `.agents/rules/code_standards.md`
@@ -56,3 +56,10 @@ Welcome to SET&PLATE. You are acting as an expert autonomous engineering agent. 
   - `token-budget`: Low-context search and slice inspection procedures.
   - `dev-workflows`: Build, run, and test procedures with suppressed output.
   - `surgical-editing`: Minimal-diff patch techniques.
+  - `poteto-mode`: Entry point for non-trivial engineering tasks; choose its matching playbook and follow its verification and reporting steps. Project rules above remain authoritative when instructions conflict.
+
+---
+
+## Multi-Agent Execution Policy
+
+Delegation is optional. Use it only when independent parallel work materially helps. When agents are used, give each clear file ownership, keep shared contracts coordinated, avoid concurrent edits to the same file, and integrate and verify their changes. Explorers and reviewers do not edit application files.

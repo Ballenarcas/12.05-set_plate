@@ -1,7 +1,13 @@
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+// In development, send API requests through Vite so LAN devices use the
+// computer hosting the frontend instead of their own localhost.
+const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
-let dashboardRequest: Promise<DashboardSummary> | null = null
+const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
+const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
+const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
+import type { Routine, WorkoutHistoryEntry } from '../types/workout'
+import type { WorkoutLogCreate } from '../types/workout'
 
 export interface DashboardSummary {
   user_name: string
@@ -24,25 +30,141 @@ export interface DashboardSummary {
   } | null
 }
 
-export async function fetchDashboardSummary(): Promise<DashboardSummary> {
-  if (dashboardRequest) return dashboardRequest
+function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
+  try {
+    const saved = sessionStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+    if (!saved) return null
+    const cached = JSON.parse(saved) as { data: DashboardSummary; at: number }
+    return cached?.data && typeof cached.at === 'number' ? cached : null
+  } catch {
+    return null
+  }
+}
 
+export function clearDashboardCache(): void {
+  dashboardRequests.clear()
+}
+
+export function getCachedDashboardSummary(): DashboardSummary | null {
+  const user = getCurrentUser()
+  return user?.id ? readDashboardCache(user.id)?.data ?? null : null
+}
+
+export async function fetchDashboardSummary(options: { forceRefresh?: boolean } = {}): Promise<DashboardSummary> {
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Complete onboarding before loading the dashboard')
+  const userId = user.id
+  const cached = readDashboardCache(userId)
+  if (!options.forceRefresh && cached && Date.now() - cached.at < DASHBOARD_CACHE_TTL_MS) return cached.data
+  const inflight = dashboardRequests.get(userId)
+  if (inflight) return inflight
 
-  dashboardRequest = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(user.id)}`, {
+  const request = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
       if (!response.ok) throw new Error('Unable to load dashboard summary')
-      return response.json() as Promise<DashboardSummary>
+      const data = await response.json() as DashboardSummary
+      try {
+        sessionStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now() }))
+      } catch {
+        // The fresh response remains usable when browser storage is unavailable.
+      }
+      return data
     })
-    .catch((error: unknown) => {
-      dashboardRequest = null
-      throw error
+    .finally(() => {
+      dashboardRequests.delete(userId)
     })
 
-  return dashboardRequest
+  dashboardRequests.set(userId, request)
+  return request
+}
+
+let routinesRequest: Promise<Routine[]> | null = null
+
+export async function fetchRoutines(): Promise<Routine[]> {
+  if (routinesRequest) return routinesRequest
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before loading routines')
+  routinesRequest = fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Unable to load routines')
+      return response.json() as Promise<Routine[]>
+    })
+    .catch((error: unknown) => {
+      routinesRequest = null
+      throw error
+    })
+  return routinesRequest
+}
+
+export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate): Promise<{ id: string; status: string }> {
+  const response = await fetch(`${API_URL}/api/v1/workouts/logs?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || 'Unable to save workout')
+  }
+  return response.json() as Promise<{ id: string; status: string }>
+}
+
+export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
+  const query = new URLSearchParams({ user_id: userId, limit: '30' })
+  const response = await fetch(`${API_URL}/api/v1/workouts/history?${query}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || 'Unable to load workout history')
+  }
+  const result = await response.json() as { items: WorkoutHistoryEntry[] }
+  return result.items
+}
+
+export async function deleteWorkoutHistoryEntry(userId: string, workoutId: string): Promise<void> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || 'Unable to delete workout history entry')
+  }
+}
+
+export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
+  const response = await fetch(`${API_URL}/api/v1/users/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim(), password }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+
+  if (!response.ok) {
+    let errorMessage = `Server error (${response.status})`
+    try {
+      const errorData = await response.json()
+      if (typeof errorData.detail === 'string') errorMessage = errorData.detail
+    } catch {
+      // Keep the status-based error when the server response is not JSON.
+    }
+    throw new Error(errorMessage)
+  }
+
+  const profile = await response.json() as import('../types').UserProfile
+  try {
+    localStorage.setItem('set_plate_user', JSON.stringify(profile))
+  } catch {
+    throw new Error('Could not save the signed-in profile in this browser')
+  }
+  return profile
 }
 
 export interface TrainerInsightRequest {
@@ -148,7 +270,12 @@ export interface FetchExercisesParams {
   equipment?: string
   page?: number
   limit?: number
+  compact?: boolean
 }
+
+const exerciseListCache = new Map<string, { at: number; data: import('../types').ExerciseListResponse }>()
+const exerciseListInflight = new Map<string, Promise<import('../types').ExerciseListResponse>>()
+const EXERCISE_LIST_TTL_MS = 30_000
 
 export async function fetchExercises(params: FetchExercisesParams = {}) {
   const query = new URLSearchParams()
@@ -158,11 +285,29 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   if (params.equipment) query.set('equipment', params.equipment)
   if (params.page) query.set('page', String(params.page))
   if (params.limit) query.set('limit', String(params.limit))
+  if (params.compact) query.set('compact', 'true')
 
-  const queryString = query.toString() ? `?${query.toString()}` : ''
-  const response = await fetch(`${API_URL}/api/v1/workouts/exercises${queryString}`)
-  if (!response.ok) throw new Error('Failed to fetch exercises')
-  return response.json()
+  const queryString = query.toString()
+  const cached = exerciseListCache.get(queryString)
+  if (cached && Date.now() - cached.at < EXERCISE_LIST_TTL_MS) return cached.data
+  const inflight = exerciseListInflight.get(queryString)
+  if (inflight) return inflight
+
+  const request = fetch(`${API_URL}/api/v1/workouts/exercises${queryString ? `?${queryString}` : ''}`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Failed to fetch exercises')
+      const data = (await response.json()) as import('../types').ExerciseListResponse
+      exerciseListCache.set(queryString, { at: Date.now(), data })
+      return data
+    })
+    .finally(() => {
+      exerciseListInflight.delete(queryString)
+    })
+
+  exerciseListInflight.set(queryString, request)
+  return request
 }
 
 export async function fetchExerciseCategories(): Promise<string[]> {
@@ -257,6 +402,9 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
   }
 
   localProfile.id = data.user_id
+  if (data.calorie_goal) {
+    localProfile.calorie_goal = data.calorie_goal
+  }
   try {
     localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
   } catch {
@@ -275,5 +423,115 @@ export function getCurrentUser(): import('../types').UserProfile | null {
   }
 }
 
+export async function updateUserSettings(
+  userId: string,
+  settings: { age: number; weight: number; height: number; gender: string; objective: string },
+): Promise<void> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/settings/update?${query}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || `Unable to save settings (${response.status})`)
+  }
 
+  try {
+    const user = getCurrentUser()
+    if (user?.id === userId) {
+      localStorage.setItem('set_plate_user', JSON.stringify({ ...user, ...settings }))
+    }
+    sessionStorage.removeItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+  } catch {
+    // The saved server response remains authoritative if browser storage is unavailable.
+  }
+  clearDashboardCache()
+}
 
+export interface MealLogItem {
+  id: string
+  user_id: string
+  meal_name: string
+  meal_type: string
+  portion_amount: string
+  weight_g: string
+  item_calories: number
+  consumed_at?: string
+  proteins_g?: number
+  carbs_g?: number
+  fats_g?: number
+}
+
+export interface TodayNutritionData {
+  consumed_calories: number
+  daily_goal: number
+  active_calories: number
+  calories_progress_percentage: number
+  carbs_g: number
+  proteins_g: number
+  fats_g: number
+  meals: MealLogItem[]
+}
+
+export async function fetchTodayNutrition(userId: string): Promise<TodayNutritionData> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}`)
+  if (!response.ok) {
+    throw new Error('Failed to fetch today nutrition from database')
+  }
+  return response.json()
+}
+
+export interface FoodSearchItem {
+  id: string
+  name: string
+  calories_per_100g: number
+  proteins_per_100g: number
+  carbs_per_100g: number
+  fats_per_100g: number
+  category?: string
+}
+
+export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
+  if (!response.ok) {
+    throw new Error(`Food search unavailable (${response.status}). Try again.`)
+  }
+  return response.json()
+}
+
+export interface MealCreateRequest {
+  user_id: string
+  name: string
+  calories?: number
+  quantity_g?: number
+  meal_type?: string
+  proteins?: number
+  carbs?: number
+  fats?: number
+}
+
+export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || 'Failed to save meal to database')
+  }
+  clearDashboardCache()
+  return response.json()
+}
+
+export async function deleteMealLog(mealId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${mealId}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    throw new Error('Failed to delete meal from database')
+  }
+  clearDashboardCache()
+}

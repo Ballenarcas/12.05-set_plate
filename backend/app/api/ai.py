@@ -8,8 +8,7 @@ from app.schemas.ai import (
     TrainerInsightRequest,
     TrainerInsightResponse,
 )
-from app.services.ai_service import generate_trainer_insight, handle_conversational_setup
-from app.services.fuzzy_matcher import get_fuzzy_matcher
+from app.facades.ai_facade import ai_facade
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -17,7 +16,7 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 @router.post("/trainer-insight", response_model=TrainerInsightResponse)
 def trainer_insight(request: TrainerInsightRequest) -> TrainerInsightResponse:
     try:
-        insight = generate_trainer_insight(
+        insight = ai_facade.trainer_insight(
             nutrition_summary=request.nutrition_summary,
             training_summary=request.training_summary,
             user_goal=request.user_goal,
@@ -33,8 +32,7 @@ def trainer_insight(request: TrainerInsightRequest) -> TrainerInsightResponse:
 @router.post("/parse-intent", response_model=ParseNaturalLanguageResponse)
 def parse_natural_language(request: ParseNaturalLanguageRequest) -> ParseNaturalLanguageResponse:
     """Fuzzy matches natural language user input against database exercises, routines, foods, and meals."""
-    matcher = get_fuzzy_matcher()
-    return matcher.match(
+    return ai_facade.parse_intent(
         text=request.text,
         threshold=request.threshold,
         limit_per_category=request.limit_per_category,
@@ -44,7 +42,7 @@ def parse_natural_language(request: ParseNaturalLanguageRequest) -> ParseNatural
 @router.post("/conversational-setup", response_model=ConversationalSetupResponse)
 def conversational_setup(request: ConversationalSetupRequest) -> ConversationalSetupResponse:
     """Talks to the AI bot to set up routines or log meals with grounded DB object recognition."""
-    reply, detected_intent, matched_entities = handle_conversational_setup(
+    reply, detected_intent, matched_entities = ai_facade.conversational_setup(
         message=request.message,
         conversation_history=request.conversation_history,
     )

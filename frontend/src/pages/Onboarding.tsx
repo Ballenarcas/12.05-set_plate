@@ -92,7 +92,8 @@ function Onboarding() {
     if (!formData.birthDate) {
       newErrors.birthDate = 'Birth date is required'
     } else {
-      const birth = new Date(formData.birthDate)
+      const [year, month, day] = formData.birthDate.split('-').map(Number)
+      const birth = new Date(year, month - 1, day)
       const today = new Date()
       if (isNaN(birth.getTime()) || birth > today) {
         newErrors.birthDate = 'Please enter a valid birth date'
@@ -387,10 +388,10 @@ function Onboarding() {
                   <input
                     id="birthDate"
                     type="date"
+                    autoComplete="bday"
                     className={`form-input${errors.birthDate ? ' has-error' : ''}`}
                     value={formData.birthDate}
                     onChange={(e) => handleInputChange('birthDate', e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
                   />
                   {errors.birthDate && <span className="error-text">{errors.birthDate}</span>}
                 </div>

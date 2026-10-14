@@ -1,6 +1,6 @@
 # Architecture & Domain Boundary Rules
 
-SET&PLATE integrates fitness tracking, nutrition tracking, and AI recommendations into a closed adaptive loop.
+SET&PLATE integrates fitness and nutrition tracking with an optional AI Trainer.
 
 ---
 
@@ -24,7 +24,10 @@ SET&PLATE integrates fitness tracking, nutrition tracking, and AI recommendation
    - Services: `backend/app/services/ai_service.py`
    - API endpoint: `backend/app/api/ai.py`
 
+   **Current availability:** AI model calls are temporarily disabled to conserve tokens. Keep the Home tip as a static placeholder; do not call or re-enable a model until the user explicitly asks.
+
 ## 2. Cross-Cutting Concerns
 - **Supabase Integration**: Centralized client in `backend/app/db/supabase_client.py`. Do not re-instantiate clients across endpoints.
 - **Environment Settings**: Handled exclusively through `backend/app/core/config.py` using `pydantic-settings`.
 - **API Client**: Frontend requests must flow through `frontend/src/services/api.ts` to maintain centralized error handling and URL configuration.
+- **Use-case orchestration**: Routers should call `backend/app/facades/`; facades coordinate services and persistence. Keep service modules focused on subsystem logic.

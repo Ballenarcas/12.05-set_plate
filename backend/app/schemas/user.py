@@ -24,7 +24,7 @@ class UserOnboardingResponse(BaseModel):
     saved_to_supabase: bool
 
 
-class UserLookupRequest(BaseModel):
+class UserLoginRequest(BaseModel):
     email: str = Field(
         ...,
         min_length=3,
@@ -32,9 +32,10 @@ class UserLookupRequest(BaseModel):
         pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$",
         description="Email address",
     )
+    password: str = Field(..., min_length=1, max_length=1024)
 
 
-class UserLookupResponse(BaseModel):
+class UserLoginResponse(BaseModel):
     id: str
     email: str
     name: str

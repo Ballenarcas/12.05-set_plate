@@ -2,11 +2,11 @@ import logging
 import uuid
 from fastapi import APIRouter, HTTPException
 
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.db.supabase_client import get_supabase
 from app.schemas.user import (
-    UserLookupRequest,
-    UserLookupResponse,
+    UserLoginRequest,
+    UserLoginResponse,
     UserOnboardingRequest,
     UserOnboardingResponse,
 )
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.post("/lookup", response_model=UserLookupResponse)
-def lookup_user(payload: UserLookupRequest) -> UserLookupResponse:
-    """Looks up a saved profile by email without verifying a password."""
+@router.post("/login", response_model=UserLoginResponse)
+def login_user(payload: UserLoginRequest) -> UserLoginResponse:
+    """Verifies the supplied password against the saved password hash."""
     try:
         supabase = get_supabase(admin=True)
         if supabase is None:
@@ -35,7 +35,7 @@ def lookup_user(payload: UserLookupRequest) -> UserLookupResponse:
         )
         result = (
             supabase.table("users")
-            .select("id,email,Name,Surname,is_premium,age,gender,weight,height,objective")
+            .select("id,email,password,Name,Surname,is_premium,age,gender,weight,height,objective")
             .ilike("email", email_pattern)
             .limit(1)
             .execute()
@@ -43,14 +43,14 @@ def lookup_user(payload: UserLookupRequest) -> UserLookupResponse:
     except HTTPException:
         raise
     except Exception as err:
-        logger.error("Could not look up user profile: %s", err, exc_info=True)
-        raise HTTPException(status_code=500, detail="Could not look up profile") from err
+        logger.error("Could not authenticate user: %s", err, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not sign in") from err
 
-    if not result.data:
-        raise HTTPException(status_code=404, detail="No profile found for this email")
+    if not result.data or not verify_password(payload.password, result.data[0].get("password", "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     user = result.data[0]
-    return UserLookupResponse(
+    return UserLoginResponse(
         id=str(user["id"]),
         email=user["email"],
         name=user.get("Name") or "",

@@ -49,11 +49,11 @@ export async function fetchDashboardSummary(force = false): Promise<DashboardSum
   return request
 }
 
-export async function findUserProfileByEmail(email: string): Promise<import('../types').UserProfile> {
-  const response = await fetch(`${API_URL}/api/v1/users/lookup`, {
+export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
+  const response = await fetch(`${API_URL}/api/v1/users/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim() }),
+    body: JSON.stringify({ email: email.trim(), password }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
 
@@ -72,7 +72,7 @@ export async function findUserProfileByEmail(email: string): Promise<import('../
   try {
     localStorage.setItem('set_plate_user', JSON.stringify(profile))
   } catch {
-    throw new Error('Could not save the profile in this browser')
+    throw new Error('Could not save the signed-in profile in this browser')
   }
   return profile
 }
@@ -394,5 +394,3 @@ export async function deleteMealLog(mealId: string): Promise<void> {
   }
   clearDashboardCache()
 }
-
-

@@ -19,7 +19,7 @@ function Settings() {
       setGender(user.gender || 'Male')
       setObjective(user.objective || 'Hypertrophy')
     }
-  }, [user])
+  }, [user?.id])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -395,6 +395,33 @@ export function getCurrentUser(): import('../types').UserProfile | null {
   }
 }
 
+export async function updateUserSettings(
+  userId: string,
+  settings: { age: number; weight: number; height: number; gender: string; objective: string },
+): Promise<void> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/settings/update?${query}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || `Unable to save settings (${response.status})`)
+  }
+
+  try {
+    const user = getCurrentUser()
+    if (user?.id === userId) {
+      localStorage.setItem('set_plate_user', JSON.stringify({ ...user, ...settings }))
+    }
+    sessionStorage.removeItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+  } catch {
+    // The saved server response remains authoritative if browser storage is unavailable.
+  }
+  clearDashboardCache()
+}
+
 export interface MealLogItem {
   id: string
   user_id: string

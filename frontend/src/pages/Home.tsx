@@ -1,7 +1,9 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchDashboardSummary, generateTrainerInsight, getCachedDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
+
+const TRAINER_INSIGHT = 'AI insight will be displayed here'
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
@@ -60,7 +62,6 @@ function HomeSkeleton() {
 
 function Home() {
   const [summary, setSummary] = useState<DashboardSummary | null>(() => getCachedDashboardSummary())
-  const [aiNotification, setAiNotification] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const user = getCurrentUser()
   const navigate = useNavigate()
@@ -72,19 +73,6 @@ function Home() {
       .then((data) => {
         if (!isMounted) return
         setSummary(data)
-
-        const currentUser = getCurrentUser()
-        generateTrainerInsight({
-          nutrition_summary: JSON.stringify(data.nutrition),
-          training_summary: JSON.stringify(data.workout),
-          user_goal: currentUser?.objective ?? '',
-        })
-          .then((response) => {
-            if (isMounted) setAiNotification(response.insight)
-          })
-          .catch(() => {
-            if (isMounted) setAiNotification('AI trainer insight is unavailable right now.')
-          })
       })
       .catch((requestError: Error) => {
         if (isMounted && !getCachedDashboardSummary()) setError(requestError.message)
@@ -125,13 +113,9 @@ function Home() {
 
       <section className="section" aria-labelledby="trainer-insight">
         <h2 className="section-title" id="trainer-insight">AI Trainer</h2>
-        <div className="card ai-banner" aria-busy={aiNotification === null}>
+        <div className="card ai-banner">
           <Lightbulb size={21} aria-hidden="true" />
-          {aiNotification ? (
-            <p>{aiNotification}</p>
-          ) : (
-            <span className="skeleton skeleton-line w-long" aria-hidden="true" />
-          )}
+          <p>{TRAINER_INSIGHT}</p>
         </div>
       </section>
 

@@ -5,15 +5,21 @@ from app.schemas.settings import UserSettingsUpdate
 TABLE_NAME = os.getenv("USERS_TABLE_NAME", "users")
 
 async def update_user_settings_db(user_id: str, settings: UserSettingsUpdate):
-    # Récupère les données validées
-    update_data = settings.model_dump(exclude={"notifications_enabled", "health_data_integration"})    
-    # Initialise le client Supabase avec ta fonction
+    update_data = settings.model_dump(exclude={"notifications_enabled", "health_data_integration"})
     client = get_supabase()
-    
+    if client is None:
+        raise RuntimeError("Database connection unavailable")
+
     try:
-        # Mise à jour dans la table ciblée
-        response = client.table(TABLE_NAME).update(update_data).eq("id", user_id).execute()
+        response = (
+            client.table(TABLE_NAME)
+            .update(update_data)
+            .eq("id", user_id)
+            .select("id")
+            .execute()
+        )
+        if not response.data:
+            raise LookupError("User profile was not found")
         return response.data
     except Exception as e:
-        print(f"Erreur Supabase sur la table '{TABLE_NAME}' : {str(e)}")
-        raise Exception(f"Erreur avec la base de données. Vérifie que la table '{TABLE_NAME}' existe.")
+        raise RuntimeError(f"Could not update user settings in '{TABLE_NAME}'") from e

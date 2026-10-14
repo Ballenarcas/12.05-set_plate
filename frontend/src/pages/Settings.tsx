@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { User, Save, LogOut } from 'lucide-react'
-import { getCurrentUser } from '../services/api'
+import { getCurrentUser, updateUserSettings } from '../services/api'
 
 function Settings() {
   const user = getCurrentUser()
@@ -29,19 +29,14 @@ function Settings() {
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/settings/update?user_id=${user?.id || 'TEST_ID'}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          age: parseInt(age),
-          weight: parseFloat(weight),
-          height: parseInt(height),
-          gender,
-          objective
-        }),
+      if (!user?.id) throw new Error('Your user profile could not be found. Please sign in again.')
+      await updateUserSettings(user.id, {
+        age: parseInt(age, 10),
+        weight: parseFloat(weight),
+        height: parseInt(height, 10),
+        gender,
+        objective,
       })
-
-      if (!response.ok) throw new Error("Erreur serveur")
       alert("Changes have been successfully saved!")
     } catch (error) {
       alert("Failed to save changes. Please try again.")

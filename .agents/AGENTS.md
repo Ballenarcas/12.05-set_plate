@@ -57,6 +57,7 @@ Use this guide with the concise repository-level `AGENTS.md`. Prefer accurate, f
   - `dev-workflows`: Build, run, and test procedures with suppressed output.
   - `surgical-editing`: Minimal-diff patch techniques.
   - `poteto-mode`: Entry point for non-trivial engineering tasks; choose its matching playbook and follow its verification and reporting steps. Project rules above remain authoritative when instructions conflict.
+  - `pstack`: Supporting skills for investigation, architecture, bug fixes, features, refactoring, verification, review, technical writing, and `principle-*` guidance. Invoke focused skills directly when appropriate; use `/poteto-mode` to route non-trivial work.
 
 ---
 

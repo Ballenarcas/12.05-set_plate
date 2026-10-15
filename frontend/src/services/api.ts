@@ -2,12 +2,36 @@
 // computer hosting the frontend instead of their own localhost.
 const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
+const DASHBOARD_TIMEOUT_MS = 15000
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
 import type { Routine, WorkoutHistoryEntry } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
+
+export interface PlanExercise {
+  exercise_id: string
+  name: string
+  sets: number
+  reps: number
+}
+
+export interface WorkoutPlanSummary {
+  id: string
+  routine_id: string | null
+  title: string
+  plan_date: string
+  is_rest_day: boolean
+  ai_adjusted: boolean
+  ai_reasoning: string | null
+  exercises: PlanExercise[]
+}
+
+export interface CompletedWorkoutToday {
+  id: string
+  name: string
+}
 
 export interface DashboardSummary {
   user_name: string
@@ -28,6 +52,8 @@ export interface DashboardSummary {
     exercise_count: number
     estimated_duration_minutes: number
   } | null
+  plan: WorkoutPlanSummary | null
+  completed_workout_today: CompletedWorkoutToday | null
 }
 
 function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
@@ -60,7 +86,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
   if (inflight) return inflight
 
   const request = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}`, {
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
     .then(async (response) => {
       if (!response.ok) throw new Error('Unable to load dashboard summary')
@@ -78,6 +104,18 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
 
   dashboardRequests.set(userId, request)
   return request
+}
+
+export async function planTodaysWorkout(userId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/v1/workouts/plan-today?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || 'Unable to plan today’s workout')
+  }
+  clearDashboardCache()
 }
 
 let routinesRequest: Promise<Routine[]> | null = null

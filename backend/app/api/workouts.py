@@ -9,6 +9,13 @@ from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, Wo
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
 
+@router.post("/plan-today")
+async def plan_todays_workout(
+    user_id: UUID = Query(..., description="Supabase users.id"),
+) -> dict:
+    return await workout_facade.plan_today(user_id)
+
+
 @router.post("/logs", response_model=WorkoutLogResponse)
 def create_workout_log(
     payload: WorkoutLogCreate,

@@ -6,6 +6,7 @@ import type { Exercise } from '../types'
 import type { ActiveExercise, WorkoutLogCreate, WorkoutSet } from '../types/workout'
 
 type ActiveSession = {
+  planId?: string
   routineId?: string
   name: string
   startedAt: string
@@ -145,9 +146,9 @@ function ActiveWorkout() {
   const removeSetAnimationTimer = useRef<number | null>(null)
   const imageLookups = useRef(new Set<string>())
   const sessionRef = useRef(session)
-  sessionRef.current = session
 
   useEffect(() => {
+    sessionRef.current = session
     if (session) sessionStorage.setItem('set_plate_active_workout', JSON.stringify(session))
   }, [session])
 
@@ -398,6 +399,7 @@ function ActiveWorkout() {
     setIsSaving(true)
     setSaveError(null)
     const payload: WorkoutLogCreate = {
+      plan_id: currentSession.planId,
       routine_id: currentSession.routineId,
       name: workoutName.trim() || currentSession.name,
       duration_seconds: durationSeconds,

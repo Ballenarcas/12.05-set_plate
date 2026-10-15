@@ -33,6 +33,7 @@ export interface ActiveExercise {
 }
 
 export interface WorkoutLogCreate {
+  plan_id?: string
   routine_id?: string
   name: string
   duration_seconds: number

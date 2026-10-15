@@ -67,6 +67,12 @@
 .primary-button { width: 100%; margin-top: 1rem; border: 0; color: #071c0e; background: var(--green); }
 .training-card { padding: 1.1rem; }
 .training-card h3 { margin: 0 0 0.35rem; font-size: 1.3rem; }
+.scheduled-training-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.scheduled-exercises { display: grid; gap: 0.55rem; margin: 0.85rem 0 0; padding-left: 1.1rem; color: var(--text); font-size: 0.82rem; }
+.scheduled-exercises li { display: grid; gap: 0.12rem; }
+.scheduled-exercise-sets { color: var(--text-muted); font-size: 0.72rem; }
+.ai-adjusted-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0 0.45rem; border-radius: 0.35rem; color: #16120a; background: #d6b85a; font-size: 0.62rem; font-weight: 800; white-space: nowrap; }
+.training-reasoning { margin: 0.7rem 0 0; color: var(--text-muted); font-size: 0.78rem; line-height: 1.45; }
 .training-meta { display: grid; gap: 0.35rem; margin: 0; padding-left: 1.1rem; color: var(--text-muted); font-size: 0.8rem; }
 .state-card { display: grid; min-height: 10rem; place-items: center; color: var(--text-muted); text-align: center; }
 .placeholder { padding: 1.5rem; }

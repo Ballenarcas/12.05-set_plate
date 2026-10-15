@@ -143,17 +143,37 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
             for set_item in exercise.sets
         )
 
+    plan = None
+    if payload.plan_id:
+        plan_rows = (
+            supabase.table("workout_plans")
+            .select("id,routine_id,title,ai_adjusted,ai_reasoning")
+            .eq("id", str(payload.plan_id))
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        if not plan_rows:
+            raise HTTPException(status_code=404, detail="Workout plan not found")
+        plan = plan_rows[0]
+
+    routine_id = payload.routine_id or (plan.get("routine_id") if plan else None)
     workout_id = None
     try:
+        record = {
+            "user_id": str(user_id),
+            "routine_id": str(routine_id) if routine_id else None,
+            "name": payload.name.strip(),
+            "start_time": payload.started_at.isoformat(),
+            "end_time": payload.completed_at.isoformat(),
+        }
+        if plan is not None:
+            record["ai_adjusted"] = bool(plan.get("ai_adjusted"))
+            record["ai_reasoning"] = plan.get("ai_reasoning")
         response = (
             supabase.table("workouts")
-            .insert({
-                "user_id": str(user_id),
-                "routine_id": str(payload.routine_id) if payload.routine_id else None,
-                "name": payload.name.strip(),
-                "start_time": payload.started_at.isoformat(),
-                "end_time": payload.completed_at.isoformat(),
-            })
+            .insert(record)
             .select("id")
             .execute()
         )
@@ -163,9 +183,13 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
             raise RuntimeError("Supabase did not return the saved workout ID")
         workout_id = workout_row["id"]
         if set_records:
-            for record in set_records:
-                record["workout_id"] = workout_id
+            for set_item in set_records:
+                set_item["workout_id"] = workout_id
             supabase.table("workout_sets").insert(set_records).execute()
+        if plan is not None:
+            supabase.table("workout_plans").delete().eq("id", str(payload.plan_id)).eq("user_id", str(user_id)).execute()
+    except HTTPException:
+        raise
     except Exception as err:
         logger.exception("Failed to persist workout and workout sets")
         if workout_id:

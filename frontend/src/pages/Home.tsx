@@ -1,7 +1,7 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 
 const TRAINER_INSIGHT = 'AI insight will be displayed here'
 
@@ -64,15 +64,24 @@ function Home() {
   const [summary, setSummary] = useState<DashboardSummary | null>(() => getCachedDashboardSummary())
   const [error, setError] = useState<string | null>(null)
   const user = getCurrentUser()
+  const userId = user?.id
   const navigate = useNavigate()
 
   useEffect(() => {
     let isMounted = true
 
-    fetchDashboardSummary({ forceRefresh: true })
-      .then((data) => {
+    fetchDashboardSummary()
+      .then(async (data) => {
         if (!isMounted) return
         setSummary(data)
+        if (data.plan || data.completed_workout_today || !userId) return
+        try {
+          await planTodaysWorkout(userId)
+          const refreshed = await fetchDashboardSummary({ forceRefresh: true })
+          if (isMounted) setSummary(refreshed)
+        } catch {
+          // Keep the dashboard available when planning is temporarily unavailable.
+        }
       })
       .catch((requestError: Error) => {
         if (isMounted && !getCachedDashboardSummary()) setError(requestError.message)
@@ -81,12 +90,14 @@ function Home() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [userId])
 
   if (error) return <div className="screen state-card" role="alert">{error}</div>
   if (!summary) return <HomeSkeleton />
 
-  const { nutrition, workout } = summary
+  const { nutrition } = summary
+  const plan = summary.plan
+  const completedWorkoutToday = summary.completed_workout_today
   const calorieProgress = Math.max(
     0,
     Math.min(100, Math.round(((nutrition.target_kcals - nutrition.remaining_kcals) / nutrition.target_kcals) * 100)),
@@ -140,14 +151,75 @@ function Home() {
 
       <section className="section" aria-labelledby="programmed-training">
         <h2 className="section-title" id="programmed-training"><Dumbbell size={16} aria-hidden="true" /> Programmed training</h2>
-        {workout ? (
+        {completedWorkoutToday ? (
           <div className="card training-card">
-            <h3>{workout.title}</h3>
-            <ul className="training-meta"><li>Volume: {workout.exercise_count} exercises</li><li>Est. duration: {workout.estimated_duration_minutes} minutes</li></ul>
-            <button className="primary-button" type="button" onClick={() => navigate('/workouts')}>START TRAINING!</button>
+            <div className="scheduled-training-heading">
+              <h3>Workout completed today</h3>
+            </div>
+            <ul className="training-meta">
+              <li>{completedWorkoutToday.name}</li>
+            </ul>
           </div>
+        ) : plan ? (
+          plan.is_rest_day ? (
+            <div className="card training-card">
+              <div className="scheduled-training-heading">
+                <h3>Rest day</h3>
+              </div>
+              <ul className="training-meta">
+                <li>Recovery recommended by your AI trainer</li>
+              </ul>
+              {plan.ai_reasoning && (
+                <p className="training-reasoning">{plan.ai_reasoning}</p>
+              )}
+            </div>
+          ) : (
+          <div className="card training-card">
+            <div className="scheduled-training-heading">
+              <h3>{plan.title}</h3>
+              {plan.routine_id === null ? (
+                <span className="ai-adjusted-badge">AI generated</span>
+              ) : plan.ai_adjusted && <span className="ai-adjusted-badge">AI adjusted</span>}
+            </div>
+            <ul className="training-meta">
+              <li>Today</li>
+              <li>Volume: {plan.exercises.length} exercises</li>
+            </ul>
+            {plan.exercises.length > 0 && (
+              <ul className="scheduled-exercises" aria-label="Planned exercises and sets">
+                {plan.exercises.map((exercise) => (
+                  <li key={exercise.exercise_id}>
+                    <span>{exercise.name}</span>
+                    <span className="scheduled-exercise-sets">{exercise.sets} sets · {exercise.reps} reps</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {plan.ai_adjusted && plan.ai_reasoning && (
+              <p className="training-reasoning">{plan.ai_reasoning}</p>
+            )}
+            <button className="primary-button" type="button" onClick={() => navigate('/workouts/active', { state: {
+              planId: plan.id,
+              routineId: plan.routine_id,
+              name: plan.title,
+              startedAt: new Date().toISOString(),
+              exercises: plan.exercises.map((exercise) => ({
+                exercise_id: exercise.exercise_id,
+                name: exercise.name,
+                previous_weight_kg: null,
+                previous_reps: exercise.reps,
+                sets: Array.from({ length: Math.max(1, exercise.sets) }, (_, index) => ({
+                  set_number: index + 1,
+                  weight_kg: 0,
+                  reps: exercise.reps,
+                  is_completed: false,
+                })),
+              })),
+            } })}>START WORKOUT</button>
+          </div>
+          )
         ) : (
-          <div className="card training-card empty-state">No programmed training assigned.</div>
+          <div className="card training-card empty-state">No workout scheduled for today.</div>
         )}
       </section>
     </div>

@@ -99,13 +99,33 @@
 .routine-card .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; }
 .empty-state { display: flex; min-height: 8rem; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; color: var(--text-muted); text-align: center; }
 .active-workout-screen { padding-bottom: calc(2rem + env(safe-area-inset-bottom)); }
-.active-workout-header { position: sticky; z-index: 2; top: 0; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto auto; align-items: center; gap: 0.55rem; margin: -1.25rem -1.25rem 0.85rem; padding: max(0.7rem, env(safe-area-inset-top)) 1.25rem 0.75rem; border-bottom: 1px solid var(--line); background: rgba(18, 18, 18, 0.98); }
+.active-workout-header { position: sticky; z-index: 2; top: 0; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.55rem; margin: -1.25rem -1.25rem 0.85rem; padding: max(0.7rem, env(safe-area-inset-top)) 1.25rem 0.75rem; border-bottom: 1px solid var(--line); background: rgba(18, 18, 18, 0.98); }
 .active-workout-header h1 { overflow: hidden; margin: 0; font-size: 1.05rem; text-overflow: ellipsis; white-space: nowrap; }
 .header-clock { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .session-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0 0 1rem; padding: 0.85rem 0.4rem; }
 .session-stats div { display: grid; gap: 0.2rem; justify-items: center; text-align: center; }
 .session-stats span { color: var(--text-muted); font-size: 0.68rem; font-weight: 600; }
 .session-stats strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.ai-adjust-trigger { display: inline-flex; min-height: 2.75rem; align-items: center; gap: 0.25rem; padding: 0 0.6rem; border: 1px solid var(--line); border-radius: 0.7rem; color: #d6b85a; background: var(--surface); cursor: pointer; font-size: 0.7rem; font-weight: 800; }
+.ai-adjust-trigger svg { color: #f6e86c; }
+.ai-adjust-trigger:disabled { cursor: wait; opacity: 0.6; }
+.ai-adjust-modal .ai-adjust-result { padding: 0; border: 0; border-radius: 0; }
+.ai-adjust-feedback { display: grid; gap: 0.6rem; justify-items: start; }
+.ai-adjust-loading { margin: 0; color: var(--text-muted); font-size: 0.82rem; line-height: 1.5; }
+.ai-adjust-result { display: grid; gap: 0.6rem; margin: 0; padding: 0.7rem 0.8rem; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--surface); }
+.ai-adjust-result ul { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+.ai-adjust-result li { display: grid; gap: 0.15rem; justify-items: start; padding-left: 1.1rem; font-size: 0.78rem; }
+.ai-adjust-result li span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; }
+.ai-adjust-result li p { margin: 0; color: var(--text); line-height: 1.45; }
+.ai-adjust-result li.is-applied span { color: #6f6f6f; }
+.ai-adjust-result li.is-applied p { color: var(--text-muted); }
+.ai-adjust-applied { color: var(--green); font-size: 0.68rem; font-weight: 700; }
+.ai-adjust-accept { min-height: 2.1rem; padding: 0 0.7rem; border: 1px solid rgba(40, 205, 98, 0.4); border-radius: 0.55rem; color: var(--green); background: transparent; cursor: pointer; font: inherit; font-size: 0.7rem; font-weight: 700; }
+.ai-adjust-accept:active { transform: translateY(1px); }
+.ai-adjust-accept-all { justify-self: start; min-height: 2.3rem; padding: 0 0.75rem; border: 0; border-radius: 0.55rem; color: #071c0e; background: var(--green); cursor: pointer; font-size: 0.7rem; font-weight: 800; }
+.ai-adjust-accept-all:active { transform: translateY(1px); }
+.ai-adjust-result-none { display: block; color: var(--text-muted); font-size: 0.76rem; line-height: 1.45; }
+.ai-adjust-error { padding: 0.5rem 0.7rem; border: 1px solid rgba(255, 105, 105, 0.3); border-radius: 0.65rem; color: #ff9c9c; font-size: 0.72rem; line-height: 1.45; }
 .icon-button, .done-button, .remove-set-button, .modal-close { display: inline-grid; min-width: 2.75rem; min-height: 2.75rem; place-items: center; border: 1px solid var(--line); border-radius: 0.7rem; color: #fff; background: var(--surface); cursor: pointer; }
 .finish-button { min-height: 2.75rem; padding: 0 0.7rem; border: 0; border-radius: 0.7rem; color: #071c0e; background: var(--green); cursor: pointer; font-size: 0.7rem; font-weight: 800; }
 .active-exercise-list { display: grid; gap: 1rem; }

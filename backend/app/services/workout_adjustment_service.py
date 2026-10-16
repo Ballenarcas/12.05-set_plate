@@ -284,6 +284,48 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
             "reasoning": result["reasoning"], "rest_day": False, "sets_created": True}
 
 
+_SET_ACTIONS = ("reduce_load", "reduce_reps", "drop_set", "stop_exercise")
+
+
+async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, str]]:
+    """Return proposed changes for the live workout session JSON sent by the client."""
+    exercises = workout.get("exercises")
+    if not isinstance(exercises, list) or not exercises:
+        raise HTTPException(status_code=422, detail="Workout has no exercises to evaluate")
+    if any(not isinstance(exercise.get("exercise_id"), str) for exercise in exercises):
+        raise HTTPException(status_code=422, detail="Workout exercises are missing IDs")
+    schema = {
+        "type": "array", "items": {"type": "object", "additionalProperties": False,
+            "properties": {"action": {"type": "string", "enum": list(_SET_ACTIONS)},
+                "exercise_id": {"type": "string"}, "reason": {"type": "string"},
+                "new_weight_kg": {"type": ["number", "null"], "minimum": 0},
+                "new_reps": {"type": ["integer", "null"], "minimum": 1}},
+            "required": ["action", "exercise_id", "reason"]},
+    }
+    workout_context = {key: workout.get(key) for key in ("name", "duration_seconds", "exercises")}
+    result = await _request_json(json.dumps({
+        "workout": workout_context,
+        "instruction": "You are coaching a workout in progress. "
+            "Suggest only specific, conservative changes to the sets that are not completed yet: "
+            "reduce_load with a new_weight_kg value, reduce_reps with a new_reps value, drop_set without values, "
+            "or stop_exercise without values on the affected exercise. Use the completed sets' weight, reps and RPE "
+            "to judge fatigue. Return an empty list when the current plan can be kept as is.",
+    }), schema)
+    valid_ids = {str(exercise.get("exercise_id")) for exercise in exercises}
+    if (
+        not isinstance(result, list)
+        or any(
+            not isinstance(item, dict)
+            or item.get("exercise_id") not in valid_ids
+            or item.get("action") not in _SET_ACTIONS
+            or not isinstance(item.get("reason"), str)
+            for item in result
+        )
+    ):
+        raise HTTPException(status_code=502, detail="Groq returned invalid workout adjustments")
+    return result
+
+
 async def evaluate_live_fatigue(workout_id: UUID, current_set_data: dict, db_session: Any) -> list[dict[str, str]]:
     """Return proposed changes for user confirmation without mutating persistence."""
     workouts = _data(db_session.table("workouts").select("*").eq("id", str(workout_id)).limit(1).execute())

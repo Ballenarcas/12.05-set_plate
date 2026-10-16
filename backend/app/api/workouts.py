@@ -4,6 +4,11 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
 from app.facades.workout_facade import workout_facade
+from app.schemas.workout import (
+    LiveWorkoutAdjustmentRequest,
+    LiveWorkoutAdjustmentResponse,
+    LiveWorkoutAdjustmentSuggestion,
+)
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
@@ -14,6 +19,15 @@ async def plan_todays_workout(
     user_id: UUID = Query(..., description="Supabase users.id"),
 ) -> dict:
     return await workout_facade.plan_today(user_id)
+
+
+@router.post("/adjust", response_model=LiveWorkoutAdjustmentResponse)
+async def suggest_live_adjustment(payload: LiveWorkoutAdjustmentRequest) -> LiveWorkoutAdjustmentResponse:
+    """Ask the AI trainer for conservative adjustments to the workout in progress."""
+    suggestions = await workout_facade.suggest_adjustment(payload)
+    return LiveWorkoutAdjustmentResponse(suggestions=[
+        LiveWorkoutAdjustmentSuggestion.model_validate(suggestion) for suggestion in suggestions
+    ])
 
 
 @router.post("/logs", response_model=WorkoutLogResponse)

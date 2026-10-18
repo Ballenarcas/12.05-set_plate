@@ -12,6 +12,10 @@ type RoutineExerciseDraft = {
   target_reps: number
 }
 
+function normalizeExerciseName(name: string): string {
+  return name.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLocaleLowerCase()
+}
+
 function CreateRoutine() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -96,7 +100,7 @@ function CreateRoutine() {
 
   function addExercise(exercise: Exercise) {
     setSelectedExercises((current) => current.some((item) =>
-      item.exercise_id === exercise.id || item.name.localeCompare(exercise.name, undefined, { sensitivity: 'accent' }) === 0)
+      item.exercise_id === exercise.id || normalizeExerciseName(item.name) === normalizeExerciseName(exercise.name))
       ? current
       : [...current, {
         exercise_id: exercise.id,
@@ -238,7 +242,8 @@ function CreateRoutine() {
                 {group}
               </h3>
               {groupExercises.map((exercise) => {
-                const isSelected = selectedIds.has(exercise.id)
+                const isSelected = selectedIds.has(exercise.id) || selectedExercises.some((item) =>
+                  normalizeExerciseName(item.name) === normalizeExerciseName(exercise.name))
                 return (
                   <button
                     className="routine-builder-result"

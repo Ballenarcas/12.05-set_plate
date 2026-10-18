@@ -12,6 +12,15 @@ export interface Routine {
   estimated_duration_minutes: number | null
 }
 
+export interface RoutineCreatePayload {
+  name: string
+  exercises: Array<{
+    exercise_id: string
+    target_sets: number
+    target_reps: number
+  }>
+}
+
 export interface WorkoutSet {
   set_number: number
   weight_kg: number

@@ -6,7 +6,7 @@ const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
-import type { Routine, WorkoutHistoryEntry } from '../types/workout'
+import type { Routine, RoutineCreatePayload, WorkoutHistoryEntry } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 
 export interface DashboardSummary {
@@ -82,6 +82,10 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
 
 let routinesRequest: Promise<Routine[]> | null = null
 
+export function clearRoutinesCache(): void {
+  routinesRequest = null
+}
+
 export async function fetchRoutines(): Promise<Routine[]> {
   if (routinesRequest) return routinesRequest
   const user = getCurrentUser()
@@ -98,6 +102,74 @@ export async function fetchRoutines(): Promise<Routine[]> {
       throw error
     })
   return routinesRequest
+}
+
+export async function createRoutine(payload: RoutineCreatePayload): Promise<Routine> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before creating a routine')
+
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      throw new Error('The request timed out while saving the routine. Please try again.', { cause: error })
+    }
+    if (error instanceof TypeError) {
+      throw new Error(`Could not reach the server while saving the routine: ${error.message}`, { cause: error })
+    }
+    throw error
+  }
+
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    let detail: string | undefined
+    if (error && typeof error === 'object' && 'detail' in error) {
+      const responseDetail = error.detail
+      if (typeof responseDetail === 'string') {
+        detail = responseDetail
+      } else if (Array.isArray(responseDetail)) {
+        detail = responseDetail
+          .map((item: unknown) => {
+            if (!item || typeof item !== 'object' || !('msg' in item)) return null
+            const message = typeof item.msg === 'string' ? item.msg : null
+            const location = 'loc' in item && Array.isArray(item.loc)
+              ? item.loc.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number').join(' > ')
+              : ''
+            return message ? `${location ? `${location}: ` : ''}${message}` : null
+          })
+          .filter((message): message is string => message !== null)
+          .join('; ')
+      }
+    }
+    throw new Error(detail || `Unable to create routine (server error ${response.status})`)
+  }
+  const routine = await response.json() as Routine
+  clearRoutinesCache()
+  return routine
+}
+
+export async function deleteRoutine(routineId: string): Promise<void> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before deleting a routine')
+
+  const response = await fetch(
+    `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
+    { method: 'DELETE', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
+      ? error.detail
+      : `Unable to delete routine (server error ${response.status})`
+    throw new Error(detail)
+  }
+  clearRoutinesCache()
 }
 
 export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate): Promise<{ id: string; status: string }> {

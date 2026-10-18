@@ -5,6 +5,7 @@ import { getCurrentUser } from './services/api'
 
 const Home = lazy(() => import('./pages/Home'))
 const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
+const CreateRoutine = lazy(() => import('./pages/CreateRoutine'))
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
 const Login = lazy(() => import('./pages/Login'))
 const LogMeals = lazy(() => import('./pages/LogMeals'))
@@ -30,6 +31,7 @@ function App() {
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/workouts" element={<Workouts />} />
+            <Route path="/workouts/create" element={<CreateRoutine />} />
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
             <Route path="/nutrition" element={<Nutrition />} />

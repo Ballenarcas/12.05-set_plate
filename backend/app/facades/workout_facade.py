@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from app.schemas.workout import RoutineSummary
+from app.schemas.workout import RoutineCreate, RoutineSummary
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
 from app.services import workout_service, wger_importer
 
@@ -17,6 +17,12 @@ class WorkoutFacade:
 
     def list_routines(self, user_id: UUID) -> list[RoutineSummary]:
         return workout_service.list_user_routines(user_id)
+
+    def create_routine(self, user_id: UUID, payload: RoutineCreate) -> RoutineSummary:
+        return workout_service.create_user_routine(user_id, payload)
+
+    def delete_routine(self, user_id: UUID, routine_id: UUID) -> None:
+        workout_service.delete_user_routine(user_id, routine_id)
 
     def programmed_workout(self):
         return workout_service.get_programmed_workout()

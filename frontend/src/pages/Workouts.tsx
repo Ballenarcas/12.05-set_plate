@@ -1,7 +1,7 @@
-import { ArrowRight, Dumbbell, Plus } from 'lucide-react'
+import { ArrowRight, Dumbbell, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchRoutines } from '../services/api'
+import { deleteRoutine, fetchRoutines } from '../services/api'
 import type { ActiveExercise, Routine } from '../types/workout'
 
 function createActiveExercises(routine: Routine): ActiveExercise[] {
@@ -26,6 +26,9 @@ function Workouts() {
   const [error, setError] = useState<string | null>(null)
   const [showDiscardActiveWorkout, setShowDiscardActiveWorkout] = useState(false)
   const [ongoingWorkoutName, setOngoingWorkoutName] = useState('your workout')
+  const [routineToDelete, setRoutineToDelete] = useState<Routine | null>(null)
+  const [isDeletingRoutine, setIsDeletingRoutine] = useState(false)
+  const [routineDeleteError, setRoutineDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRoutines()
@@ -69,22 +72,49 @@ function Workouts() {
     startWorkout()
   }
 
+  async function confirmDeleteRoutine() {
+    if (!routineToDelete) return
+    setIsDeletingRoutine(true)
+    setRoutineDeleteError(null)
+    try {
+      await deleteRoutine(routineToDelete.id)
+      setRoutines((current) => current.filter((routine) => routine.id !== routineToDelete.id))
+      setRoutineToDelete(null)
+    } catch (requestError) {
+      setRoutineDeleteError(requestError instanceof Error ? requestError.message : 'Unable to delete routine')
+    } finally {
+      setIsDeletingRoutine(false)
+    }
+  }
+
   return (
     <div className="screen workouts-screen">
       <header className="workouts-page-header">
         <div><p className="eyebrow">Train with purpose</p><h1>Workouts</h1></div>
-        <button className="secondary-action" type="button" onClick={requestEmptyWorkout}><Plus size={16} /> Start empty workout</button>
+        <div className="workouts-header-actions">
+          <button className="secondary-action create-routine-action" type="button" onClick={() => navigate('/workouts/create')}><Sparkles size={16} /> Create Routine</button>
+          <button className="secondary-action" type="button" onClick={requestEmptyWorkout}><Plus size={16} /> Start empty workout</button>
+        </div>
       </header>
 
       {isLoading && <div className="card state-card" role="status">Loading routines...</div>}
       {error && <div className="card state-card" role="alert">{error}</div>}
+      {routineDeleteError && <div className="card routine-delete-error" role="alert">{routineDeleteError}</div>}
 
       {!isLoading && !error && routines.length === 0 && <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No saved routines yet.</p></div>}
 
       <div className="routine-list">
         {routines.map((routine) => (
           <article className="card routine-card" key={routine.id}>
-            <div className="routine-card-heading"><div><p className="eyebrow">Saved routine</p><h2>{routine.name}</h2></div><Dumbbell size={22} aria-hidden="true" /></div>
+            <div className="routine-card-heading">
+              <div><p className="eyebrow">Saved routine</p><h2>{routine.name}</h2></div>
+              <div className="routine-card-actions">
+                <button className="routine-delete-button" type="button" aria-label={`Delete ${routine.name}`} onClick={() => { setRoutineDeleteError(null); setRoutineToDelete(routine) }}>
+                  <Trash2 size={18} aria-hidden="true" />
+                </button>
+                <Dumbbell size={22} aria-hidden="true" />
+              </div>
+            </div>
             <div className="routine-meta"><span>{routine.exercises.length} exercises</span>{routine.estimated_duration_minutes !== null && <span>Est. {routine.estimated_duration_minutes} min</span>}</div>
             <ul className="routine-preview">
               {routine.exercises.slice(0, 3).map((exercise) => <li key={exercise.exercise_id}>{exercise.name}</li>)}
@@ -94,6 +124,21 @@ function Workouts() {
           </article>
         ))}
       </div>
+
+      {routineToDelete && <div className="modal-backdrop">
+        <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-routine-title">
+          <p className="eyebrow">Remove saved routine</p>
+          <h2 id="delete-routine-title">Delete {routineToDelete.name}?</h2>
+          <p>The routine and its exercise plan will be deleted. Saved workout history will be kept.</p>
+          {routineDeleteError && <p className="form-error" role="alert">{routineDeleteError}</p>}
+          <div className="modal-actions">
+            <button className="secondary-action" type="button" onClick={() => setRoutineToDelete(null)} disabled={isDeletingRoutine}>Cancel</button>
+            <button className="danger-action" type="button" onClick={confirmDeleteRoutine} disabled={isDeletingRoutine}>
+              {isDeletingRoutine ? 'Deleting...' : 'Delete routine'}
+            </button>
+          </div>
+        </div>
+      </div>}
 
       {showDiscardActiveWorkout && <div className="modal-backdrop">
         <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="discard-active-workout-title">

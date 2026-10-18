@@ -21,6 +21,15 @@ def create_routine(
     return workout_facade.create_routine(user_id, payload)
 
 
+@router.put("/{routine_id}", response_model=RoutineSummary)
+def update_routine(
+    routine_id: UUID,
+    payload: RoutineCreate,
+    user_id: UUID = Query(..., description="Supabase users.id"),
+) -> RoutineSummary:
+    return workout_facade.update_routine(user_id, routine_id, payload)
+
+
 @router.delete("/{routine_id}")
 def delete_routine(
     routine_id: UUID,

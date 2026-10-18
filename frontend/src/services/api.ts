@@ -154,6 +154,31 @@ export async function createRoutine(payload: RoutineCreatePayload): Promise<Rout
   return routine
 }
 
+export async function updateRoutine(routineId: string, payload: RoutineCreatePayload): Promise<Routine> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before updating a routine')
+
+  const response = await fetch(
+    `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+  )
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
+      ? error.detail
+      : `Unable to update routine (server error ${response.status})`
+    throw new Error(detail)
+  }
+  const routine = await response.json() as Routine
+  clearRoutinesCache()
+  return routine
+}
+
 export async function deleteRoutine(routineId: string): Promise<void> {
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Complete onboarding before deleting a routine')
@@ -338,6 +363,7 @@ export async function conversationalSetup(
 export interface FetchExercisesParams {
   q?: string
   category?: string
+  muscle_group?: string
   muscle?: string
   equipment?: string
   page?: number
@@ -353,6 +379,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   const query = new URLSearchParams()
   if (params.q) query.set('q', params.q)
   if (params.category) query.set('category', params.category)
+  if (params.muscle_group) query.set('muscle_group', params.muscle_group)
   if (params.muscle) query.set('muscle', params.muscle)
   if (params.equipment) query.set('equipment', params.equipment)
   if (params.page) query.set('page', String(params.page))
@@ -387,6 +414,13 @@ export async function fetchExerciseCategories(): Promise<string[]> {
   if (!response.ok) throw new Error('Failed to fetch categories')
   const data = await response.json()
   return data.categories ?? []
+}
+
+export async function fetchExerciseMuscleGroups(): Promise<string[]> {
+  const response = await fetch(`${API_URL}/api/v1/workouts/exercises/muscle-groups`)
+  if (!response.ok) throw new Error('Failed to fetch exercise muscle groups')
+  const data = await response.json() as { muscle_groups: string[] }
+  return data.muscle_groups
 }
 
 export async function fetchExerciseById(exerciseId: string) {

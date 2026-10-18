@@ -1,4 +1,4 @@
-import { ArrowRight, Dumbbell, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowRight, Dumbbell, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteRoutine, fetchRoutines } from '../services/api'
@@ -109,6 +109,9 @@ function Workouts() {
             <div className="routine-card-heading">
               <div><p className="eyebrow">Saved routine</p><h2>{routine.name}</h2></div>
               <div className="routine-card-actions">
+                <button className="routine-edit-button" type="button" aria-label={`Edit ${routine.name}`} onClick={() => navigate('/workouts/create', { state: { routine } })}>
+                  <Pencil size={17} aria-hidden="true" />
+                </button>
                 <button className="routine-delete-button" type="button" aria-label={`Delete ${routine.name}`} onClick={() => { setRoutineDeleteError(null); setRoutineToDelete(routine) }}>
                   <Trash2 size={18} aria-hidden="true" />
                 </button>

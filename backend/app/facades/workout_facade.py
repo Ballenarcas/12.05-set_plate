@@ -21,6 +21,9 @@ class WorkoutFacade:
     def create_routine(self, user_id: UUID, payload: RoutineCreate) -> RoutineSummary:
         return workout_service.create_user_routine(user_id, payload)
 
+    def update_routine(self, user_id: UUID, routine_id: UUID, payload: RoutineCreate) -> RoutineSummary:
+        return workout_service.update_user_routine(user_id, routine_id, payload)
+
     def delete_routine(self, user_id: UUID, routine_id: UUID) -> None:
         workout_service.delete_user_routine(user_id, routine_id)
 
@@ -32,6 +35,9 @@ class WorkoutFacade:
 
     def get_exercise_categories(self):
         return workout_service.get_exercise_categories()
+
+    def get_exercise_muscle_groups(self):
+        return workout_service.get_exercise_muscle_groups()
 
     def get_exercise_by_id(self, exercise_id: str):
         return workout_service.get_exercise_by_id(exercise_id)

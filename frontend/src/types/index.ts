@@ -15,6 +15,7 @@ export interface Exercise {
   id: string
   wger_id?: number | null
   name: string
+  muscle_group: string
   name_es?: string | null
   category: string
   description?: string | null
@@ -66,5 +67,4 @@ export interface UserProfile {
   objective?: FitnessGoal
   calorie_goal?: number
 }
-
 

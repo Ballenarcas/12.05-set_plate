@@ -15,7 +15,12 @@ from app.schemas.workout_log import (
     WorkoutLogCreate,
     WorkoutLogResponse,
 )
-from app.services.wger_importer import get_cached_exercise, load_cached_exercises, resolve_exercise_log_id
+from app.services.wger_importer import (
+    get_cached_exercise,
+    load_cached_exercises,
+    muscle_group_for,
+    resolve_exercise_log_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +32,26 @@ def get_programmed_workout() -> WorkoutSummary:
 def list_exercises(
     query: str | None = None,
     category: str | None = None,
+    muscle_group: str | None = None,
     muscle: str | None = None,
     equipment: str | None = None,
     page: int = 1,
     limit: int = 20,
 ) -> tuple[list[Exercise], int]:
     """Retrieves and filters exercises from catalog with pagination."""
-    all_exercises = load_cached_exercises()
+    all_exercises = [
+        exercise.model_copy(update={"muscle_group": muscle_group_for(exercise)})
+        for exercise in load_cached_exercises()
+    ]
 
     filtered = all_exercises
     if category:
         cat_lower = category.lower()
         filtered = [e for e in filtered if e.category and e.category.lower() == cat_lower]
+
+    if muscle_group:
+        group_lower = muscle_group.lower()
+        filtered = [e for e in filtered if e.muscle_group.lower() == group_lower]
 
     if muscle:
         m_lower = muscle.lower()
@@ -83,6 +96,10 @@ def get_exercise_categories() -> list[str]:
     exercises = load_cached_exercises()
     categories = sorted({e.category for e in exercises if e.category})
     return categories
+
+
+def get_exercise_muscle_groups() -> list[str]:
+    return sorted({muscle_group_for(exercise) for exercise in load_cached_exercises()})
 
 
 def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
@@ -204,6 +221,94 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
                 target_reps=exercise.target_reps,
             )
             for exercise, resolved_exercise_id in zip(payload.exercises, resolved_exercise_ids)
+        ],
+    )
+
+
+def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate) -> RoutineSummary:
+    supabase = get_supabase(admin=True)
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Supabase is not configured")
+
+    routine_rows = (
+        supabase.table("routines")
+        .select("id,name")
+        .eq("id", str(routine_id))
+        .eq("user_id", str(user_id))
+        .execute()
+        .data or []
+    )
+    if not routine_rows:
+        raise HTTPException(status_code=404, detail="Routine not found")
+
+    try:
+        resolved_exercise_ids = [
+            resolve_exercise_log_id(exercise.exercise_id)
+            for exercise in payload.exercises
+        ]
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+    if len(set(resolved_exercise_ids)) != len(resolved_exercise_ids):
+        raise HTTPException(status_code=400, detail="A routine cannot contain the same exercise more than once")
+
+    exercise_rows = (
+        supabase.table("exercises")
+        .select("id,name")
+        .in_("id", resolved_exercise_ids)
+        .execute()
+        .data or []
+    )
+    exercise_names = {str(row["id"]): str(row.get("name", "Exercise")) for row in exercise_rows}
+    if set(resolved_exercise_ids) - exercise_names.keys():
+        raise HTTPException(status_code=400, detail="One or more selected exercises are unavailable")
+
+    existing_rows = (
+        supabase.table("routine_exercises")
+        .select("id,routine_id,exercise_id,target_sets,target_reps,set_order")
+        .eq("routine_id", str(routine_id))
+        .execute()
+        .data or []
+    )
+    replacement_rows = [
+        {
+            "id": str(uuid4()),
+            "routine_id": str(routine_id),
+            "exercise_id": exercise_id,
+            "set_order": index,
+            "target_sets": exercise.target_sets,
+            "target_reps": exercise.target_reps,
+        }
+        for index, (exercise, exercise_id) in enumerate(zip(payload.exercises, resolved_exercise_ids), start=1)
+    ]
+
+    try:
+        supabase.table("routine_exercises").delete().eq("routine_id", str(routine_id)).execute()
+        supabase.table("routine_exercises").insert(replacement_rows).execute()
+        supabase.table("routines").update({"name": payload.name.strip()}).eq(
+            "id", str(routine_id)
+        ).eq("user_id", str(user_id)).execute()
+    except Exception as err:
+        logger.exception("Failed to update routine")
+        try:
+            supabase.table("routine_exercises").delete().eq("routine_id", str(routine_id)).execute()
+            if existing_rows:
+                supabase.table("routine_exercises").insert(existing_rows).execute()
+        except Exception:
+            logger.exception("Failed to restore routine exercises after update failure")
+        raise HTTPException(status_code=502, detail=f"Could not update routine: {err}") from err
+
+    return RoutineSummary(
+        id=str(routine_id),
+        name=payload.name.strip(),
+        exercises=[
+            RoutineExerciseSummary(
+                exercise_id=exercise_id,
+                name=exercise_names[exercise_id],
+                target_sets=exercise.target_sets,
+                target_reps=exercise.target_reps,
+            )
+            for exercise, exercise_id in zip(payload.exercises, resolved_exercise_ids)
         ],
     )
 

@@ -49,6 +49,7 @@ def get_exercises(
     response: Response,
     q: str | None = Query(None, description="Search term for exercise name or aliases"),
     category: str | None = Query(None, description="Filter by body part category"),
+    muscle_group: str | None = Query(None, description="Filter by database muscle group"),
     muscle: str | None = Query(None, description="Filter by targeted muscle"),
     equipment: str | None = Query(None, description="Filter by required equipment"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -59,6 +60,7 @@ def get_exercises(
     items, total = workout_facade.list_exercises(
         query=q,
         category=category,
+        muscle_group=muscle_group,
         muscle=muscle,
         equipment=equipment,
         page=page,
@@ -86,6 +88,12 @@ def get_categories() -> dict[str, list[str]]:
     return {"categories": workout_facade.get_exercise_categories()}
 
 
+@router.get("/exercises/muscle-groups")
+def get_muscle_groups() -> dict[str, list[str]]:
+    """Return the muscle groups assigned to exercises during Supabase sync."""
+    return {"muscle_groups": workout_facade.get_exercise_muscle_groups()}
+
+
 @router.get("/exercises/{exercise_id}", response_model=Exercise)
 def get_exercise(exercise_id: str) -> Exercise:
     """Retrieve a single exercise by ID or wger_id."""
@@ -103,4 +111,3 @@ def trigger_wger_import(
     """Import or refresh exercises from the wger REST API."""
     result = workout_facade.import_wger(max_items=max_items, sync_supabase=sync_supabase)
     return WgerImportResponse(**result)
-

@@ -68,6 +68,20 @@
 .training-card { padding: 1.1rem; }
 .training-card h3 { margin: 0 0 0.35rem; font-size: 1.3rem; }
 .training-meta { display: grid; gap: 0.35rem; margin: 0; padding-left: 1.1rem; color: var(--text-muted); font-size: 0.8rem; }
+.home-routines-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.home-routines-heading .section-title { margin-bottom: 0.75rem; }
+.home-routines-link { display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.75rem; padding: 0.25rem 0; border: 0; color: var(--green); background: transparent; cursor: pointer; font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+.home-routines-carousel { display: flex; gap: 0.75rem; overflow-x: auto; overscroll-behavior-inline: contain; padding: 0.1rem 0.85rem 0.65rem 0; scroll-padding-inline: 0.1rem; scroll-snap-type: x mandatory; scrollbar-color: #4c584d #191a19; scrollbar-width: thin; }
+.home-routine-card { display: flex; min-width: 0; min-height: 15rem; flex: 0 0 88%; flex-direction: column; padding: 1rem; scroll-snap-align: start; }
+.home-routine-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.home-routine-card-heading h3 { margin: 0; overflow-wrap: anywhere; font-size: 1.1rem; }
+.home-routine-card-heading > svg { flex: 0 0 auto; color: var(--green); }
+.home-routine-card .routine-meta { flex-wrap: wrap; gap: 0.55rem 0.9rem; }
+.home-routine-card .routine-preview { flex: 1; margin-top: 0.7rem; }
+.home-routine-card .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; margin-top: 0.85rem; }
+.home-routines-state { display: grid; min-height: 5rem; place-items: center; padding: 1rem; color: var(--text-muted); font-size: 0.8rem; text-align: center; }
+.home-routines-error { color: #ff9c9c; }
+.home-programmed-note { margin: 0.6rem 0 0; color: var(--text-muted); font-size: 0.7rem; }
 .state-card { display: grid; min-height: 10rem; place-items: center; color: var(--text-muted); text-align: center; }
 .placeholder { padding: 1.5rem; }
 .placeholder h1 { margin-top: 0; }

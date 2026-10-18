@@ -1,12 +1,28 @@
-import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
+import { Apple, ArrowRight, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, fetchRoutines, getCachedDashboardSummary, getCurrentUser, type DashboardSummary } from '../services/api'
+import type { ActiveExercise, Routine } from '../types/workout'
 
 const TRAINER_INSIGHT = 'AI insight will be displayed here'
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function createActiveExercises(routine: Routine): ActiveExercise[] {
+  return routine.exercises.map((exercise) => ({
+    exercise_id: exercise.exercise_id,
+    name: exercise.name,
+    previous_weight_kg: null,
+    previous_reps: null,
+    sets: Array.from({ length: exercise.target_sets ?? 1 }, (_, index) => ({
+      set_number: index + 1,
+      weight_kg: 0,
+      reps: exercise.target_reps ?? 0,
+      is_completed: false,
+    })),
+  }))
 }
 
 function HomeSkeleton() {
@@ -62,6 +78,9 @@ function HomeSkeleton() {
 
 function Home() {
   const [summary, setSummary] = useState<DashboardSummary | null>(() => getCachedDashboardSummary())
+  const [routines, setRoutines] = useState<Routine[]>([])
+  const [routinesLoading, setRoutinesLoading] = useState(true)
+  const [routinesError, setRoutinesError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const user = getCurrentUser()
   const navigate = useNavigate()
@@ -82,6 +101,35 @@ function Home() {
       isMounted = false
     }
   }, [])
+
+  useEffect(() => {
+    let isMounted = true
+    fetchRoutines()
+      .then((data) => {
+        if (isMounted) setRoutines(data)
+      })
+      .catch((requestError: Error) => {
+        if (isMounted) setRoutinesError(requestError.message)
+      })
+      .finally(() => {
+        if (isMounted) setRoutinesLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  function startRoutine(routine: Routine) {
+    navigate('/workouts/active', {
+      state: {
+        routineId: routine.id,
+        name: routine.name,
+        startedAt: new Date().toISOString(),
+        exercises: createActiveExercises(routine),
+      },
+    })
+  }
 
   if (error) return <div className="screen state-card" role="alert">{error}</div>
   if (!summary) return <HomeSkeleton />
@@ -139,16 +187,40 @@ function Home() {
       </section>
 
       <section className="section" aria-labelledby="programmed-training">
-        <h2 className="section-title" id="programmed-training"><Dumbbell size={16} aria-hidden="true" /> Programmed training</h2>
-        {workout ? (
-          <div className="card training-card">
-            <h3>{workout.title}</h3>
-            <ul className="training-meta"><li>Volume: {workout.exercise_count} exercises</li><li>Est. duration: {workout.estimated_duration_minutes} minutes</li></ul>
-            <button className="primary-button" type="button" onClick={() => navigate('/workouts')}>START TRAINING!</button>
+        <div className="home-routines-heading">
+          <h2 className="section-title" id="programmed-training"><Dumbbell size={16} aria-hidden="true" /> Your routines</h2>
+          <button className="home-routines-link" type="button" onClick={() => navigate('/workouts')}>All routines <ArrowRight size={14} aria-hidden="true" /></button>
+        </div>
+        {routinesLoading && <div className="card home-routines-state" role="status">Loading your routines...</div>}
+        {routinesError && <div className="card home-routines-state home-routines-error" role="alert">{routinesError}</div>}
+        {!routinesLoading && !routinesError && routines.length === 0 && (
+          <div className="card training-card empty-state">
+            <p>No saved routines yet.</p>
+            <button className="secondary-action" type="button" onClick={() => navigate('/workouts/create')}>Create your first routine</button>
           </div>
-        ) : (
-          <div className="card training-card empty-state">No programmed training assigned.</div>
         )}
+        {!routinesLoading && !routinesError && routines.length > 0 && (
+          <div className="home-routines-carousel" aria-label="Your saved routines">
+            {routines.map((routine) => (
+              <article className="card home-routine-card" key={routine.id}>
+                <div className="home-routine-card-heading">
+                  <div><p className="eyebrow">Saved routine</p><h3>{routine.name}</h3></div>
+                  <Dumbbell size={21} aria-hidden="true" />
+                </div>
+                <div className="routine-meta">
+                  <span>{routine.exercises.length} exercises</span>
+                  {routine.estimated_duration_minutes !== null && <span>Est. {routine.estimated_duration_minutes} min</span>}
+                </div>
+                <ul className="routine-preview">
+                  {routine.exercises.slice(0, 3).map((exercise) => <li key={exercise.exercise_id}>{exercise.name}</li>)}
+                  {routine.exercises.length > 3 && <li>+{routine.exercises.length - 3} more</li>}
+                </ul>
+                <button className="primary-button" type="button" onClick={() => startRoutine(routine)}>START TRAINING <ArrowRight size={17} aria-hidden="true" /></button>
+              </article>
+            ))}
+          </div>
+        )}
+        {workout && <p className="home-programmed-note">Programmed plan: {workout.title}</p>}
       </section>
     </div>
   )

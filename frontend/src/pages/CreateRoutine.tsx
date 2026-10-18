@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Dumbbell, GripVertical, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Check, CheckCircle2, Dumbbell, GripVertical, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { createRoutine, fetchExercises, fetchExerciseMuscleGroups, updateRoutine } from '../services/api'
@@ -21,6 +21,7 @@ function CreateRoutine() {
   const location = useLocation()
   const routineToEdit = (location.state as { routine?: Routine } | null)?.routine
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const successDialogRef = useRef<HTMLDivElement>(null)
   const [name, setName] = useState(routineToEdit?.name ?? '')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -40,12 +41,17 @@ function CreateRoutine() {
   const [resolvedExerciseRequest, setResolvedExerciseRequest] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [nameError, setNameError] = useState<string | null>(null)
   const [exerciseError, setExerciseError] = useState<string | null>(null)
   const [muscleGroupError, setMuscleGroupError] = useState<string | null>(null)
   const queryKey = `${debouncedSearch}|${selectedMuscleGroup}`
   const exerciseRequestKey = `${queryKey}|${exercisePage}`
   const isLoading = resolvedExerciseRequest !== exerciseRequestKey
+
+  useEffect(() => {
+    if (successMessage) successDialogRef.current?.focus()
+  }, [successMessage])
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
@@ -128,6 +134,7 @@ function CreateRoutine() {
 
   async function saveRoutine() {
     setError(null)
+    setSuccessMessage(null)
     if (!name.trim()) {
       setNameError('Please enter a name for your routine.')
       nameInputRef.current?.focus()
@@ -149,9 +156,11 @@ function CreateRoutine() {
       } else {
         await createRoutine(payload)
       }
+      setSuccessMessage(routineToEdit ? 'Routine updated successfully.' : 'Routine saved successfully.')
+      await new Promise((resolve) => window.setTimeout(resolve, 900))
       navigate('/workouts', { replace: true })
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to create routine')
+      setError(requestError instanceof Error ? requestError.message : 'Unable to save routine')
     } finally {
       setIsSaving(false)
     }
@@ -345,6 +354,22 @@ function CreateRoutine() {
       </section>
 
       {error && <p className="routine-builder-error" role="alert">{error}</p>}
+      {successMessage && (
+        <div className="routine-save-backdrop">
+          <div
+            ref={successDialogRef}
+            className="routine-save-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="routine-save-title"
+            tabIndex={-1}
+          >
+            <span className="routine-save-icon"><CheckCircle2 size={34} aria-hidden="true" /></span>
+            <h2 id="routine-save-title">{routineToEdit ? 'Routine updated!' : 'Routine saved!'}</h2>
+            <p>{successMessage} Returning to Workouts...</p>
+          </div>
+        </div>
+      )}
       <div className="routine-builder-footer">
         <button className="secondary-action" type="button" onClick={() => navigate('/workouts')}>Cancel</button>
         <button className="primary-button routine-builder-submit" type="button" onClick={saveRoutine} disabled={!canSave}>

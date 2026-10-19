@@ -49,3 +49,4 @@ def generate_trainer_insight(
         ],
     )
     return response.choices[0].message.content or "No insight was generated."
+

@@ -282,3 +282,34 @@ def delete_workout_history_entry(user_id: UUID, workout_id: UUID) -> None:
         logger.exception("Failed to delete workout history entry")
         raise HTTPException(status_code=502, detail="Could not delete workout history entry") from err
 
+
+def summarize_today_workouts(user_id: UUID | str, today_start: datetime, today_end: datetime) -> int:
+    """Total completed-workout seconds whose end falls inside [today_start, today_end)."""
+    supabase = get_supabase(admin=True)
+    if supabase is None:
+        return 0
+    try:
+        rows = (
+            supabase.table("workouts")
+            .select("start_time,end_time")
+            .eq("user_id", str(user_id))
+            .not_.is_("end_time", "null")
+            .gte("end_time", today_start.isoformat())
+            .lt("end_time", today_end.isoformat())
+            .execute()
+            .data or []
+        )
+        total = 0.0
+        for row in rows:
+            start = row.get("start_time")
+            end = row.get("end_time")
+            if not start or not end:
+                continue
+            started = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            completed = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            total += max(0.0, (completed - started).total_seconds())
+        return int(total)
+    except Exception as err:
+        logger.warning("Could not summarize today's workouts: %s", err)
+        return 0
+

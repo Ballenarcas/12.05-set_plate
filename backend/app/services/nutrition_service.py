@@ -1,8 +1,9 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 
 import httpx
+from app.services.nutrition_math import compute_macro_targets, estimate_burned_kcal
 from app.services.user_profile_service import calculate_calorie_goal
 from app.db.supabase_client import get_supabase
 from app.schemas.nutrition import (
@@ -38,16 +39,29 @@ def infer_meal_type(timestamp_str: str | None) -> str:
         return "Meal"
 
 
-def get_user_nutrition_today(user_id: str) -> DailyNutritionResponse:
+def _utc_day_start(now: datetime | None = None) -> datetime:
+    return (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+
+def get_user_nutrition_today(
+    user_id: str,
+    today_start: datetime | None = None,
+    today_end: datetime | None = None,
+    worked_seconds: int = 0,
+) -> DailyNutritionResponse:
     supabase = get_supabase(admin=True)
+    window_start = today_start or _utc_day_start()
+    window_end = today_end or (window_start + timedelta(days=1))
+    user_weight_kg: float | None = None
     daily_goal = 2200
-    active_calories = 340
 
     if not supabase:
         return DailyNutritionResponse(
             consumed_calories=0,
             daily_goal=daily_goal,
-            active_calories=active_calories,
+            adjusted_daily_goal=daily_goal,
             calories_progress_percentage=0,
             carbs_g=0.0,
             proteins_g=0.0,
@@ -66,6 +80,10 @@ def get_user_nutrition_today(user_id: str) -> DailyNutritionResponse:
         )
         if user_res.data:
             u = user_res.data
+            try:
+                user_weight_kg = float(u.get("weight")) if u.get("weight") is not None else None
+            except (ValueError, TypeError):
+                user_weight_kg = None
             if u.get("calorie_goal"):
                 try:
                     daily_goal = int(float(u["calorie_goal"]))
@@ -90,12 +108,12 @@ def get_user_nutrition_today(user_id: str) -> DailyNutritionResponse:
     total_fats = 0.0
 
     try:
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         meals_res = (
             supabase.table("meals")
             .select("*")
             .eq("user_id", user_id)
-            .gte("consumed_at", today_start.isoformat())
+            .gte("consumed_at", window_start.isoformat())
+            .lt("consumed_at", window_end.isoformat())
             .order("consumed_at", desc=True)
             .execute()
         )
@@ -131,13 +149,25 @@ def get_user_nutrition_today(user_id: str) -> DailyNutritionResponse:
     except Exception as err:
         logger.error(f"Error fetching meals from Supabase: {err}")
 
-    progress = round((total_calories / daily_goal) * 100) if daily_goal > 0 else 0
+    workout_adjustment = estimate_burned_kcal(user_weight_kg, worked_seconds)
+    adjusted_goal = max(0, daily_goal + workout_adjustment)
+    target_protein_g, target_fat_g, target_carbs_g = compute_macro_targets(adjusted_goal, user_weight_kg)
+    remaining_calories = max(0, adjusted_goal - total_calories)
+    progress = round((total_calories / adjusted_goal) * 100) if adjusted_goal > 0 else 0
 
     return DailyNutritionResponse(
         consumed_calories=total_calories,
         daily_goal=daily_goal,
-        active_calories=active_calories,
+        workout_adjustment_calories=workout_adjustment,
+        adjusted_daily_goal=adjusted_goal,
         calories_progress_percentage=min(100, max(0, progress)),
+        remaining_calories=remaining_calories,
+        target_proteins_g=target_protein_g,
+        target_carbs_g=target_carbs_g,
+        target_fats_g=target_fat_g,
+        remaining_proteins_g=round(max(0.0, target_protein_g - total_proteins), 1),
+        remaining_carbs_g=round(max(0.0, target_carbs_g - total_carbs), 1),
+        remaining_fats_g=round(max(0.0, target_fat_g - total_fats), 1),
         carbs_g=round(total_carbs, 1),
         proteins_g=round(total_proteins, 1),
         fats_g=round(total_fats, 1),

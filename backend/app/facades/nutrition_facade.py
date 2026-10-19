@@ -1,13 +1,28 @@
-from app.schemas.nutrition import FoodSearchItem, MealCreateRequest, MealItem, DailyNutritionResponse
-from app.services import nutrition_service
+from datetime import datetime, timedelta, timezone
+
+from app.schemas.nutrition import DailyNutritionResponse, FoodSearchItem, MealCreateRequest, MealItem
+from app.services import nutrition_service, workout_service
+
+
+def _resolve_window(today_start: datetime | None, today_end: datetime | None) -> tuple[datetime, datetime]:
+    start = today_start or datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = today_end or (start + timedelta(days=1))
+    return start, end
 
 
 class NutritionFacade:
     def search_foods(self, query: str) -> list[FoodSearchItem]:
         return nutrition_service.search_foods(query)
 
-    def get_today(self, user_id: str) -> DailyNutritionResponse:
-        return nutrition_service.get_user_nutrition_today(user_id)
+    def get_today(
+        self,
+        user_id: str,
+        today_start: datetime | None = None,
+        today_end: datetime | None = None,
+    ) -> DailyNutritionResponse:
+        start, end = _resolve_window(today_start, today_end)
+        worked_seconds = workout_service.summarize_today_workouts(user_id, start, end)
+        return nutrition_service.get_user_nutrition_today(user_id, start, end, worked_seconds=worked_seconds)
 
     def create_meal(self, payload: MealCreateRequest) -> MealItem:
         return nutrition_service.create_user_meal(payload)

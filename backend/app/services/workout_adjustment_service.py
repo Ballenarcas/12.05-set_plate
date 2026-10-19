@@ -31,6 +31,7 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
         response = await client.chat.completions.create(
             model=settings.groq_model,
             temperature=0.2,
+            max_tokens=1200,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": (
@@ -132,7 +133,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         ]
     if not available_routines:
         available_exercises = _data(
-            db_session.table("exercises").select("id,name,muscle_group,muscles,equipment").limit(200).execute()
+            db_session.table("exercises").select("id,name,muscle_group,equipment").limit(80).execute()
         )
         available_exercises = [
             {**exercise, "exercise_id": str(exercise["id"])}
@@ -180,8 +181,13 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         "user_targets": {key: user.get(key) for key in ("calorie_goal", "protein_goal", "carbs_goal", "fat_goal") if user.get(key) is not None},
         "last_48_hours_intake": totals, "calorie_status": calorie_status,
         "available_routines": routine_context,
-        "available_exercises": available_exercises if not routine_context else [],
-        "instruction": plan_instruction + " Set adjusted true if you changed a saved routine or created a new workout; otherwise use false."
+        "available_exercises": (
+            [{key: exercise.get(key) for key in ("id", "name", "muscle_group", "equipment")}
+             for exercise in available_exercises]
+            if not routine_context else []
+        ),
+        "instruction": plan_instruction + " For a new workout, choose 6 to 8 exercises."
+            + " Set adjusted true if you changed a saved routine or created a new workout; otherwise use false."
             + " If recovery is the better choice today, set rest_day true, return routine_id null, workout_name \"Rest day\", an empty exercises array, and a short reasoning.",
     }), schema)
     if (

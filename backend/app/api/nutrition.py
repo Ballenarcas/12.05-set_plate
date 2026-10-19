@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -32,9 +33,11 @@ def search_food_items(
 @router.get("/today", response_model=DailyNutritionResponse)
 def get_today_nutrition(
     user_id: str = Query(..., description="User ID"),
+    today_start: datetime | None = Query(None, description="Local day start instant (inclusive ISO 8601)"),
+    today_end: datetime | None = Query(None, description="Local day end instant (exclusive ISO 8601)"),
 ) -> DailyNutritionResponse:
     try:
-        return nutrition_facade.get_today(user_id)
+        return nutrition_facade.get_today(user_id, today_start, today_end)
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Failed to fetch nutrition data: {err}")
 

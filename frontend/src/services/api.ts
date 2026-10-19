@@ -505,18 +505,76 @@ export interface MealLogItem {
 export interface TodayNutritionData {
   consumed_calories: number
   daily_goal: number
-  active_calories: number
+  workout_adjustment_calories: number
+  adjusted_daily_goal: number
   calories_progress_percentage: number
+  remaining_calories: number
+  target_proteins_g: number
+  target_carbs_g: number
+  target_fats_g: number
+  remaining_proteins_g: number
+  remaining_carbs_g: number
+  remaining_fats_g: number
   carbs_g: number
   proteins_g: number
   fats_g: number
   meals: MealLogItem[]
 }
 
+export function localDayWindow(): { today_start: string; today_end: string } {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { today_start: start.toISOString(), today_end: end.toISOString() }
+}
+
 export async function fetchTodayNutrition(userId: string): Promise<TodayNutritionData> {
-  const response = await fetch(`${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}`)
+  const window = localDayWindow()
+  const response = await fetch(
+    `${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}&today_start=${encodeURIComponent(window.today_start)}&today_end=${encodeURIComponent(window.today_end)}`,
+  )
   if (!response.ok) {
     throw new Error('Failed to fetch today nutrition from database')
+  }
+  return response.json()
+}
+
+export interface CalorieAdjustmentData {
+  adjustment_id: string | null
+  previous_goal: number
+  proposed_goal: number
+  has_change: boolean
+  reason: string
+  status: 'pending' | 'accepted' | 'rejected' | 'advice'
+  objective: string
+  avg_daily_intake: number
+  compliance_rate: number
+  weekly_volume: number
+}
+
+export async function fetchCalorieAdjustment(userId: string): Promise<CalorieAdjustmentData> {
+  const response = await fetch(
+    `${API_URL}/api/v1/ai/calorie-adjustment?user_id=${encodeURIComponent(userId)}`,
+  )
+  if (!response.ok) {
+    throw new Error('Failed to fetch the calorie adjustment')
+  }
+  return response.json()
+}
+
+export async function decideCalorieAdjustment(
+  userId: string,
+  adjustmentId: string,
+  status: 'accepted' | 'rejected',
+): Promise<{ calorie_goal: number }> {
+  const response = await fetch(`${API_URL}/api/v1/ai/calorie-adjustment/decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, adjustment_id: adjustmentId, status }),
+  })
+  if (!response.ok) {
+    throw new Error('Failed to save the calorie adjustment decision')
   }
   return response.json()
 }

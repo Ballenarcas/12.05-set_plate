@@ -126,6 +126,11 @@
 .ai-adjust-accept-all:active { transform: translateY(1px); }
 .ai-adjust-result-none { display: block; color: var(--text-muted); font-size: 0.76rem; line-height: 1.45; }
 .ai-adjust-error { padding: 0.5rem 0.7rem; border: 1px solid rgba(255, 105, 105, 0.3); border-radius: 0.65rem; color: #ff9c9c; font-size: 0.72rem; line-height: 1.45; }
+.confirmation-modal:focus { outline: none; }
+@media (max-width: 360px) {
+  .header-clock-label { display: none; }
+  .active-workout-header { gap: 0.4rem; }
+}
 .icon-button, .done-button, .remove-set-button, .modal-close { display: inline-grid; min-width: 2.75rem; min-height: 2.75rem; place-items: center; border: 1px solid var(--line); border-radius: 0.7rem; color: #fff; background: var(--surface); cursor: pointer; }
 .finish-button { min-height: 2.75rem; padding: 0 0.7rem; border: 0; border-radius: 0.7rem; color: #071c0e; background: var(--green); cursor: pointer; font-size: 0.7rem; font-weight: 800; }
 .active-exercise-list { display: grid; gap: 1rem; }

@@ -287,7 +287,22 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
 _SET_ACTIONS = ("reduce_load", "reduce_reps", "drop_set", "stop_exercise")
 
 
-async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, str]]:
+def _remaining_sets(exercise: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        set_row for set_row in exercise.get("sets") or []
+        if isinstance(set_row, dict) and not set_row.get("is_completed")
+    ]
+
+
+def _heaviest_value(exercise: dict[str, Any], field: str) -> float | None:
+    values = [
+        float(set_row.get(field) or 0) for set_row in exercise.get("sets") or []
+        if isinstance(set_row, dict) and float(set_row.get(field) or 0) > 0
+    ]
+    return max(values) if values else None
+
+
+async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, Any]]:
     """Return proposed changes for the live workout session JSON sent by the client."""
     exercises = workout.get("exercises")
     if not isinstance(exercises, list) or not exercises:
@@ -302,72 +317,47 @@ async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, str
                 "new_reps": {"type": ["integer", "null"], "minimum": 1}},
             "required": ["action", "exercise_id", "reason"]},
     }
-    workout_context = {key: workout.get(key) for key in ("name", "duration_seconds", "exercises")}
+    workout_context = {key: workout.get(key) for key in ("name", "duration_seconds", "user_goal", "exercises")}
     result = await _request_json(json.dumps({
         "workout": workout_context,
         "instruction": "You are coaching a workout in progress. "
             "Suggest only specific, conservative changes to the sets that are not completed yet: "
             "reduce_load with a new_weight_kg value, reduce_reps with a new_reps value, drop_set without values, "
-            "or stop_exercise without values on the affected exercise. Use the completed sets' weight, reps and RPE "
-            "to judge fatigue. Return an empty list when the current plan can be kept as is.",
+            "or stop_exercise without values on the affected exercise. "
+            "Warmup sets are preparation, not fatigue evidence. Weigh drop and failure sets by their RPE. "
+            "Respect the routine targets and the user's goal when choosing values. "
+            "Return an empty list when the current plan can be kept as is.",
     }), schema)
-    valid_ids = {str(exercise.get("exercise_id")) for exercise in exercises}
-    if (
-        not isinstance(result, list)
-        or any(
+    by_id = {str(exercise.get("exercise_id")): exercise for exercise in exercises}
+    suggestions: list[dict[str, Any]] = []
+    for item in result:
+        if (
             not isinstance(item, dict)
-            or item.get("exercise_id") not in valid_ids
+            or item.get("exercise_id") not in by_id
             or item.get("action") not in _SET_ACTIONS
             or not isinstance(item.get("reason"), str)
-            for item in result
-        )
-    ):
-        raise HTTPException(status_code=502, detail="Groq returned invalid workout adjustments")
-    return result
-
-
-async def evaluate_live_fatigue(workout_id: UUID, current_set_data: dict, db_session: Any) -> list[dict[str, str]]:
-    """Return proposed changes for user confirmation without mutating persistence."""
-    workouts = _data(db_session.table("workouts").select("*").eq("id", str(workout_id)).limit(1).execute())
-    if not workouts:
-        raise HTTPException(status_code=404, detail="Workout not found")
-    workout = workouts[0]
-    routine_exercises = _data(
-        db_session.table("routine_exercises").select("*")
-        .eq("routine_id", str(workout["routine_id"])).order("set_order").execute()
-    ) if workout.get("routine_id") else []
-    logged_sets = _data(
-        db_session.table("workout_sets").select("*").eq("workout_id", str(workout_id))
-        .eq("is_done", True).execute()
-    )
-    planned_sets = _data(
-        db_session.table("workout_sets").select("exercise_id,set_number,reps,weight,is_done")
-        .eq("workout_id", str(workout_id)).execute()
-    )
-    remaining_set_counts: dict[str, int] = {}
-    for row in planned_sets:
-        if not row.get("is_done"):
-            exercise_id = str(row.get("exercise_id"))
-            remaining_set_counts[exercise_id] = remaining_set_counts.get(exercise_id, 0) + 1
-    remaining = [
-        {**row, "remaining_sets": remaining_set_counts[str(row.get("exercise_id"))]}
-        for row in routine_exercises if str(row.get("exercise_id")) in remaining_set_counts
-    ]
-    schema = {
-        "type": "array", "items": {"type": "object", "additionalProperties": False,
-            "properties": {"action": {"type": "string", "enum": ["drop_set", "reduce_load", "skip_exercise"]},
-                "exercise_id": {"type": "string"}, "reason": {"type": "string"}},
-            "required": ["action", "exercise_id", "reason"]},
-    }
-    result = await _request_json(json.dumps({
-        "current_set": current_set_data, "completed_sets": logged_sets,
-        "remaining_exercises": remaining,
-        "instruction": "Return specific, conservative suggestions for remaining exercise IDs only. Return an empty list if no change is warranted.",
-    }), schema)
-    valid_ids = {str(row.get("exercise_id")) for row in remaining}
-    suggestions = result
-    if not isinstance(suggestions, list):
-        raise HTTPException(status_code=502, detail="Groq returned invalid fatigue suggestions")
-    if any(not isinstance(item, dict) or item.get("exercise_id") not in valid_ids for item in suggestions):
-        raise HTTPException(status_code=502, detail="Groq returned an invalid fatigue suggestion")
+        ):
+            raise HTTPException(status_code=502, detail="Groq returned invalid workout adjustments")
+        exercise = by_id[item["exercise_id"]]
+        if not _remaining_sets(exercise):
+            continue
+        if item["action"] == "reduce_load":
+            new_weight = item.get("new_weight_kg")
+            reference = _heaviest_value(exercise, "weight_kg")
+            if (
+                not isinstance(new_weight, (int, float)) or isinstance(new_weight, bool)
+                or new_weight <= 0 or (reference is not None and new_weight >= reference)
+            ):
+                raise HTTPException(status_code=502, detail="Groq suggested a load that is not a reduction")
+        elif item["action"] == "reduce_reps":
+            new_reps = item.get("new_reps")
+            reference = _heaviest_value(exercise, "reps")
+            if (
+                not isinstance(new_reps, int) or isinstance(new_reps, bool)
+                or new_reps < 1 or (reference is not None and new_reps >= reference)
+            ):
+                raise HTTPException(status_code=502, detail="Groq suggested reps that are not a reduction")
+        else:
+            item = {key: value for key, value in item.items() if key not in ("new_weight_kg", "new_reps")}
+        suggestions.append(item)
     return suggestions

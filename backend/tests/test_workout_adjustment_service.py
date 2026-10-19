@@ -218,27 +218,76 @@ async def test_generated_plan_rejects_exercise_ids_outside_the_catalog(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_live_fatigue_returns_suggestions_without_database_writes(monkeypatch):
-    database = FakeDatabase()
-    database.rows["workout_sets"] = [
-        {"exercise_id": database.exercise_id, "set_number": 1, "reps": 8, "is_done": False},
-    ]
+def live_workout(**overrides):
+    workout = {
+        "name": "Push day",
+        "duration_seconds": 900,
+        "user_goal": "Hypertrophy",
+        "exercises": [{
+            "exercise_id": "bench",
+            "name": "Bench press",
+            "sets": [
+                {"set_number": 1, "weight_kg": 80, "reps": 8, "is_completed": True, "kind": "normal"},
+                {"set_number": 2, "weight_kg": 80, "reps": 8, "is_completed": False, "kind": "normal"},
+            ],
+        }],
+    }
+    workout.update(overrides)
+    return workout
+
+
+@pytest.mark.asyncio
+async def test_live_adjustment_accepts_a_lower_load(monkeypatch):
+    suggestions = [{"action": "reduce_load", "exercise_id": "bench", "reason": "RPE 9 on set one.", "new_weight_kg": 72.5}]
+
+    async def recommend(*_):
+        return suggestions
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    assert await service.suggest_live_adjustment(live_workout()) == suggestions
+
+
+@pytest.mark.asyncio
+async def test_live_adjustment_rejects_a_load_that_is_not_a_reduction(monkeypatch):
+    suggestions = [{"action": "reduce_load", "exercise_id": "bench", "reason": "Heavier.", "new_weight_kg": 90}]
+
+    async def recommend(*_):
+        return suggestions
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    with pytest.raises(HTTPException) as error:
+        await service.suggest_live_adjustment(live_workout())
+    assert error.value.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_live_adjustment_skips_exercises_without_remaining_sets(monkeypatch):
+    workout = live_workout()
+    workout["exercises"][0]["sets"] = workout["exercises"][0]["sets"][:1]
+    suggestions = [{"action": "stop_exercise", "exercise_id": "bench", "reason": "Done already."}]
+
+    async def recommend(*_):
+        return suggestions
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    assert await service.suggest_live_adjustment(workout) == []
+
+
+@pytest.mark.asyncio
+async def test_live_adjustment_strips_values_from_actions_that_take_none(monkeypatch):
     suggestions = [{
         "action": "drop_set",
-        "exercise_id": database.exercise_id,
-        "reason": "High effort on the previous set.",
+        "exercise_id": "bench",
+        "reason": "Finish with a drop set.",
+        "new_weight_kg": 60,
     }]
 
     async def recommend(*_):
         return suggestions
 
     monkeypatch.setattr(service, "_request_json", recommend)
-    result = await service.evaluate_live_fatigue(
-        UUID(database.workout_id), {"exercise_id": database.exercise_id, "rpe": 10}, database,
-    )
-
-    assert result == suggestions
-    assert database.writes == []
+    result = await service.suggest_live_adjustment(live_workout())
+    assert result == [{"action": "drop_set", "exercise_id": "bench", "reason": "Finish with a drop set."}]
 
 
 @pytest.mark.asyncio

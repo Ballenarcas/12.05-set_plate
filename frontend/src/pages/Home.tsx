@@ -208,6 +208,8 @@ function Home() {
                 name: exercise.name,
                 previous_weight_kg: null,
                 previous_reps: exercise.reps,
+                target_sets: exercise.sets,
+                target_reps: exercise.reps,
                 sets: Array.from({ length: Math.max(1, exercise.sets) }, (_, index) => ({
                   set_number: index + 1,
                   weight_kg: 0,

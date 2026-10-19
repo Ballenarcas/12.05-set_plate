@@ -159,9 +159,11 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
 }
 
 export async function requestWorkoutAdjustment(
+  userId: string,
   payload: LiveWorkoutAdjustmentRequest,
 ): Promise<LiveWorkoutAdjustmentResponse> {
-  const response = await fetch(`${API_URL}/api/v1/workouts/adjust`, {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/workouts/adjust?${query}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

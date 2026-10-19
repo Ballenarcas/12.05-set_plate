@@ -29,6 +29,7 @@ class LiveWorkoutSet(BaseModel):
     reps: int = Field(ge=0)
     rpe: float | None = Field(default=None, ge=1, le=10)
     is_completed: bool = False
+    kind: Literal["normal", "warmup", "drop", "failure"] = "normal"
 
 
 class LiveWorkoutExercise(BaseModel):
@@ -37,12 +38,15 @@ class LiveWorkoutExercise(BaseModel):
     previous_weight_kg: float | None = Field(default=None, ge=0)
     previous_reps: int | None = Field(default=None, ge=0)
     rest_seconds: int | None = Field(default=None, ge=1)
+    target_sets: int | None = Field(default=None, ge=0)
+    target_reps: int | None = Field(default=None, ge=0)
     sets: list[LiveWorkoutSet] = Field(default_factory=list)
 
 
 class LiveWorkoutAdjustmentRequest(BaseModel):
     name: str
     duration_seconds: int = Field(ge=0)
+    user_goal: str | None = None
     exercises: list[LiveWorkoutExercise] = Field(min_length=1)
 
 

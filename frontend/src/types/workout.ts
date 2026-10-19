@@ -12,6 +12,8 @@ export interface Routine {
   estimated_duration_minutes: number | null
 }
 
+export type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
+
 export interface WorkoutSet {
   set_number: number
   weight_kg: number
@@ -29,7 +31,18 @@ export interface ActiveExercise {
   notes?: string
   rest_enabled?: boolean
   rest_seconds?: number
+  target_sets?: number | null
+  target_reps?: number | null
   sets: WorkoutSet[]
+}
+
+export interface ActiveSession {
+  planId?: string
+  routineId?: string
+  name: string
+  startedAt: string
+  exercises: ActiveExercise[]
+  setKinds: Record<string, SetKind>
 }
 
 export interface WorkoutLogCreate {
@@ -78,13 +91,16 @@ export interface LiveWorkoutAdjustmentSuggestion {
 export interface LiveWorkoutAdjustmentRequest {
   name: string
   duration_seconds: number
+  user_goal?: string | null
   exercises: Array<{
     exercise_id: string
     name: string
     previous_weight_kg: number | null
     previous_reps: number | null
     rest_seconds: number | null
-    sets: WorkoutSet[]
+    target_sets?: number | null
+    target_reps?: number | null
+    sets: Array<WorkoutSet & { kind: SetKind }>
   }>
 }
 

@@ -2,6 +2,7 @@
 // computer hosting the frontend instead of their own localhost.
 const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
+const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
 const LLM_TIMEOUT_MS = 20000
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
@@ -202,12 +203,20 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
 }
 
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
-  const response = await fetch(`${API_URL}/api/v1/users/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+      signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error('Sign-in is taking longer than expected. Check your connection and try again.')
+    }
+    throw error
+  }
 
   if (!response.ok) {
     let errorMessage = `Server error (${response.status})`

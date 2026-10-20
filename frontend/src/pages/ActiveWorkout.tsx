@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical,
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExerciseById, fetchExercises, getCurrentUser, saveWorkoutLog } from '../services/api'
+import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
 import type { ActiveExercise, WorkoutLogCreate, WorkoutSet } from '../types/workout'
 
@@ -418,7 +419,7 @@ function ActiveWorkout() {
       sessionStorage.removeItem('set_plate_active_workout')
       navigate('/workouts')
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Unable to save workout')
+      setSaveError(describeError(error, "We couldn't save your workout. Please try again."))
       setIsSaving(false)
     }
   }

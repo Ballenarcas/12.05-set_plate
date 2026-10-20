@@ -1,12 +1,24 @@
+import threading
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import ai, dashboard, nutrition, routines, stats, users, workouts
 from app.core.config import get_settings
 from app.api.settings import router as settings_router
+from app.db.supabase_client import warm_supabase
 
 settings = get_settings()
-app = FastAPI(title=settings.app_name)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    threading.Thread(target=warm_supabase, daemon=True).start()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

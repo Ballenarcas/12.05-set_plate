@@ -192,6 +192,8 @@
 .modal-actions .primary-button { margin-top: 0; }
 .danger-action { min-height: 2.75rem; border: 1px solid #813d3d; border-radius: 0.7rem; color: #ffb1b1; background: transparent; cursor: pointer; font-size: 0.78rem; font-weight: 700; }
 .form-error { margin-top: 0.8rem; color: #ff9e9e; font-size: 0.78rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
 .picker-header { display: grid; grid-template-columns: 2.75rem 1fr; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
 .picker-header h1 { margin: 0; font-size: 1.45rem; }
 .picker-search { display: flex; min-height: 2.9rem; align-items: center; gap: 0.55rem; margin-bottom: 1rem; padding: 0 0.85rem; border: 1px solid var(--line); border-radius: 0.7rem; color: var(--text-muted); background: var(--surface); }

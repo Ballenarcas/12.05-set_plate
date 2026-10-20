@@ -2,6 +2,7 @@ import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
+import { describeError } from '../utils/errors.js'
 
 const TRAINER_INSIGHT = 'AI insight will be displayed here'
 
@@ -84,7 +85,9 @@ function Home() {
         }
       })
       .catch((requestError: Error) => {
-        if (isMounted && !getCachedDashboardSummary()) setError(requestError.message)
+        if (isMounted && !getCachedDashboardSummary()) {
+          setError(describeError(requestError, "We couldn't load your dashboard. Please try again."))
+        }
       })
 
     return () => {

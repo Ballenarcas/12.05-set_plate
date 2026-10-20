@@ -2,6 +2,7 @@ import { ArrowRight, Dumbbell, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchRoutines } from '../services/api'
+import { describeError } from '../utils/errors.js'
 import type { ActiveExercise, Routine } from '../types/workout'
 
 function createActiveExercises(routine: Routine): ActiveExercise[] {
@@ -30,7 +31,7 @@ function Workouts() {
   useEffect(() => {
     fetchRoutines()
       .then(setRoutines)
-      .catch((requestError: Error) => setError(requestError.message))
+      .catch((requestError: Error) => setError(describeError(requestError, "We couldn't load your routines. Please try again.")))
       .finally(() => setIsLoading(false))
   }, [])
 

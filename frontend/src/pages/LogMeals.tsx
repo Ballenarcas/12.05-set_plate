@@ -26,6 +26,7 @@ import {
   type TodayNutritionData,
 } from '../services/api'
 import { summarizeMeal } from '../utils/mealComposition.js'
+import { describeError } from '../utils/errors.js'
 import '../styles/log-meals.css'
 
 type PlateFood = {
@@ -77,6 +78,8 @@ export function LogMeals() {
   const [nutritionData, setNutritionData] = useState<TodayNutritionData | null>(null)
   const [mealList, setMealList] = useState<MealLogItem[]>([])
   const [adjustment, setAdjustment] = useState<CalorieAdjustmentData | null>(null)
+  const [adjustmentError, setAdjustmentError] = useState<string | null>(null)
+  const [isDeciding, setIsDeciding] = useState(false)
   const [isTipOpen, setIsTipOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -121,7 +124,7 @@ export function LogMeals() {
       })
       .catch((err: Error) => {
         if (!isMounted) return
-        setErrorMessage(err.message || 'Unable to load nutrition data from database')
+        setErrorMessage(describeError(err, "We couldn't load today's meals. Please try again."))
       })
       .finally(() => {
         if (isMounted) setIsLoading(false)
@@ -167,34 +170,62 @@ export function LogMeals() {
       return
     }
     if (!currentUser?.id) return
+    setIsTipOpen(true)
+    setAdjustmentError(null)
     fetchCalorieAdjustment(currentUser.id)
       .then((data) => {
         setAdjustment(data)
-        setIsTipOpen(true)
+        setAdjustmentError(null)
       })
-      .catch(() => undefined)
+      .catch((err: unknown) => {
+        setAdjustmentError(describeError(err, "We couldn't load your progress. Please try again."))
+      })
   }
 
   const handleConfirmTip = () => {
     if (!adjustment || !currentUser?.id) return
     const current = adjustment
-    setIsTipOpen(false)
-    setAdjustment({ ...current, status: 'accepted' })
-    if (current.adjustment_id && current.has_change) {
-      decideCalorieAdjustment(currentUser.id, current.adjustment_id, 'accepted')
-        .then(() => refetchNutrition())
-        .catch(() => undefined)
+    if (!current.adjustment_id || !current.has_change) {
+      setIsTipOpen(false)
+      setAdjustment({ ...current, status: 'accepted' })
+      return
     }
+    setIsDeciding(true)
+    setAdjustmentError(null)
+    decideCalorieAdjustment(currentUser.id, current.adjustment_id, 'accepted')
+      .then((result) => {
+        setAdjustment({ ...current, status: 'accepted', proposed_goal: result.calorie_goal })
+        setIsTipOpen(false)
+        refetchNutrition()
+      })
+      .catch((err: unknown) => {
+        setAdjustmentError(describeError(err, "We couldn't update your goal. Please try again."))
+      })
+      .finally(() => setIsDeciding(false))
   }
 
   const handleDeclineTip = () => {
-    if (!adjustment || !currentUser?.id) return
-    const current = adjustment
-    setIsTipOpen(false)
-    setAdjustment({ ...current, status: 'rejected' })
-    if (current.adjustment_id && current.has_change) {
-      decideCalorieAdjustment(currentUser.id, current.adjustment_id, 'rejected').catch(() => undefined)
+    if (!adjustment || !currentUser?.id) {
+      setIsTipOpen(false)
+      setAdjustmentError(null)
+      return
     }
+    const current = adjustment
+    if (!current.adjustment_id || !current.has_change) {
+      setIsTipOpen(false)
+      return
+    }
+    setIsDeciding(true)
+    setAdjustmentError(null)
+    decideCalorieAdjustment(currentUser.id, current.adjustment_id, 'rejected')
+      .then(() => {
+        setAdjustment({ ...current, status: 'rejected' })
+        setIsTipOpen(false)
+      })
+      .catch((err: unknown) => {
+        setAdjustmentError(describeError(err, "We couldn't save your choice. Please try again."))
+      })
+      .finally(() => setIsDeciding(false))
   }
 
   // 3. Search suggestions as user types in modal
@@ -214,7 +245,7 @@ export function LogMeals() {
         .catch((err: unknown) => {
           if (!isCurrent) return
           setSuggestions([])
-          setFoodSearchMessage(err instanceof Error ? err.message : 'Food search is unavailable.')
+          setFoodSearchMessage(describeError(err, 'Food search is not available right now. Please try again.'))
         })
         .finally(() => {
           if (isCurrent) setIsSearchingFoods(false)
@@ -342,8 +373,7 @@ export function LogMeals() {
       setFoodInput('')
       setPlateFoods([])
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save meal'
-      setErrorMessage(msg)
+      setErrorMessage(describeError(err, "We couldn't save this meal. Please try again."))
     } finally {
       setIsSubmitting(false)
     }
@@ -369,8 +399,7 @@ export function LogMeals() {
         : null))
       refetchNutrition()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete meal'
-      setErrorMessage(msg)
+      setErrorMessage(describeError(err, "We couldn't remove this meal. Please try again."))
     }
   }
 
@@ -746,9 +775,9 @@ export function LogMeals() {
               </section>
 
               {errorMessage && (
-                <p className="field-hint" style={{ color: '#f87171', margin: 0 }}>
+                <div className="inline-alert" role="alert">
                   {errorMessage}
-                </p>
+                </div>
               )}
 
               {/* Modal Submit Button */}
@@ -771,39 +800,74 @@ export function LogMeals() {
         </div>
       )}
 
-      {isTipOpen && adjustment && (
+      {isTipOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="calorie-adjustment-title">
           <div className="modal-dialog tip-dialog">
             <div className="modal-header">
               <h2 className="modal-title" id="calorie-adjustment-title">
-                {adjustment.has_change ? 'Calorie Goal Adjustment' : 'AI Trainer Tip'}
+                {adjustment?.has_change ? 'Calorie Goal Adjustment' : 'AI Trainer Tip'}
               </h2>
               <button type="button" className="btn-modal-close" onClick={handleDeclineTip} aria-label="Close tip">
                 <X size={18} />
               </button>
             </div>
             <div className="tip-body">
-              {adjustment.has_change && (
-                <p className="tip-goals">
-                  <span className="tip-goal-old">{adjustment.previous_goal} kcal</span>
-                  <span className="tip-goal-arrow">→</span>
-                  <span className="tip-goal-new">{adjustment.proposed_goal} kcal</span>
-                </p>
+              {adjustmentError ? (
+                <p className="tip-error" role="alert">{adjustmentError}</p>
+              ) : !adjustment ? (
+                <p className="tip-message">Checking your last 7 days...</p>
+              ) : (
+                <>
+                  {adjustment.has_change && (
+                    <p className="tip-goals">
+                      <span className="tip-goal-old">{adjustment.previous_goal} kcal</span>
+                      <span className="tip-goal-arrow">→</span>
+                      <span className="tip-goal-new">{adjustment.proposed_goal} kcal</span>
+                    </p>
+                  )}
+                  <p className="tip-message">{adjustment.reason}</p>
+                  <p className="tip-reasoning">
+                    <strong>Why:</strong> last 7 days, {Math.round(adjustment.compliance_rate * 100)}% of days
+                    on target, averaging {adjustment.avg_daily_intake} kcal, weekly training volume{' '}
+                    {adjustment.weekly_volume} kg.
+                  </p>
+                </>
               )}
-              <p className="tip-message">{adjustment.reason}</p>
-              <p className="tip-reasoning">
-                <strong>Why:</strong> last 7 days, {Math.round(adjustment.compliance_rate * 100)}% of days
-                on target, averaging {adjustment.avg_daily_intake} kcal, weekly training volume{' '}
-                {adjustment.weekly_volume} kg.
-              </p>
             </div>
             <div className="tip-actions">
-              <button type="button" className="btn-modal-submit tip-accept-btn" onClick={handleConfirmTip}>
-                {adjustment.has_change ? `Apply ${adjustment.proposed_goal} kcal` : 'Got it'}
-              </button>
-              {adjustment.has_change && (
-                <button type="button" className="tip-decline-btn" onClick={handleDeclineTip}>
-                  Keep {adjustment.previous_goal} kcal
+              {adjustment ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-modal-submit tip-accept-btn"
+                    onClick={handleConfirmTip}
+                    disabled={isDeciding}
+                  >
+                    {isDeciding
+                      ? 'Saving...'
+                      : adjustment.has_change
+                        ? `Apply ${adjustment.proposed_goal} kcal`
+                        : 'Got it'}
+                  </button>
+                  {adjustment.has_change && (
+                    <button
+                      type="button"
+                      className="tip-decline-btn"
+                      onClick={handleDeclineTip}
+                      disabled={isDeciding}
+                    >
+                      Keep {adjustment.previous_goal} kcal
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-modal-submit tip-accept-btn"
+                  onClick={handleOpenTip}
+                  disabled={!adjustmentError}
+                >
+                  {adjustmentError ? 'Try again' : 'Checking...'}
                 </button>
               )}
             </div>

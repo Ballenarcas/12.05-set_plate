@@ -27,7 +27,8 @@ def search_food_items(
     try:
         return nutrition_facade.search_foods(q)
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Failed to search foods: {err}")
+        logger.exception("Failed to search foods")
+        raise HTTPException(status_code=500, detail="Could not search foods right now.") from err
 
 
 @router.get("/today", response_model=DailyNutritionResponse)
@@ -39,7 +40,8 @@ def get_today_nutrition(
     try:
         return nutrition_facade.get_today(user_id, today_start, today_end)
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch nutrition data: {err}")
+        logger.exception("Failed to load today's nutrition")
+        raise HTTPException(status_code=500, detail="Could not load today's nutrition.") from err
 
 
 @router.post("/meals", response_model=MealItem)
@@ -48,7 +50,7 @@ def add_meal(payload: MealCreateRequest) -> MealItem:
         return nutrition_facade.create_meal(payload)
     except Exception as err:
         logger.exception("Failed to save meal")
-        raise HTTPException(status_code=500, detail=f"Failed to save meal: {err}")
+        raise HTTPException(status_code=500, detail="Could not save this meal.") from err
 
 
 @router.delete("/meals/{meal_id}")
@@ -57,4 +59,5 @@ def remove_meal(meal_id: str) -> dict[str, str]:
         nutrition_facade.delete_meal(meal_id)
         return {"status": "success", "deleted_id": meal_id}
     except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Failed to delete meal: {err}")
+        logger.exception("Failed to delete meal")
+        raise HTTPException(status_code=500, detail="Could not remove this meal.") from err

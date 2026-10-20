@@ -980,6 +980,18 @@
 
 .tip-body { display: grid; gap: 0.6rem; }
 
+.inline-alert,
+.tip-error {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 0.65rem;
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.12);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .tip-goals { margin: 0; display: flex; align-items: center; gap: 0.5rem; font-variant-numeric: tabular-nums; }
 .tip-goal-old { font-size: 1rem; font-weight: 700; color: #888888; text-decoration: line-through; }
 .tip-goal-arrow { color: #4ade80; font-weight: 800; }

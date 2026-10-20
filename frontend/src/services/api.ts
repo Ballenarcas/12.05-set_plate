@@ -3,7 +3,9 @@
 const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
 const WRITE_TIMEOUT_MS = 15000
+const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
+const LLM_TIMEOUT_MS = 20000
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
@@ -12,7 +14,12 @@ const nutritionRequests = new Map<string, Promise<TodayNutritionData>>()
 const adjustmentRequests = new Map<string, Promise<CalorieAdjustmentData>>()
 const NUTRITION_CACHE_PREFIX = 'set_plate_nutrition:'
 const NUTRITION_CACHE_TTL_MS = 60_000
-import type { Routine, WorkoutHistoryEntry } from '../types/workout'
+import type {
+  LiveWorkoutAdjustmentRequest,
+  LiveWorkoutAdjustmentResponse,
+  Routine,
+  WorkoutHistoryEntry,
+} from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 
 export interface PlanExercise {
@@ -155,6 +162,24 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
   return response.json() as Promise<{ id: string; status: string }>
 }
 
+export async function requestWorkoutAdjustment(
+  userId: string,
+  payload: LiveWorkoutAdjustmentRequest,
+): Promise<LiveWorkoutAdjustmentResponse> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/workouts/adjust?${query}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.detail || 'Unable to get AI adjustments')
+  }
+  return response.json() as Promise<LiveWorkoutAdjustmentResponse>
+}
+
 export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
   const query = new URLSearchParams({ user_id: userId, limit: '30' })
   const response = await fetch(`${API_URL}/api/v1/workouts/history?${query}`, {
@@ -179,12 +204,20 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
 }
 
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
-  const response = await fetch(`${API_URL}/api/v1/users/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+      signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error('Sign-in is taking longer than expected. Check your connection and try again.', { cause: error })
+    }
+    throw error
+  }
 
   if (!response.ok) {
     if (response.status === 401 || response.status === 404) {

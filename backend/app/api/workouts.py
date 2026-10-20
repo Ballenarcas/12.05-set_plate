@@ -1,12 +1,21 @@
+from time import monotonic
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
 from app.facades.workout_facade import workout_facade
+from app.schemas.workout import (
+    LiveWorkoutAdjustmentRequest,
+    LiveWorkoutAdjustmentResponse,
+    LiveWorkoutAdjustmentSuggestion,
+)
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
+
+_ADJUSTMENT_COOLDOWN_SECONDS = 60
+_last_adjustment_request: dict[str, float] = {}
 
 
 @router.post("/plan-today")
@@ -14,6 +23,22 @@ async def plan_todays_workout(
     user_id: UUID = Query(..., description="Supabase users.id"),
 ) -> dict:
     return await workout_facade.plan_today(user_id)
+
+
+@router.post("/adjust", response_model=LiveWorkoutAdjustmentResponse)
+async def suggest_live_adjustment(
+    payload: LiveWorkoutAdjustmentRequest,
+    user_id: UUID = Query(..., description="Supabase users.id"),
+) -> LiveWorkoutAdjustmentResponse:
+    """Ask the AI trainer for conservative adjustments to the workout in progress."""
+    last_request = _last_adjustment_request.get(str(user_id))
+    if last_request is not None and monotonic() - last_request < _ADJUSTMENT_COOLDOWN_SECONDS:
+        raise HTTPException(status_code=429, detail="Wait a moment before asking for another adjustment")
+    suggestions = await workout_facade.suggest_adjustment(payload)
+    _last_adjustment_request[str(user_id)] = monotonic()
+    return LiveWorkoutAdjustmentResponse(suggestions=[
+        LiveWorkoutAdjustmentSuggestion.model_validate(suggestion) for suggestion in suggestions
+    ])
 
 
 @router.post("/logs", response_model=WorkoutLogResponse)

@@ -18,6 +18,7 @@ class ExerciseLogItem(BaseModel):
 
 
 class WorkoutLogCreate(BaseModel):
+    plan_id: UUID | None = None
     routine_id: UUID | None = None
     name: str = Field(min_length=1, max_length=120)
     duration_seconds: int = Field(ge=0)

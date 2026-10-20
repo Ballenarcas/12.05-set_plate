@@ -2,6 +2,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExercises } from '../services/api'
+import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
 
 const PAGE_SIZE = 30
@@ -38,7 +39,7 @@ function ExercisePicker() {
         }
       })
       .catch((requestError: Error) => {
-        if (isCurrent) setError(requestError.message)
+        if (isCurrent) setError(describeError(requestError, "We couldn't load exercises. Please try again."))
       })
       .finally(() => {
         if (isCurrent) setIsLoading(false)

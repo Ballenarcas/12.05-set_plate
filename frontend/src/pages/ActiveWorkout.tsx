@@ -1,21 +1,52 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { fetchExerciseById, fetchExercises, getCurrentUser, saveWorkoutLog } from '../services/api'
+import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog } from '../services/api'
+import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
-import type { ActiveExercise, WorkoutLogCreate, WorkoutSet } from '../types/workout'
+import type {
+  ActiveExercise,
+  ActiveSession,
+  LiveWorkoutAdjustmentAction,
+  LiveWorkoutAdjustmentRequest,
+  LiveWorkoutAdjustmentSuggestion,
+  SetKind,
+  WorkoutLogCreate,
+  WorkoutSet,
+} from '../types/workout'
+import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 
-type ActiveSession = {
-  routineId?: string
-  name: string
-  startedAt: string
-  exercises: ActiveExercise[]
-  setKinds: Record<string, SetKind>
-}
-
-type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
+const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
+  reduce_load: 'Reduce the load',
+  reduce_reps: 'Reduce the reps',
+  drop_set: 'Turn the next set into a drop set',
+  stop_exercise: 'Skip the remaining sets',
+}
+
+function describeAdjustment(suggestion: LiveWorkoutAdjustmentSuggestion): string {
+  const base = ADJUSTMENT_ACTION_LABELS[suggestion.action]
+  if (suggestion.action === 'reduce_load' && typeof suggestion.new_weight_kg === 'number') {
+    return `${base} to ${suggestion.new_weight_kg} kg`
+  }
+  if (suggestion.action === 'reduce_reps' && typeof suggestion.new_reps === 'number') {
+    return `${base} to ${suggestion.new_reps}`
+  }
+  return base
+}
+
+type AiAdjustmentState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; suggestions: LiveWorkoutAdjustmentSuggestion[]; applied: number[] }
+  | { status: 'error'; message: string }
+type AdjustmentUndo = {
+  session: ActiveSession
+  rpeValues: Record<string, number>
+  restRemaining: Record<number, number>
+  applied: number[]
+}
 type PendingSetRemoval = {
   exerciseIndex: number
   setIndex: number
@@ -56,17 +87,6 @@ function formatClock(seconds: number): string {
 
 function formatRest(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`
-}
-
-function reindexKeyedMap<T>(map: Record<string, T>, removedIndex: number): Record<string, T> {
-  const next: Record<string, T> = {}
-  for (const [key, value] of Object.entries(map)) {
-    const [indexPart, ...rest] = key.split(':')
-    const index = Number(indexPart)
-    if (index === removedIndex) continue
-    next[[index > removedIndex ? index - 1 : index, ...rest].join(':')] = value
-  }
-  return next
 }
 
 function swapKeyedMapIndexes<T>(map: Record<string, T>, firstIndex: number, secondIndex: number): Record<string, T> {
@@ -114,6 +134,46 @@ function createSet(setNumber: number, source?: WorkoutSet): WorkoutSet {
   return { set_number: setNumber, weight_kg: source?.weight_kg ?? 0, reps: source?.reps ?? 0, is_completed: false }
 }
 
+function nullableNumber(value: unknown, min = 0): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const number = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(number) && number >= min ? number : null
+}
+
+function safeNumber(value: unknown, min = 0): number {
+  return nullableNumber(value, min) ?? 0
+}
+
+function safeCount(value: unknown, min = 0): number {
+  return Math.trunc(safeNumber(value, min))
+}
+
+function safeSetKind(value: unknown): SetKind {
+  return value === 'warmup' || value === 'drop' || value === 'failure' ? value : 'normal'
+}
+
+function useDialogBehavior(open: boolean, onClose: () => void) {
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeRef = useRef(onClose)
+  useEffect(() => {
+    closeRef.current = onClose
+  }, [onClose])
+  useEffect(() => {
+    if (!open) return
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    dialogRef.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeRef.current()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      previouslyFocused?.focus()
+    }
+  }, [open])
+  return dialogRef
+}
+
 function getSession(state: unknown): ActiveSession | null {
   if (!state || typeof state !== 'object' || !('name' in state) || !('exercises' in state)) return null
   const parsed = state as Partial<ActiveSession>
@@ -132,6 +192,7 @@ function ActiveWorkout() {
   const [workoutName, setWorkoutName] = useState(() => session?.name ?? '')
   const [now, setNow] = useState(() => Date.now())
   const [showFinish, setShowFinish] = useState(false)
+  const [showAiAdjustment, setShowAiAdjustment] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [rpeValues, setRpeValues] = useState<Record<string, number>>({})
@@ -140,21 +201,29 @@ function ActiveWorkout() {
   const [removingSetKey, setRemovingSetKey] = useState<string | null>(null)
   const [revealedSetKey, setRevealedSetKey] = useState<string | null>(null)
   const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
+  const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
+  const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
   const removeSetTimer = useRef<number | null>(null)
   const removeSetAnimationTimer = useRef<number | null>(null)
+  const undoAdjustmentTimer = useRef<number | null>(null)
+  const lastAdjustmentSetCount = useRef<number | null>(null)
   const imageLookups = useRef(new Set<string>())
   const sessionRef = useRef(session)
-  sessionRef.current = session
 
   useEffect(() => {
+    sessionRef.current = session
     if (session) sessionStorage.setItem('set_plate_active_workout', JSON.stringify(session))
   }, [session])
 
   useEffect(() => () => {
     if (removeSetTimer.current !== null) window.clearTimeout(removeSetTimer.current)
     if (removeSetAnimationTimer.current !== null) window.clearTimeout(removeSetAnimationTimer.current)
+    if (undoAdjustmentTimer.current !== null) window.clearTimeout(undoAdjustmentTimer.current)
   }, [])
+
+  const aiAdjustmentDialogRef = useDialogBehavior(showAiAdjustment, () => setShowAiAdjustment(false))
+  const finishDialogRef = useDialogBehavior(showFinish, () => setShowFinish(false))
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -398,6 +467,7 @@ function ActiveWorkout() {
     setIsSaving(true)
     setSaveError(null)
     const payload: WorkoutLogCreate = {
+      plan_id: currentSession.planId,
       routine_id: currentSession.routineId,
       name: workoutName.trim() || currentSession.name,
       duration_seconds: durationSeconds,
@@ -416,9 +486,121 @@ function ActiveWorkout() {
       sessionStorage.removeItem('set_plate_active_workout')
       navigate('/workouts')
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Unable to save workout')
+      setSaveError(describeError(error, "We couldn't save your workout. Please try again."))
       setIsSaving(false)
     }
+  }
+
+  async function requestAiAdjustment() {
+    const currentSession = session
+    const user = getCurrentUser()
+    if (!currentSession || aiAdjustment.status === 'loading') return
+    if (!user?.id) {
+      setAiAdjustment({ status: 'error', message: 'Sign in to ask the AI trainer for adjustments' })
+      return
+    }
+    const completedAtRequest = completedSets
+    const exercises = (Array.isArray(currentSession.exercises) ? currentSession.exercises : []).map((exercise, exerciseIndex) => {
+      const { exercise_id, name, previous_weight_kg, previous_reps, rest_enabled, rest_seconds, target_sets, target_reps, sets } = exercise
+      const previousWeight = nullableNumber(previous_weight_kg)
+      const previousReps = nullableNumber(previous_reps)
+      const rest = nullableNumber(rest_seconds, 1)
+      const targetSets = nullableNumber(target_sets)
+      const targetReps = nullableNumber(target_reps)
+      return {
+        exercise_id: exercise_id ? String(exercise_id) : '',
+        name: typeof name === 'string' && name.trim() ? name : 'Exercise',
+        previous_weight_kg: previousWeight,
+        previous_reps: previousReps === null ? null : Math.trunc(previousReps),
+        rest_seconds: rest_enabled ? (rest === null ? DEFAULT_REST_SECONDS : Math.trunc(rest)) : null,
+        target_sets: targetSets === null ? null : Math.trunc(targetSets),
+        target_reps: targetReps === null ? null : Math.trunc(targetReps),
+        sets: (Array.isArray(sets) ? sets : []).map((set, setIndex) => {
+          const key = `${exerciseIndex}:${set.set_number}`
+          const rpe = nullableNumber(rpeValues[key], 1)
+          return {
+            set_number: setIndex + 1,
+            weight_kg: safeNumber(set.weight_kg),
+            reps: safeCount(set.reps),
+            is_completed: Boolean(set.is_completed),
+            rpe: rpe !== null && rpe <= 10 ? rpe : null,
+            kind: safeSetKind(currentSession.setKinds[key]),
+          }
+        }),
+      }
+    }).filter((exercise) => exercise.exercise_id)
+    if (!exercises.length) {
+      setAiAdjustment({ status: 'error', message: 'Add at least one exercise before asking the AI for adjustments.' })
+      return
+    }
+    setAiAdjustment({ status: 'loading' })
+    const payload: LiveWorkoutAdjustmentRequest = {
+      name: typeof currentSession.name === 'string' && currentSession.name.trim() ? currentSession.name : 'Workout',
+      duration_seconds: Number.isFinite(durationSeconds) ? Math.max(0, Math.floor(durationSeconds)) : 0,
+      user_goal: typeof user.objective === 'string' ? user.objective : null,
+      exercises,
+    }
+    try {
+      const result = await requestWorkoutAdjustment(user.id, payload)
+      lastAdjustmentSetCount.current = completedAtRequest
+      setAdjustmentUndo(null)
+      setAiAdjustment({ status: 'ready', suggestions: result.suggestions, applied: [] })
+    } catch (error) {
+      setAiAdjustment({ status: 'error', message: error instanceof Error ? error.message : 'Unable to get AI adjustments' })
+    }
+  }
+
+  function openAiAdjustment() {
+    setShowAiAdjustment(true)
+    const isStale = lastAdjustmentSetCount.current !== completedSets
+    if (aiAdjustment.status !== 'ready' || isStale) requestAiAdjustment()
+  }
+
+  function rememberAdjustmentUndo(snapshot: AdjustmentUndo) {
+    if (undoAdjustmentTimer.current !== null) window.clearTimeout(undoAdjustmentTimer.current)
+    setAdjustmentUndo(snapshot)
+    undoAdjustmentTimer.current = window.setTimeout(() => {
+      setAdjustmentUndo(null)
+      undoAdjustmentTimer.current = null
+    }, 8000)
+  }
+
+  function applyOneAdjustment(index: number) {
+    if (!session || aiAdjustment.status !== 'ready' || aiAdjustment.applied.includes(index)) return
+    const update = aiAdjustment.suggestions[index]
+    rememberAdjustmentUndo({ session, rpeValues, restRemaining, applied: aiAdjustment.applied })
+    applySuggestions([update])
+    setAiAdjustment({ ...aiAdjustment, applied: [...aiAdjustment.applied, index] })
+  }
+
+  function applyAllAdjustments() {
+    if (!session || aiAdjustment.status !== 'ready') return
+    const pending = aiAdjustment.suggestions.filter((_, index) => !aiAdjustment.applied.includes(index))
+    rememberAdjustmentUndo({ session, rpeValues, restRemaining, applied: aiAdjustment.applied })
+    applySuggestions(pending)
+    setAiAdjustment({ ...aiAdjustment, applied: aiAdjustment.suggestions.map((_, index) => index) })
+  }
+
+  function undoAdjustment() {
+    if (!adjustmentUndo || aiAdjustment.status !== 'ready') return
+    if (undoAdjustmentTimer.current !== null) {
+      window.clearTimeout(undoAdjustmentTimer.current)
+      undoAdjustmentTimer.current = null
+    }
+    setSession(adjustmentUndo.session)
+    setRpeValues(adjustmentUndo.rpeValues)
+    setRestRemaining(adjustmentUndo.restRemaining)
+    setAiAdjustment({ ...aiAdjustment, applied: adjustmentUndo.applied })
+    setAdjustmentUndo(null)
+  }
+
+  function applySuggestions(updates: LiveWorkoutAdjustmentSuggestion[]) {
+    const current = session
+    if (!current || !updates.length) return
+    const next = applyAdjustments(current, rpeValues, restRemaining, updates)
+    setSession(next.session)
+    setRpeValues(next.rpeValues)
+    setRestRemaining(next.restRemaining)
   }
 
   function discardWorkout() {
@@ -431,7 +613,18 @@ function ActiveWorkout() {
       <header className="active-workout-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
         <h1>Log Workout</h1>
-        <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} />{formatClock(durationSeconds)}</span>
+        <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} aria-hidden="true" /><span className="header-clock-label">{formatClock(durationSeconds)}</span></span>
+        <button
+          className="ai-adjust-trigger"
+          type="button"
+          onClick={openAiAdjustment}
+          disabled={isSaving}
+          aria-label="Ask AI for adjustments"
+          title="Ask AI for adjustments"
+        >
+          <Sparkles size={16} aria-hidden="true" />
+          AI
+        </button>
         <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>Finish</button>
       </header>
 
@@ -550,9 +743,51 @@ function ActiveWorkout() {
         <button className="secondary-action add-exercise-button" type="button" onClick={() => navigate('/workouts/active/exercises')}><Plus size={17} /> Add Exercise</button>
       </section>
 
+      {showAiAdjustment && (
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAiAdjustment(false) }}>
+          <div className="confirmation-modal ai-adjust-modal" role="dialog" aria-modal="true" aria-labelledby="ai-adjust-title" tabIndex={-1} ref={aiAdjustmentDialogRef}>
+            <button className="modal-close" type="button" onClick={() => setShowAiAdjustment(false)} aria-label="Close"><X size={20} /></button>
+            <p className="eyebrow">AI trainer</p>
+            <h2 id="ai-adjust-title">Workout adjustments</h2>
+            {aiAdjustment.status === 'loading'
+              && <p className="ai-adjust-loading" role="status">Reviewing your sets and effort ratings...</p>}
+            {aiAdjustment.status === 'ready' && (aiAdjustment.suggestions.length === 0
+              ? <div className="ai-adjust-feedback"><p className="ai-adjust-result-none" role="status">No modifications suggested. Your current plan looks on track for the rest of the session.</p></div>
+              : <div className="ai-adjust-result">
+                  <ul>
+                    {aiAdjustment.suggestions.map((suggestion, index) => {
+                      const isApplied = aiAdjustment.applied.includes(index)
+                      const exerciseName = session.exercises.find((exercise) => exercise.exercise_id === suggestion.exercise_id)?.name
+                      return <li key={`${suggestion.exercise_id}:${suggestion.action}`} className={isApplied ? 'is-applied' : undefined}>
+                        <span>{exerciseName ?? 'Exercise'}</span>
+                        <p><strong>{describeAdjustment(suggestion)}.</strong> {suggestion.reason}</p>
+                        {isApplied
+                          ? <p className="ai-adjust-applied">Applied</p>
+                          : <button className="ai-adjust-accept" type="button" onClick={() => applyOneAdjustment(index)}>Accept</button>}
+                      </li>
+                    })}
+                  </ul>
+                  {aiAdjustment.applied.length < aiAdjustment.suggestions.length
+                    && <button className="ai-adjust-accept-all" type="button" onClick={applyAllAdjustments}>Accept all suggestions</button>}
+                </div>)}
+            {aiAdjustment.status === 'error' && <div className="ai-adjust-feedback">
+              <p className="ai-adjust-error" role="alert">{aiAdjustment.message}</p>
+              <button className="secondary-action" type="button" onClick={requestAiAdjustment}>Try again</button>
+            </div>}
+            {adjustmentUndo && <div className="set-removal-undo" role="status">
+              <span>Adjustment applied</span>
+              <button type="button" onClick={undoAdjustment}>Undo</button>
+            </div>}
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => setShowAiAdjustment(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showFinish && (
-        <div className="modal-backdrop">
-          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="finish-title">
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowFinish(false) }}>
+          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="finish-title" tabIndex={-1} ref={finishDialogRef}>
             <button className="modal-close" type="button" onClick={() => setShowFinish(false)} aria-label="Close"><X size={20} /></button>
             <p className="eyebrow">Session complete</p>
             <h2 id="finish-title">Finish workout?</h2>

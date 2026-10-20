@@ -162,20 +162,41 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
   return response.json() as Promise<{ id: string; status: string }>
 }
 
+function workoutAdjustmentError(response: Response, payload: unknown): string {
+  if (response.status === 422) {
+    return "The AI couldn't read your workout data. Refresh the page and try again."
+  }
+  if (payload && typeof payload === 'object' && 'detail' in payload) {
+    const detail = (payload as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+  }
+  return 'Unable to get AI adjustments'
+}
+
 export async function requestWorkoutAdjustment(
   userId: string,
   payload: LiveWorkoutAdjustmentRequest,
 ): Promise<LiveWorkoutAdjustmentResponse> {
   const query = new URLSearchParams({ user_id: userId })
-  const response = await fetch(`${API_URL}/api/v1/workouts/adjust?${query}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/workouts/adjust?${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error('The AI trainer is taking too long. Please try again.', { cause: error })
+    }
+    throw error
+  }
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.detail || 'Unable to get AI adjustments')
+    const body = await response.json().catch(() => null)
+    if (response.status === 422) console.error('Workout adjustment request rejected', JSON.stringify(body))
+    throw new Error(workoutAdjustmentError(response, body))
   }
   return response.json() as Promise<LiveWorkoutAdjustmentResponse>
 }

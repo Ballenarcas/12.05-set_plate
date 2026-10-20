@@ -28,9 +28,11 @@ async def plan_todays_workout(
 @router.post("/adjust", response_model=LiveWorkoutAdjustmentResponse)
 async def suggest_live_adjustment(
     payload: LiveWorkoutAdjustmentRequest,
+    response: Response,
     user_id: UUID = Query(..., description="Supabase users.id"),
 ) -> LiveWorkoutAdjustmentResponse:
     """Ask the AI trainer for conservative adjustments to the workout in progress."""
+    response.headers["Cache-Control"] = "no-store"
     last_request = _last_adjustment_request.get(str(user_id))
     if last_request is not None and monotonic() - last_request < _ADJUSTMENT_COOLDOWN_SECONDS:
         raise HTTPException(status_code=429, detail="Wait a moment before asking for another adjustment")

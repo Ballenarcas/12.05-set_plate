@@ -134,6 +134,24 @@ function createSet(setNumber: number, source?: WorkoutSet): WorkoutSet {
   return { set_number: setNumber, weight_kg: source?.weight_kg ?? 0, reps: source?.reps ?? 0, is_completed: false }
 }
 
+function nullableNumber(value: unknown, min = 0): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const number = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(number) && number >= min ? number : null
+}
+
+function safeNumber(value: unknown, min = 0): number {
+  return nullableNumber(value, min) ?? 0
+}
+
+function safeCount(value: unknown, min = 0): number {
+  return Math.trunc(safeNumber(value, min))
+}
+
+function safeSetKind(value: unknown): SetKind {
+  return value === 'warmup' || value === 'drop' || value === 'failure' ? value : 'normal'
+}
+
 function useDialogBehavior(open: boolean, onClose: () => void) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
@@ -482,25 +500,45 @@ function ActiveWorkout() {
       return
     }
     const completedAtRequest = completedSets
+    const exercises = (Array.isArray(currentSession.exercises) ? currentSession.exercises : []).map((exercise, exerciseIndex) => {
+      const { exercise_id, name, previous_weight_kg, previous_reps, rest_enabled, rest_seconds, target_sets, target_reps, sets } = exercise
+      const previousWeight = nullableNumber(previous_weight_kg)
+      const previousReps = nullableNumber(previous_reps)
+      const rest = nullableNumber(rest_seconds, 1)
+      const targetSets = nullableNumber(target_sets)
+      const targetReps = nullableNumber(target_reps)
+      return {
+        exercise_id: exercise_id ? String(exercise_id) : '',
+        name: typeof name === 'string' && name.trim() ? name : 'Exercise',
+        previous_weight_kg: previousWeight,
+        previous_reps: previousReps === null ? null : Math.trunc(previousReps),
+        rest_seconds: rest_enabled ? (rest === null ? DEFAULT_REST_SECONDS : Math.trunc(rest)) : null,
+        target_sets: targetSets === null ? null : Math.trunc(targetSets),
+        target_reps: targetReps === null ? null : Math.trunc(targetReps),
+        sets: (Array.isArray(sets) ? sets : []).map((set, setIndex) => {
+          const key = `${exerciseIndex}:${set.set_number}`
+          const rpe = nullableNumber(rpeValues[key], 1)
+          return {
+            set_number: setIndex + 1,
+            weight_kg: safeNumber(set.weight_kg),
+            reps: safeCount(set.reps),
+            is_completed: Boolean(set.is_completed),
+            rpe: rpe !== null && rpe <= 10 ? rpe : null,
+            kind: safeSetKind(currentSession.setKinds[key]),
+          }
+        }),
+      }
+    }).filter((exercise) => exercise.exercise_id)
+    if (!exercises.length) {
+      setAiAdjustment({ status: 'error', message: 'Add at least one exercise before asking the AI for adjustments.' })
+      return
+    }
     setAiAdjustment({ status: 'loading' })
     const payload: LiveWorkoutAdjustmentRequest = {
-      name: currentSession.name,
-      duration_seconds: durationSeconds,
-      user_goal: user.objective ?? null,
-      exercises: currentSession.exercises.map(({ exercise_id, name, previous_weight_kg, previous_reps, rest_enabled, rest_seconds, target_sets, target_reps, sets }, exerciseIndex) => ({
-        exercise_id,
-        name,
-        previous_weight_kg,
-        previous_reps,
-        rest_seconds: rest_enabled ? (rest_seconds ?? DEFAULT_REST_SECONDS) : null,
-        target_sets: target_sets ?? null,
-        target_reps: target_reps ?? null,
-        sets: sets.map((set) => ({
-          ...set,
-          rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? null,
-          kind: currentSession.setKinds[`${exerciseIndex}:${set.set_number}`] ?? 'normal',
-        })),
-      })),
+      name: typeof currentSession.name === 'string' && currentSession.name.trim() ? currentSession.name : 'Workout',
+      duration_seconds: Number.isFinite(durationSeconds) ? Math.max(0, Math.floor(durationSeconds)) : 0,
+      user_goal: typeof user.objective === 'string' ? user.objective : null,
+      exercises,
     }
     try {
       const result = await requestWorkoutAdjustment(user.id, payload)

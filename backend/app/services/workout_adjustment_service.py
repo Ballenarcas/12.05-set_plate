@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
-from groq import AsyncGroq
+from groq import AsyncGroq, BadRequestError
 
 from app.core.config import get_settings
 
@@ -14,6 +14,28 @@ logger = logging.getLogger(__name__)
 
 _DEFICIT_RATIO = 0.8
 _SURPLUS_RATIO = 1.2
+
+
+def _is_gpt_oss(model: str) -> bool:
+    return "gpt-oss" in model.lower()
+
+
+def _parse_json(content: str | None) -> Any:
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    if not text:
+        raise ValueError("Groq returned an empty response")
+    return json.loads(text)
+
+
+def _is_retryable_json_error(error: Exception) -> bool:
+    if isinstance(error, BadRequestError):
+        return "json_validate_failed" in str(error)
+    return isinstance(error, ValueError)
 
 
 async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
@@ -27,33 +49,60 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
          "required": ["suggestions"], "additionalProperties": False}
         if is_array else schema
     )
+    instruction = (
+        "Use only supplied data. Reply with a single JSON value that matches this schema exactly, "
+        "with no markdown fences and no extra text: "
+        f"{json.dumps(response_schema)}"
+    )
+    structured = _is_gpt_oss(settings.groq_model)
+    request: dict[str, Any] = {
+        "model": settings.groq_model,
+        "temperature": 0.6 if structured else 0.2,
+        "messages": (
+            [{"role": "user", "content": f"{instruction}\n\nData:\n{prompt}"}]
+            if structured else [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": prompt},
+            ]
+        ),
+    }
+    if structured:
+        request["max_completion_tokens"] = 2048
+        request["reasoning_effort"] = "low"
+        request["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "workout_suggestions" if is_array else "workout_plan",
+                "strict": True,
+                "schema": response_schema,
+            },
+        }
+    else:
+        request["max_tokens"] = 2048
+        request["response_format"] = {"type": "json_object"}
+
     client = AsyncGroq(api_key=settings.groq_api_key)
     try:
-        response = await client.chat.completions.create(
-            model=settings.groq_model,
-            temperature=0.2,
-            max_tokens=1200,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": (
-                    "Use only supplied data. Return valid JSON matching this schema, with no additional claims: "
-                    f"{json.dumps(response_schema)}"
-                )},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        content = response.choices[0].message.content
-        value = json.loads(content or "")
-        if is_array:
-            value = value.get("suggestions") if isinstance(value, dict) else None
-            if not isinstance(value, list):
-                raise ValueError("Expected a suggestions array")
-        elif not isinstance(value, dict):
-            raise ValueError("Expected a JSON object")
-        return value
-    except Exception as err:
-        logger.exception("Groq workout adjustment request failed")
-        raise HTTPException(status_code=502, detail="Could not generate workout adjustment") from err
+        for attempt in range(2):
+            try:
+                response = await client.chat.completions.create(**request)
+                value = _parse_json(response.choices[0].message.content)
+                if is_array:
+                    if isinstance(value, list):
+                        return value
+                    value = value.get("suggestions") if isinstance(value, dict) else None
+                    if not isinstance(value, list):
+                        raise ValueError("Expected a suggestions array")
+                    return value
+                if not isinstance(value, dict):
+                    raise ValueError("Expected a JSON object")
+                return value
+            except Exception as err:
+                if attempt == 0 and _is_retryable_json_error(err):
+                    logger.warning("Groq returned invalid JSON; retrying once: %s", err)
+                    continue
+                logger.exception("Groq workout adjustment request failed")
+                raise HTTPException(status_code=502, detail="Could not generate workout adjustment") from err
     finally:
         await client.close()
 
@@ -278,7 +327,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
     schema = {
         "type": "object", "additionalProperties": False,
         "properties": {
-            "routine_id": {"type": ["string", "null"]},
+            "routine_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
             "workout_name": {"type": "string"},
             "rest_day": {"type": "boolean"},
             "adjusted": {"type": "boolean"}, "reasoning": {"type": "string"},
@@ -425,17 +474,19 @@ async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, Any
         "type": "array", "items": {"type": "object", "additionalProperties": False,
             "properties": {"action": {"type": "string", "enum": list(_SET_ACTIONS)},
                 "exercise_id": {"type": "string"}, "reason": {"type": "string"},
-                "new_weight_kg": {"type": ["number", "null"], "minimum": 0},
-                "new_reps": {"type": ["integer", "null"], "minimum": 1}},
-            "required": ["action", "exercise_id", "reason"]},
+                "new_weight_kg": {"anyOf": [{"type": "number", "minimum": 0}, {"type": "null"}]},
+                "new_reps": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]}},
+            "required": ["action", "exercise_id", "reason", "new_weight_kg", "new_reps"]},
     }
     workout_context = {key: workout.get(key) for key in ("name", "duration_seconds", "user_goal", "exercises")}
     result = await _request_json(json.dumps({
         "workout": workout_context,
         "instruction": "You are coaching a workout in progress. "
             "Suggest only specific, conservative changes to the sets that are not completed yet: "
-            "reduce_load with a new_weight_kg value, reduce_reps with a new_reps value, drop_set without values, "
-            "or stop_exercise without values on the affected exercise. "
+            "reduce_load with a new_weight_kg value and new_reps null, "
+            "reduce_reps with a new_reps value and new_weight_kg null, "
+            "drop_set with both new_weight_kg and new_reps null, "
+            "or stop_exercise with both new_weight_kg and new_reps null on the affected exercise. "
             "Warmup sets are preparation, not fatigue evidence. Weigh drop and failure sets by their RPE. "
             "Respect the routine targets and the user's goal when choosing values. "
             "Return an empty list when the current plan can be kept as is.",

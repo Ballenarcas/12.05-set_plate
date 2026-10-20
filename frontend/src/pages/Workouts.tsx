@@ -1,4 +1,4 @@
-import { ArrowRight, Dumbbell, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowRight, Dumbbell, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteRoutine, fetchRoutines } from '../services/api'
@@ -92,7 +92,7 @@ function Workouts() {
       <header className="workouts-page-header">
         <div><p className="eyebrow">Train with purpose</p><h1>Workouts</h1></div>
         <div className="workouts-header-actions">
-          <button className="secondary-action create-routine-action" type="button" onClick={() => navigate('/workouts/create')}><Sparkles size={16} /> Create Routine</button>
+          <button className="secondary-action create-routine-action" type="button" onClick={() => navigate('/workouts/create')}><Plus size={16} /> Create Routine</button>
           <button className="secondary-action" type="button" onClick={requestEmptyWorkout}><Plus size={16} /> Start empty workout</button>
         </div>
       </header>

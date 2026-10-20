@@ -104,10 +104,11 @@ function CreateRoutine() {
     }
   }, [debouncedSearch, selectedMuscleGroup, exercisePage, queryKey, exerciseRequestKey])
 
-  function addExercise(exercise: Exercise) {
+  function toggleExercise(exercise: Exercise) {
     setSelectedExercises((current) => current.some((item) =>
       item.exercise_id === exercise.id || normalizeExerciseName(item.name) === normalizeExerciseName(exercise.name))
-      ? current
+      ? current.filter((item) =>
+        item.exercise_id !== exercise.id && normalizeExerciseName(item.name) !== normalizeExerciseName(exercise.name))
       : [...current, {
         exercise_id: exercise.id,
         name: exercise.name,
@@ -255,12 +256,12 @@ function CreateRoutine() {
                   normalizeExerciseName(item.name) === normalizeExerciseName(exercise.name))
                 return (
                   <button
-                    className="routine-builder-result"
+                    className={`routine-builder-result${isSelected ? ' is-selected' : ''}`}
                     type="button"
                     key={exercise.id}
-                    onClick={() => addExercise(exercise)}
-                    disabled={isSelected}
-                    aria-label={`${isSelected ? 'Added' : 'Add'} ${exercise.name}`}
+                    onClick={() => toggleExercise(exercise)}
+                    aria-pressed={isSelected}
+                    aria-label={`${isSelected ? 'Remove' : 'Add'} ${exercise.name}`}
                   >
                     {exercise.images[0]
                       ? <img src={exercise.images[0]} alt="" />

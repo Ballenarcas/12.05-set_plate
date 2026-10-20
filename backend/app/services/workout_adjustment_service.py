@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -74,6 +75,87 @@ def _exercise_name(row: dict[str, Any]) -> str:
     return (exercise or {}).get("name") or row.get("name") or "Exercise"
 
 
+def _exercise_muscle_group(row: dict[str, Any]) -> str | None:
+    exercise = row.get("exercises")
+    if isinstance(exercise, list):
+        exercise = exercise[0] if exercise else {}
+    group = (exercise or {}).get("muscle_group")
+    return group.strip() if isinstance(group, str) and group.strip() else None
+
+
+def _load_exercise_catalog(db_session: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    page_size = 1000
+    start = 0
+    while True:
+        page = _data(
+            db_session.table("exercises").select("id,name,muscle_group,muscles,equipment")
+            .order("id").range(start, start + page_size - 1).execute()
+        )
+        rows.extend(page)
+        if len(page) < page_size:
+            break
+        start += page_size
+    return [
+        {**row, "exercise_id": str(row["id"])}
+        for row in rows
+        if row.get("id") and row.get("name")
+    ]
+
+
+def _sample_exercise_pool(
+    catalog: list[dict[str, Any]],
+    blocked_muscle_groups: set[str],
+    recent_exercise_ids: set[str],
+    seed: str,
+    limit: int = 80,
+) -> list[dict[str, Any]]:
+    by_group: dict[str, list[dict[str, Any]]] = {}
+    for row in catalog:
+        if (row.get("muscle_group") or "") in blocked_muscle_groups:
+            continue
+        if str(row.get("id")) in recent_exercise_ids:
+            continue
+        by_group.setdefault(row.get("muscle_group") or "Other", []).append(row)
+    generator = random.Random(seed)
+    for rows in by_group.values():
+        generator.shuffle(rows)
+    groups = sorted(by_group)
+    pool: list[dict[str, Any]] = []
+    while len(pool) < limit:
+        added = False
+        for group in groups:
+            if len(pool) >= limit:
+                break
+            if by_group[group]:
+                pool.append(by_group[group].pop())
+                added = True
+        if not added:
+            break
+    generator.shuffle(pool)
+    return pool
+
+
+def _save_rest_day(
+    db_session: Any, user_id: UUID, today: str, reasoning: str, adjusted: bool,
+) -> dict[str, Any]:
+    try:
+        saved = _data(db_session.table("workout_plans").upsert({
+            "user_id": str(user_id), "plan_date": today, "routine_id": None,
+            "title": "Rest day", "exercises": [], "is_rest_day": True,
+            "ai_adjusted": adjusted, "ai_reasoning": reasoning,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }, on_conflict="user_id,plan_date").select("id").execute())
+        if not saved:
+            raise RuntimeError("Supabase did not return the workout plan ID")
+        plan_id = saved[0]["id"]
+    except Exception as err:
+        logger.exception("Could not save daily workout plan")
+        raise HTTPException(status_code=502, detail="Could not save daily workout plan") from err
+    return {"plan_id": plan_id, "ai_adjusted": adjusted,
+            "reasoning": reasoning, "rest_day": True, "sets_created": True}
+
+
 async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
     """Build today's training plan and store it as a document, apart from completed workouts."""
     start, end = _today_window()
@@ -92,6 +174,28 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
             db_session.table("workouts").select("id,end_time").eq("user_id", str(user_id))
             .gte("start_time", start.isoformat()).lt("start_time", end.isoformat()).execute()
         )
+        recent_exercise_ids: set[str] = set()
+        recent_muscle_groups: set[str] = set()
+        recent_workouts = _data(
+            db_session.table("workouts").select("id").eq("user_id", str(user_id))
+            .gte("start_time", (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()).execute()
+        )
+        if recent_workouts:
+            recent_sets = _data(
+                db_session.table("workout_sets").select("exercise_id")
+                .in_("workout_id", [str(row["id"]) for row in recent_workouts]).execute()
+            )
+            recent_exercise_ids = {
+                str(row["exercise_id"]) for row in recent_sets if row.get("exercise_id")
+            }
+        if recent_exercise_ids:
+            recent_rows = _data(
+                db_session.table("exercises").select("id,muscle_group")
+                .in_("id", sorted(recent_exercise_ids)).execute()
+            )
+            recent_muscle_groups = {
+                row["muscle_group"] for row in recent_rows if row.get("muscle_group")
+            }
         routines = _data(
             db_session.table("routines").select("id,name").eq("user_id", str(user_id)).execute()
         )
@@ -115,33 +219,46 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
                 "sets_created": False}
 
     available_routines: list[dict[str, Any]] = []
-    available_exercises: list[dict[str, Any]] = []
     if routines:
         routine_ids = [str(row["id"]) for row in routines]
         routine_rows = _data(
             db_session.table("routine_exercises")
-            .select("routine_id,exercise_id,target_sets,target_reps,set_order,exercises(name)")
+            .select("routine_id,exercise_id,target_sets,target_reps,set_order,exercises(name,muscle_group)")
             .in_("routine_id", routine_ids).order("set_order").execute()
         )
         exercises_by_routine: dict[str, list[dict[str, Any]]] = {routine_id: [] for routine_id in routine_ids}
         for exercise in routine_rows:
             exercises_by_routine.setdefault(str(exercise["routine_id"]), []).append(exercise)
         available_routines = [
-            {**routine, "exercises": exercises_by_routine.get(str(routine["id"]), [])}
+            {
+                **routine,
+                "exercises": exercises_by_routine.get(str(routine["id"]), []),
+                "muscle_groups": sorted({
+                    group for exercise in exercises_by_routine.get(str(routine["id"]), [])
+                    if (group := _exercise_muscle_group(exercise))
+                }),
+            }
             for routine in routines if exercises_by_routine.get(str(routine["id"]))
         ]
-    if not available_routines:
-        available_exercises = _data(
-            db_session.table("exercises").select("id,name,muscle_group,muscles,equipment").limit(200).execute()
+    safe_routines = [
+        routine for routine in available_routines
+        if not (set(routine["muscle_groups"]) & recent_muscle_groups)
+    ]
+    available_exercises: list[dict[str, Any]] = []
+    if not safe_routines:
+        catalog = _load_exercise_catalog(db_session)
+        available_exercises = _sample_exercise_pool(
+            catalog, recent_muscle_groups, recent_exercise_ids, seed=f"{user_id}:{today}",
         )
-        available_exercises = [
-            {**exercise, "exercise_id": str(exercise["id"])}
-            for exercise in available_exercises
-            if exercise.get("id") and exercise.get("name")
-        ]
         if not available_exercises:
-            return {"plan_id": None, "ai_adjusted": False, "reasoning": None, "rest_day": False,
-                    "sets_created": False}
+            if not catalog:
+                return {"plan_id": None, "ai_adjusted": False, "reasoning": None, "rest_day": False,
+                        "sets_created": False}
+            return _save_rest_day(
+                db_session, user_id, today,
+                "Every muscle group was trained in the last 48 hours. Today is a rest day.",
+                adjusted=True,
+            )
     totals = {
         key: sum(float(meal.get(field) or 0) for meal in meals)
         for key, field in (("calories", "calories"), ("protein", "proteins"), ("carbs", "carbs"), ("fat", "fats"))
@@ -169,16 +286,17 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
                 "required": ["exercise_id", "sets", "reps"]}},
         }, "required": ["routine_id", "workout_name", "rest_day", "adjusted", "reasoning", "exercises"],
     }
-    if available_routines:
+    if safe_routines:
         plan_instruction = "Choose one supplied routine and return its id. Return every exercise in that routine, preserving exercise_id. Adjust set and rep counts based on the nutrition context."
-        routine_context = available_routines
+        routine_context = safe_routines
     else:
-        plan_instruction = "Build a complete workout from the supplied exercise catalog only. Select a balanced group of exercises for one training session and choose practical sets and reps for each. Return routine_id as null and provide a concise workout_name. Do not invent exercise IDs or names."
+        plan_instruction = "Build a complete workout from the supplied exercise pool only. The pool already excludes every muscle group trained in the last 48 hours. Select a balanced group of exercises and choose practical sets and reps for each. Return routine_id as null and provide a concise workout_name. Do not invent exercise IDs or names."
         routine_context = []
 
     result = await _request_json(json.dumps({
         "user_targets": {key: user.get(key) for key in ("calorie_goal", "protein_goal", "carbs_goal", "fat_goal") if user.get(key) is not None},
         "last_48_hours_intake": totals, "calorie_status": calorie_status,
+        "recent_muscle_groups": sorted(recent_muscle_groups),
         "available_routines": routine_context,
         "available_exercises": available_exercises if not routine_context else [],
         "instruction": plan_instruction + " Set adjusted true if you changed a saved routine or created a new workout; otherwise use false."
@@ -195,25 +313,13 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="Groq returned an invalid workout plan")
 
     if result["rest_day"]:
-        try:
-            saved = _data(db_session.table("workout_plans").upsert({
-                "user_id": str(user_id), "plan_date": today, "routine_id": None,
-                "title": "Rest day", "exercises": [], "is_rest_day": True,
-                "ai_adjusted": bool(result["adjusted"]), "ai_reasoning": result["reasoning"],
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }, on_conflict="user_id,plan_date").select("id").execute())
-            if not saved:
-                raise RuntimeError("Supabase did not return the workout plan ID")
-            plan_id = saved[0]["id"]
-        except Exception as err:
-            logger.exception("Could not save daily workout plan")
-            raise HTTPException(status_code=502, detail="Could not save daily workout plan") from err
-        return {"plan_id": plan_id, "ai_adjusted": result["adjusted"],
-                "reasoning": result["reasoning"], "rest_day": True, "sets_created": True}
+        return _save_rest_day(
+            db_session, user_id, today, result["reasoning"], bool(result["adjusted"]),
+        )
 
     selected_routine_id = str(result["routine_id"]) if result.get("routine_id") else None
-    if available_routines:
-        selected_routine = next((row for row in available_routines if str(row["id"]) == selected_routine_id), None)
+    if safe_routines:
+        selected_routine = next((row for row in safe_routines if str(row["id"]) == selected_routine_id), None)
         if selected_routine is None:
             raise HTTPException(status_code=502, detail="Groq selected an unavailable routine")
         routine_exercises = selected_routine["exercises"]

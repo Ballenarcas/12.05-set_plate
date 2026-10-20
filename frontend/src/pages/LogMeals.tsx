@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronLeft,
@@ -18,6 +18,7 @@ import {
   deleteMealLog,
   fetchCalorieAdjustment,
   fetchTodayNutrition,
+  getCachedTodayNutrition,
   getCurrentUser,
   searchFoodItems,
   type CalorieAdjustmentData,
@@ -41,7 +42,7 @@ type PlateFood = {
 type MealDelta = { calories: number; protein: number; carbs: number; fat: number }
 
 function applyMealDelta(prev: TodayNutritionData, delta: MealDelta, sign: 1 | -1): TodayNutritionData {
-  const targetGoal = prev.adjusted_daily_goal > 0 ? prev.adjusted_daily_goal : prev.daily_goal
+  const targetGoal = prev.daily_goal
   const consumed = Math.max(0, prev.consumed_calories + sign * (delta.calories || 0))
   const consumedProteins = Math.max(0, Math.round(((prev.proteins_g || 0) + sign * (delta.protein || 0)) * 10) / 10)
   const consumedCarbs = Math.max(0, Math.round(((prev.carbs_g || 0) + sign * (delta.carbs || 0)) * 10) / 10)
@@ -74,9 +75,11 @@ export function LogMeals() {
     }
   }, [currentUser, navigate])
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [nutritionData, setNutritionData] = useState<TodayNutritionData | null>(null)
-  const [mealList, setMealList] = useState<MealLogItem[]>([])
+  const [initialNutrition] = useState(() => getCachedTodayNutrition(currentUser?.id ?? ''))
+  const hadCachedNutrition = useRef(Boolean(initialNutrition))
+  const [isLoading, setIsLoading] = useState(!initialNutrition)
+  const [nutritionData, setNutritionData] = useState<TodayNutritionData | null>(initialNutrition)
+  const [mealList, setMealList] = useState<MealLogItem[]>(initialNutrition?.meals ?? [])
   const [adjustment, setAdjustment] = useState<CalorieAdjustmentData | null>(null)
   const [adjustmentError, setAdjustmentError] = useState<string | null>(null)
   const [isDeciding, setIsDeciding] = useState(false)
@@ -123,7 +126,7 @@ export function LogMeals() {
         setErrorMessage(null)
       })
       .catch((err: Error) => {
-        if (!isMounted) return
+        if (!isMounted || hadCachedNutrition.current) return
         setErrorMessage(describeError(err, "We couldn't load today's meals. Please try again."))
       })
       .finally(() => {
@@ -410,16 +413,17 @@ export function LogMeals() {
   )
 
   const consumedCaloriesText = nutritionData ? nutritionData.consumed_calories.toLocaleString() : '-'
-  const targetGoal = nutritionData
-    ? (nutritionData.adjusted_daily_goal > 0 ? nutritionData.adjusted_daily_goal : nutritionData.daily_goal)
-    : 0
+  const targetGoal = nutritionData ? nutritionData.daily_goal : 0
   const dailyGoalText = nutritionData ? targetGoal.toLocaleString() : '-'
   const remainingCaloriesText = nutritionData ? Math.max(0, targetGoal - nutritionData.consumed_calories).toLocaleString() : '-'
   const carbsText = nutritionData && nutritionData.remaining_carbs_g !== undefined ? `${nutritionData.remaining_carbs_g}g` : '-'
   const proteinsText = nutritionData && nutritionData.remaining_proteins_g !== undefined ? `${nutritionData.remaining_proteins_g}g` : '-'
   const fatsText = nutritionData && nutritionData.remaining_fats_g !== undefined ? `${nutritionData.remaining_fats_g}g` : '-'
-  const workoutAdjustmentText = nutritionData && nutritionData.workout_adjustment_calories > 0
-    ? `+${nutritionData.workout_adjustment_calories} kcal est. from today's training`
+  const appliedAdjustment = adjustment && adjustment.status === 'accepted' && adjustment.has_change
+    ? adjustment.proposed_goal - adjustment.previous_goal
+    : 0
+  const adjustmentNote = appliedAdjustment !== 0
+    ? `AI adjusted your goal by ${appliedAdjustment > 0 ? '+' : ''}${appliedAdjustment.toLocaleString()} kcal`
     : null
   const progressPercent = nutritionData ? Math.min(Math.max(nutritionData.calories_progress_percentage, 0), 100) : 0
 
@@ -469,16 +473,14 @@ export function LogMeals() {
             </button>
           </div>
 
-          <div className="summary-metrics-row">
-            <span className="main-calorie-metric">
-              {consumedCaloriesText} / {dailyGoalText} kcal
-            </span>
-            <span className="summary-remaining">LEFT TODAY: {remainingCaloriesText} kcal</span>
-            {workoutAdjustmentText && (
-              <span className="summary-workout-note" title="Estimated burn (MET 5.0), not an exact value.">
-                {workoutAdjustmentText}
+          <div className="summary-metrics-block">
+            <div className="summary-metrics-row">
+              <span className="main-calorie-metric">
+                {consumedCaloriesText} / {dailyGoalText} kcal
               </span>
-            )}
+              <span className="summary-remaining">{remainingCaloriesText} kcal left</span>
+            </div>
+            {adjustmentNote && <p className="summary-ai-note">{adjustmentNote}</p>}
           </div>
 
           <div
@@ -496,9 +498,18 @@ export function LogMeals() {
           </div>
 
           <div className="macros-row">
-            <div className="macro-pill">Carbs left: {carbsText}</div>
-            <div className="macro-pill">Proteins left: {proteinsText}</div>
-            <div className="macro-pill">Fats left: {fatsText}</div>
+            <div className="macro-pill">
+              <span className="macro-pill-label">Carbs left</span>
+              <span className="macro-pill-value">{carbsText}</span>
+            </div>
+            <div className="macro-pill">
+              <span className="macro-pill-label">Protein left</span>
+              <span className="macro-pill-value">{proteinsText}</span>
+            </div>
+            <div className="macro-pill">
+              <span className="macro-pill-label">Fat left</span>
+              <span className="macro-pill-value">{fatsText}</span>
+            </div>
           </div>
         </section>
 
@@ -826,11 +837,13 @@ export function LogMeals() {
                     </p>
                   )}
                   <p className="tip-message">{adjustment.reason}</p>
-                  <p className="tip-reasoning">
-                    <strong>Why:</strong> last 7 days, {Math.round(adjustment.compliance_rate * 100)}% of days
-                    on target, averaging {adjustment.avg_daily_intake} kcal, weekly training volume{' '}
-                    {adjustment.weekly_volume} kg.
-                  </p>
+                  {(adjustment.status === 'pending' || adjustment.status === 'advice') && (
+                    <p className="tip-reasoning">
+                      <strong>Why:</strong> last 7 days, {Math.round(adjustment.compliance_rate * 100)}% of days
+                      on target, averaging {adjustment.avg_daily_intake} kcal, weekly training volume{' '}
+                      {adjustment.weekly_volume} kg.
+                    </p>
+                  )}
                 </>
               )}
             </div>

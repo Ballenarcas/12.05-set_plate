@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app.schemas.nutrition import DailyNutritionResponse, FoodSearchItem, MealCreateRequest, MealItem
-from app.services import nutrition_service, workout_service
+from app.services import nutrition_service
 
 
 def _resolve_window(today_start: datetime | None, today_end: datetime | None) -> tuple[datetime, datetime]:
@@ -21,8 +21,7 @@ class NutritionFacade:
         today_end: datetime | None = None,
     ) -> DailyNutritionResponse:
         start, end = _resolve_window(today_start, today_end)
-        worked_seconds = workout_service.summarize_today_workouts(user_id, start, end)
-        return nutrition_service.get_user_nutrition_today(user_id, start, end, worked_seconds=worked_seconds)
+        return nutrition_service.get_user_nutrition_today(user_id, start, end)
 
     def create_meal(self, payload: MealCreateRequest) -> MealItem:
         return nutrition_service.create_user_meal(payload)

@@ -8,6 +8,10 @@ const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
+const nutritionRequests = new Map<string, Promise<TodayNutritionData>>()
+const adjustmentRequests = new Map<string, Promise<CalorieAdjustmentData>>()
+const NUTRITION_CACHE_PREFIX = 'set_plate_nutrition:'
+const NUTRITION_CACHE_TTL_MS = 60_000
 import type { Routine, WorkoutHistoryEntry } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 
@@ -491,8 +495,6 @@ export interface MealLogItem {
 export interface TodayNutritionData {
   consumed_calories: number
   daily_goal: number
-  workout_adjustment_calories: number
-  adjusted_daily_goal: number
   calories_progress_percentage: number
   remaining_calories: number
   target_proteins_g: number
@@ -515,15 +517,54 @@ export function localDayWindow(): { today_start: string; today_end: string } {
   return { today_start: start.toISOString(), today_end: end.toISOString() }
 }
 
+function nutritionCacheKey(userId: string, windowStart: string): string {
+  return `${NUTRITION_CACHE_PREFIX}${userId}:${windowStart}`
+}
+
+export function getCachedTodayNutrition(userId: string): TodayNutritionData | null {
+  if (!userId) return null
+  try {
+    const window = localDayWindow()
+    const saved = sessionStorage.getItem(nutritionCacheKey(userId, window.today_start))
+    if (!saved) return null
+    const cached = JSON.parse(saved) as { data: TodayNutritionData; at: number }
+    if (!cached?.data || typeof cached.at !== 'number') return null
+    if (Date.now() - cached.at > NUTRITION_CACHE_TTL_MS) return null
+    return cached.data
+  } catch {
+    return null
+  }
+}
+
 export async function fetchTodayNutrition(userId: string): Promise<TodayNutritionData> {
   const window = localDayWindow()
-  const response = await fetch(
+  const requestKey = `${userId}:${window.today_start}`
+  const existing = nutritionRequests.get(requestKey)
+  if (existing) return existing
+
+  const request = fetch(
     `${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}&today_start=${encodeURIComponent(window.today_start)}&today_end=${encodeURIComponent(window.today_end)}`,
+    { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
   )
-  if (!response.ok) {
-    throw new Error("We couldn't load today's nutrition. Please try again.")
-  }
-  return response.json()
+    .then((response) => {
+      if (!response.ok) throw new Error("We couldn't load today's nutrition. Please try again.")
+      return response.json() as Promise<TodayNutritionData>
+    })
+    .then((data) => {
+      try {
+        sessionStorage.setItem(
+          nutritionCacheKey(userId, window.today_start),
+          JSON.stringify({ data, at: Date.now() }),
+        )
+      } catch {
+        // The fresh response remains usable when browser storage is unavailable.
+      }
+      return data
+    })
+    .finally(() => nutritionRequests.delete(requestKey))
+
+  nutritionRequests.set(requestKey, request)
+  return request
 }
 
 export interface CalorieAdjustmentData {
@@ -540,13 +581,21 @@ export interface CalorieAdjustmentData {
 }
 
 export async function fetchCalorieAdjustment(userId: string): Promise<CalorieAdjustmentData> {
-  const response = await fetch(
+  const existing = adjustmentRequests.get(userId)
+  if (existing) return existing
+
+  const request = fetch(
     `${API_URL}/api/v1/ai/calorie-adjustment?user_id=${encodeURIComponent(userId)}`,
+    { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
   )
-  if (!response.ok) {
-    throw new Error("We couldn't check your progress right now. Please try again.")
-  }
-  return response.json()
+    .then((response) => {
+      if (!response.ok) throw new Error("We couldn't check your progress right now. Please try again.")
+      return response.json() as Promise<CalorieAdjustmentData>
+    })
+    .finally(() => adjustmentRequests.delete(userId))
+
+  adjustmentRequests.set(userId, request)
+  return request
 }
 
 export async function decideCalorieAdjustment(

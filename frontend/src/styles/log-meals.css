@@ -191,31 +191,53 @@
   background: rgba(74, 222, 128, 0.2);
 }
 
+.summary-metrics-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
 .summary-metrics-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .main-calorie-metric {
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   font-weight: 800;
   color: #ffffff;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .summary-remaining {
-  font-size: 0.8rem;
-  font-weight: 800;
+  font-size: 0.75rem;
+  font-weight: 700;
   color: #4ade80;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.summary-workout-note {
-  flex-basis: 100%;
-  color: #a0a0a0;
-  font-size: 0.68rem;
+.summary-ai-note {
+  margin: 0;
+  color: #4ade80;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+@media (max-width: 340px) {
+  .main-calorie-metric {
+    font-size: 1.08rem;
+  }
+
+  .summary-remaining {
+    font-size: 0.7rem;
+  }
 }
 
 .active-calorie-metric {
@@ -258,17 +280,30 @@
 }
 
 .macro-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  min-width: 0;
   background: #252525;
   border: 1px solid #333333;
   border-radius: 10px;
-  padding: 0.5rem 0.4rem;
+  padding: 0.5rem 0.3rem;
   text-align: center;
-  font-size: 0.8rem;
+}
+
+.macro-pill-label {
+  font-size: 0.68rem;
   font-weight: 600;
-  color: #d4d4d4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #a0a0a0;
+}
+
+.macro-pill-value {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #e5e5e5;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 4. NEW REGISTER CARD */

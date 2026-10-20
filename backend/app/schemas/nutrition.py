@@ -46,9 +46,6 @@ class MealCreateRequest(BaseModel):
 class DailyNutritionResponse(BaseModel):
     consumed_calories: int
     daily_goal: int
-    # Workout adjustment is an estimate (MET 5.0 over session duration), never exact burn.
-    workout_adjustment_calories: int = 0
-    adjusted_daily_goal: int = 0
     calories_progress_percentage: int
     remaining_calories: int = 0
     target_proteins_g: float = 0.0

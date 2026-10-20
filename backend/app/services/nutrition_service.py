@@ -1,9 +1,11 @@
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import logging
+from typing import Any
 
 import httpx
-from app.services.nutrition_math import compute_macro_targets, estimate_burned_kcal
+from app.services.nutrition_math import compute_macro_targets
 from app.services.user_profile_service import calculate_calorie_goal
 from app.db.supabase_client import get_supabase
 from app.schemas.nutrition import (
@@ -45,31 +47,8 @@ def _utc_day_start(now: datetime | None = None) -> datetime:
     )
 
 
-def get_user_nutrition_today(
-    user_id: str,
-    today_start: datetime | None = None,
-    today_end: datetime | None = None,
-    worked_seconds: int = 0,
-) -> DailyNutritionResponse:
-    supabase = get_supabase(admin=True)
-    window_start = today_start or _utc_day_start()
-    window_end = today_end or (window_start + timedelta(days=1))
-    user_weight_kg: float | None = None
-    daily_goal = 2200
-
-    if not supabase:
-        return DailyNutritionResponse(
-            consumed_calories=0,
-            daily_goal=daily_goal,
-            adjusted_daily_goal=daily_goal,
-            calories_progress_percentage=0,
-            carbs_g=0.0,
-            proteins_g=0.0,
-            fats_g=0.0,
-            meals=[],
-        )
-
-    # 1. Fetch user to retrieve calorie_goal from database (with BMR formula fallback)
+def _load_user_target(supabase: Any, user_id: str) -> tuple[int | None, float | None]:
+    """Read the saved goal and weight. Returns (None, None) when it cannot be read."""
     try:
         user_res = (
             supabase.table("users")
@@ -78,29 +57,39 @@ def get_user_nutrition_today(
             .single()
             .execute()
         )
-        if user_res.data:
-            u = user_res.data
+        if not user_res.data:
+            return None, None
+        u = user_res.data
+        try:
+            weight = float(u.get("weight")) if u.get("weight") is not None else None
+        except (ValueError, TypeError):
+            weight = None
+        if u.get("calorie_goal"):
             try:
-                user_weight_kg = float(u.get("weight")) if u.get("weight") is not None else None
+                return int(float(u["calorie_goal"])), weight
             except (ValueError, TypeError):
-                user_weight_kg = None
-            if u.get("calorie_goal"):
-                try:
-                    daily_goal = int(float(u["calorie_goal"]))
-                except (ValueError, TypeError):
-                    daily_goal = 2200
-            else:
-                daily_goal = calculate_calorie_goal(
-                    weight=u.get("weight"),
-                    height=u.get("height"),
-                    age=u.get("age"),
-                    gender=u.get("gender"),
-                    objective=u.get("objective"),
-                )
+                return 2200, weight
+        return (
+            calculate_calorie_goal(
+                weight=u.get("weight"),
+                height=u.get("height"),
+                age=u.get("age"),
+                gender=u.get("gender"),
+                objective=u.get("objective"),
+            ),
+            weight,
+        )
     except Exception as err:
         logger.warning(f"Could not retrieve user calorie_goal: {err}")
+        return None, None
 
-    # 2. Fetch meals for user
+
+def _load_today_meals(
+    supabase: Any,
+    user_id: str,
+    window_start: datetime,
+    window_end: datetime,
+) -> tuple[list[MealItem], int, float, float, float]:
     meals_data: list[MealItem] = []
     total_calories = 0
     total_carbs = 0.0
@@ -110,16 +99,14 @@ def get_user_nutrition_today(
     try:
         meals_res = (
             supabase.table("meals")
-            .select("*")
+            .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at")
             .eq("user_id", user_id)
             .gte("consumed_at", window_start.isoformat())
             .lt("consumed_at", window_end.isoformat())
             .order("consumed_at", desc=True)
             .execute()
         )
-        raw_meals = meals_res.data or []
-
-        for row in raw_meals:
+        for row in meals_res.data or []:
             cals = int(row.get("calories") or 0)
             proteins = float(row.get("proteins") or 0.0)
             carbs = float(row.get("carbs") or 0.0)
@@ -149,17 +136,52 @@ def get_user_nutrition_today(
     except Exception as err:
         logger.error(f"Error fetching meals from Supabase: {err}")
 
-    workout_adjustment = estimate_burned_kcal(user_weight_kg, worked_seconds)
-    adjusted_goal = max(0, daily_goal + workout_adjustment)
-    target_protein_g, target_fat_g, target_carbs_g = compute_macro_targets(adjusted_goal, user_weight_kg)
-    remaining_calories = max(0, adjusted_goal - total_calories)
-    progress = round((total_calories / adjusted_goal) * 100) if adjusted_goal > 0 else 0
+    return meals_data, total_calories, total_proteins, total_carbs, total_fats
+
+
+def get_user_nutrition_today(
+    user_id: str,
+    today_start: datetime | None = None,
+    today_end: datetime | None = None,
+) -> DailyNutritionResponse:
+    supabase = get_supabase(admin=True)
+    window_start = today_start or _utc_day_start()
+    window_end = today_end or (window_start + timedelta(days=1))
+    daily_goal = 2200
+    user_weight_kg: float | None = None
+    meals_data: list[MealItem] = []
+    total_calories = 0
+    total_proteins = 0.0
+    total_carbs = 0.0
+    total_fats = 0.0
+
+    if not supabase:
+        return DailyNutritionResponse(
+            consumed_calories=0,
+            daily_goal=daily_goal,
+            calories_progress_percentage=0,
+            carbs_g=0.0,
+            proteins_g=0.0,
+            fats_g=0.0,
+            meals=[],
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        user_future = executor.submit(_load_user_target, supabase, user_id)
+        meals_future = executor.submit(_load_today_meals, supabase, user_id, window_start, window_end)
+        loaded_goal, user_weight_kg = user_future.result()
+        meals_data, total_calories, total_proteins, total_carbs, total_fats = meals_future.result()
+
+    if loaded_goal is not None:
+        daily_goal = loaded_goal
+
+    target_protein_g, target_fat_g, target_carbs_g = compute_macro_targets(daily_goal, user_weight_kg)
+    remaining_calories = max(0, daily_goal - total_calories)
+    progress = round((total_calories / daily_goal) * 100) if daily_goal > 0 else 0
 
     return DailyNutritionResponse(
         consumed_calories=total_calories,
         daily_goal=daily_goal,
-        workout_adjustment_calories=workout_adjustment,
-        adjusted_daily_goal=adjusted_goal,
         calories_progress_percentage=min(100, max(0, progress)),
         remaining_calories=remaining_calories,
         target_proteins_g=target_protein_g,

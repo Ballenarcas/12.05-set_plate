@@ -296,6 +296,7 @@ def get_adjustment(
 ) -> dict[str, Any]:
     """Return the current proposal. A decided one is not recomputed until the cooldown ends."""
     session = db_session or get_supabase(admin=True)
+    latest = None
     try:
         latest = _latest_rows(session, user_id)
     except Exception as err:
@@ -303,11 +304,14 @@ def get_adjustment(
             raise _missing_table_error(err) from err
         raise
 
-    metrics = collect_metrics(session, user_id, today)
     if latest:
         row = latest[0]
-        if row.get("status") == "pending" or _is_within_cooldown(row.get("created_at"), _utc_now()):
-            return _response(row, metrics)
+        if row.get("status") == "pending":
+            return _response(row, collect_metrics(session, user_id, today))
+        if _is_within_cooldown(row.get("created_at"), _utc_now()):
+            return _response(row)
+
+    metrics = collect_metrics(session, user_id, today)
 
     proposal = propose_adjustment(metrics)
     if not proposal["has_change"]:

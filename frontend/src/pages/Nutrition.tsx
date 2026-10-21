@@ -7,7 +7,8 @@ import type { MealLogItem } from '../services/api';
 export default function Nutrition() {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [meals, setMeals] = useState<MealLogItem[]>([]);
+  const [allMeals, setAllMeals] = useState<MealLogItem[]>([]);
+  const [displayedMeals, setDisplayedMeals] = useState<MealLogItem[]>([]);
   const [dateError, setDateError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -18,19 +19,42 @@ export default function Nutrition() {
   // État pour la suppression
   const [deletingMeal, setDeletingMeal] = useState<MealLogItem | null>(null);
 
-  // Charger les VRAIES données de l'utilisateur
+  // Charger tous les repas de l'utilisateur au montage de la page
   useEffect(() => {
     const user = getCurrentUser();
     if (!user?.id) return;
 
     setIsLoading(true);
+
     fetchTodayNutrition(user.id)
       .then(data => {
-        setMeals(data.meals || []);
+        const mealsList = data.meals || [];
+        setAllMeals(mealsList);
       })
-      .catch(error => console.error("Erreur de chargement des repas:", error))
+      .catch(error => {
+        console.error("Erreur de chargement des repas:", error);
+        setAllMeals([]);
+      })
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Filtrer les repas chaque fois que la date sélectionnée ou la liste complète change
+  useEffect(() => {
+    if (allMeals.length === 0) {
+      setDisplayedMeals([]);
+      return;
+    }
+
+    const selectedString = selectedDate.toDateString();
+    
+    const filtered = allMeals.filter(meal => {
+      if (!meal.consumed_at) return true; // Si pas de date, on affiche par défaut
+      const mealDate = new Date(meal.consumed_at);
+      return mealDate.toDateString() === selectedString;
+    });
+
+    setDisplayedMeals(filtered);
+  }, [selectedDate, allMeals]);
 
   // Vérification de la limite de 7 jours
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,7 +104,7 @@ export default function Nutrition() {
     
     const ratio = Number(editQuantity) / (Number(editingMeal.weight_g) || 1);
     
-    const updatedMeals = meals.map(m => {
+    const updateList = (list: MealLogItem[]) => list.map(m => {
       if (m.id === editingMeal.id) {
         return {
           ...m,
@@ -94,20 +118,15 @@ export default function Nutrition() {
       return m;
     });
 
-    setMeals(updatedMeals);
+    setAllMeals(updateList(allMeals));
     setEditingMeal(null);
   };
 
-  // Nouvelle fonction pour confirmer la suppression
   const confirmDelete = () => {
     if (!deletingMeal) return;
     
-    // Supprime l'élément du tableau localement
-    const updatedMeals = meals.filter(m => m.id !== deletingMeal.id);
-    setMeals(updatedMeals);
+    setAllMeals(allMeals.filter(m => m.id !== deletingMeal.id));
     setDeletingMeal(null);
-    
-    // Plus tard, tu devras rajouter ici l'appel à ton API : deleteMealLog(deletingMeal.id)
   };
 
   return (
@@ -152,10 +171,10 @@ export default function Nutrition() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {isLoading ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>Loading your meals...</div>
-        ) : meals.length === 0 ? (
+        ) : displayedMeals.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>No meals recorded for this day.</div>
         ) : (
-          meals.map((meal) => (
+          displayedMeals.map((meal) => (
             <div key={meal.id} style={{ backgroundColor: '#1c1c1e', borderRadius: '20px', padding: '20px', position: 'relative', border: '1px solid rgba(255,255,255,0.03)' }}>
               
               {/* Card Header */}
@@ -173,7 +192,6 @@ export default function Nutrition() {
                   <button onClick={() => openEditModal(meal)} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex' }} aria-label="Edit meal">
                     <MoreHorizontal size={20} strokeWidth={2.5} />
                   </button>
-                  {/* BOUTON SUPPRIMER */}
                   <button onClick={() => setDeletingMeal(meal)} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', padding: 0, display: 'flex' }} aria-label="Delete meal">
                     <Trash2 size={18} strokeWidth={2} />
                   </button>
@@ -264,7 +282,7 @@ export default function Nutrition() {
             backgroundColor: '#1c1c1e', padding: '24px', borderRadius: '24px', width: '90%', maxWidth: '340px',
             boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)'
           }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>Delete Meal?</h3>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '17,px', fontWeight: 700, color: '#ffffff' }}>Delete Meal?</h3>
             <p style={{ margin: 0, color: '#d1d1d6', fontSize: '14px', lineHeight: '1.5' }}>
               Are you sure you want to remove <strong style={{color: '#fff'}}>{deletingMeal.meal_name}</strong> from this day? This cannot be undone.
             </p>

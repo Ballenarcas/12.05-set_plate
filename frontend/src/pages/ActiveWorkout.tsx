@@ -16,6 +16,9 @@ import type {
 } from '../types/workout'
 import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 
+// IMPORT AJOUTÉ ICI POUR LA MODALE :
+import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
+
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
 const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
@@ -203,6 +206,11 @@ function ActiveWorkout() {
   const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
   const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
   const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
+
+  // Modale SelectExerciseModal
+  const [isSelectModalOpen, setIsSelectModalOpen] = useState(false)
+  const [replaceIndex, setReplaceIndex] = useState<number | null>(null)
+
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
   const removeSetTimer = useRef<number | null>(null)
   const removeSetAnimationTimer = useRef<number | null>(null)
@@ -299,6 +307,32 @@ function ActiveWorkout() {
   ), 0) ?? 0
 
   if (!session) return <div className="screen state-card" role="alert">No active workout selected.</div>
+
+  function handleSelectExercise(selected: any) {
+    const replacement = {
+      exercise_id: selected.id,
+      name: selected.name,
+      images: selected.images || [],
+      previous_weight_kg: null,
+      previous_reps: null,
+    }
+
+    setSession((current) => {
+      if (!current) return current
+      if (replaceIndex !== null && current.exercises[replaceIndex]) {
+        return {
+          ...current,
+          exercises: current.exercises.map((ex, idx) => idx === replaceIndex ? { ...ex, ...replacement } : ex),
+        }
+      }
+      return {
+        ...current,
+        exercises: [...current.exercises, { ...replacement, sets: [createSet(1)] }],
+      }
+    })
+    setIsSelectModalOpen(false)
+    setReplaceIndex(null)
+  }
 
   function updateExercise(exerciseIndex: number, update: Partial<ActiveExercise>) {
     setSession((current) => current ? ({
@@ -397,7 +431,8 @@ function ActiveWorkout() {
 
   function replaceExercise(exerciseIndex: number) {
     setMenuOpen(null)
-    navigate('/workouts/active/exercises', { state: { replaceExerciseIndex: exerciseIndex } })
+    setReplaceIndex(exerciseIndex)
+    setIsSelectModalOpen(true)
   }
 
   function moveExercise(exerciseIndex: number, direction: -1 | 1) {
@@ -740,7 +775,16 @@ function ActiveWorkout() {
       </div>
 
       <section className="add-exercise-section">
-        <button className="secondary-action add-exercise-button" type="button" onClick={() => navigate('/workouts/active/exercises')}><Plus size={17} /> Add Exercise</button>
+        <button 
+          className="secondary-action add-exercise-button" 
+          type="button" 
+          onClick={() => {
+            setReplaceIndex(null)
+            setIsSelectModalOpen(true)
+          }}
+        >
+          <Plus size={17} /> Add Exercise
+        </button>
       </section>
 
       {showAiAdjustment && (
@@ -813,8 +857,22 @@ function ActiveWorkout() {
           </div>
         </div>
       )}
+
+      {/* Pop-up de sélection d'exercice */}
+      <SelectExerciseModal
+        isOpen={isSelectModalOpen}
+        onClose={() => {
+          setIsSelectModalOpen(false)
+          setReplaceIndex(null)
+        }}
+        onSelectExercise={handleSelectExercise}
+        onCreateCustom={() => {
+          setIsSelectModalOpen(false)
+          navigate('/exercises/custom')
+        }}
+      />
     </div>
   )
 }
 
-export default ActiveWorkout
+export default ActiveWorkout;

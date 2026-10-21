@@ -115,7 +115,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search for replacement..."
+            placeholder="Search exercises..."
             autoFocus
             style={{
               width: '100%',

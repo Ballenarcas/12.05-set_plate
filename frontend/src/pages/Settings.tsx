@@ -1,360 +1,271 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Loader2, LogOut, Save, User } from 'lucide-react'
-import { clearDashboardCache, getCurrentUser, updateUserSettings } from '../services/api'
-import { describeError } from '../utils/errors.js'
+import React, { useState, useEffect } from 'react';
+import { User, Save, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { getCurrentUser, updateUserSettings } from '../services/api';
+import type { UserProfile } from '../types';
 
-type Notice = { kind: 'success' | 'error'; text: string }
-
-function Settings() {
-  const user = getCurrentUser()
-  const navigate = useNavigate()
-
-  const [age, setAge] = useState(user?.age?.toString() || '')
-  const [weight, setWeight] = useState(user?.weight?.toString() || '')
-  const [height, setHeight] = useState(user?.height?.toString() || '')
-  const [gender, setGender] = useState(user?.gender || 'Male')
-  const [objective, setObjective] = useState<string>(user?.objective || 'Hypertrophy')
-  const [notice, setNotice] = useState<Notice | null>(null)
-  const [isSaving, setIsSaving] = useState(false)
-  const [isLogoutOpen, setIsLogoutOpen] = useState(false)
+export default function Settings() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [formData, setFormData] = useState({
+    age: '',
+    weight: '',
+    height: '',
+    gender: 'Male',
+    objective: 'Hypertrophy'
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  
+  // État pour la modale de déconnexion
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
-    if (!notice) return
-    const timer = window.setTimeout(() => setNotice(null), notice.kind === 'success' ? 5000 : 8000)
-    return () => window.clearTimeout(timer)
-  }, [notice])
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    const ageValue = Number(age)
-    const weightValue = Number(weight)
-    const heightValue = Number(height)
-
-    if (!age.trim() || !weight.trim() || !height.trim() || !gender.trim() || !objective.trim()) {
-      setNotice({ kind: 'error', text: 'Fill in every field before saving your changes.' })
-      return
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      setUser(currentUser);
+      setFormData({
+        age: currentUser.age?.toString() || '',
+        weight: currentUser.weight?.toString() || '',
+        height: currentUser.height?.toString() || '',
+        gender: currentUser.gender || 'Male',
+        objective: currentUser.objective || 'Hypertrophy'
+      });
     }
-    if (!Number.isInteger(ageValue) || ageValue < 12 || ageValue > 120) {
-      setNotice({ kind: 'error', text: 'Age must be a whole number between 12 and 120.' })
-      return
-    }
-    if (!Number.isFinite(weightValue) || weightValue < 20 || weightValue > 350) {
-      setNotice({ kind: 'error', text: 'Weight must be between 20 and 350 kg.' })
-      return
-    }
-    if (!Number.isInteger(heightValue) || heightValue < 80 || heightValue > 250) {
-      setNotice({ kind: 'error', text: 'Height must be a whole number between 80 and 250 cm.' })
-      return
-    }
+  }, []);
 
-    setIsSaving(true)
-    setNotice(null)
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSave = async () => {
+    if (!user?.id) return;
+    setIsSaving(true);
+    setSaveMessage('');
+    
     try {
-      if (!user?.id) throw new Error('Your profile could not be found. Please sign in again.')
       await updateUserSettings(user.id, {
-        age: ageValue,
-        weight: weightValue,
-        height: heightValue,
-        gender,
-        objective,
-      })
-      setNotice({
-        kind: 'success',
-        text: 'Profile updated. Your next calorie and workout estimates will use these details.',
-      })
+        age: parseInt(formData.age, 10),
+        weight: parseFloat(formData.weight),
+        height: parseInt(formData.height, 10),
+        gender: formData.gender,
+        objective: formData.objective
+      });
+      setSaveMessage('Settings saved successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
-      setNotice({ kind: 'error', text: describeError(error, "We couldn't save your changes. Please try again.") })
+      setSaveMessage('Error saving settings.');
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
-  const confirmLogout = () => {
-    try {
-      localStorage.removeItem('set_plate_user')
-      sessionStorage.removeItem('set_plate_active_workout')
-      sessionStorage.removeItem('set_plate_pending_exercise')
-    } catch {
-      // The redirect still signs the user out when storage is unavailable.
-    }
-    clearDashboardCache()
-    setIsLogoutOpen(false)
-    navigate('/login', { replace: true })
-  }
+  const handleLogout = () => {
+    // Effacer les données de l'utilisateur
+    localStorage.removeItem('set_plate_user');
+    sessionStorage.clear();
+    // Rediriger vers l'écran de connexion / bienvenue
+    navigate('/welcome', { replace: true });
+  };
 
   return (
-    <div className="screen">
-      {/* Styles injectés pour un look premium */}
+    <div style={{ backgroundColor: '#121212', minHeight: '100vh', color: '#f3f3f5', padding: '24px 20px', fontFamily: 'system-ui, -apple-system, sans-serif', paddingBottom: '120px' }}>
+      
+      {/* STYLE GLOBAL POUR CACHER LES FLÈCHES ET STYLISER LES SELECTS */}
       <style>{`
-        .premium-card {
-          background-color: #1A1A1A;
-          border-radius: 16px;
-          padding: 1.5rem;
-          border: 1px solid #2E2E2E;
-          box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-          margin-bottom: 2rem;
+        .hide-arrows::-webkit-outer-spin-button,
+        .hide-arrows::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
         }
-        .settings-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1rem 0;
-          border-bottom: 1px solid #2A2A2A;
+        .hide-arrows {
+          -moz-appearance: textfield;
         }
-        .settings-row:last-of-type {
-          border-bottom: none;
+        .premium-select {
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          appearance: none;
+          background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%238e8e93%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+          background-repeat: no-repeat;
+          background-position: right 12px top 50%;
+          background-size: 16px auto;
         }
-        .settings-label {
-          color: #A1A1AA;
-          font-size: 0.95rem;
-          font-weight: 500;
-        }
-        .settings-input {
-          width: 160px;
-          padding: 0.6rem 1rem;
-          border-radius: 10px;
-          background-color: #09090B;
-          color: #FFF;
-          border: 1px solid #333;
-          font-size: 0.95rem;
-          transition: all 0.2s ease;
-          outline: none;
-        }
-        .settings-input:focus {
-          border-color: #8B5CF6;
-          box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
-        }
-        .settings-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          width: 100%;
-          margin-top: 1.5rem;
-          background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
-          color: white;
-          border: none;
-          padding: 1rem;
-          border-radius: 12px;
-          font-weight: 600;
-          font-size: 1.05rem;
-          cursor: pointer;
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
-          box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
-        }
-        .settings-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
-        }
-        .settings-btn:disabled {
-          opacity: 0.7;
-          cursor: progress;
-          transform: none;
-          box-shadow: none;
-        }
-        .settings-notice {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.6rem;
-          margin-top: 1.5rem;
-          padding: 0.75rem 0.9rem;
-          border-radius: 12px;
-          font-size: 0.9rem;
-          line-height: 1.45;
-        }
-        .settings-notice svg {
-          flex: none;
-          margin-top: 0.1rem;
-        }
-        .settings-notice.success {
-          color: #bbf7d0;
-          background: rgba(34, 197, 94, 0.12);
-          border: 1px solid rgba(34, 197, 94, 0.35);
-        }
-        .settings-notice.error {
-          color: #fecaca;
-          background: rgba(248, 113, 113, 0.12);
-          border: 1px solid rgba(248, 113, 113, 0.35);
-        }
-        .logout-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          width: 100%;
-          margin-top: 1rem;
-          background-color: transparent;
-          color: #EF4444;
-          border: 1px solid #EF4444;
-          padding: 1rem;
-          border-radius: 12px;
-          font-weight: 600;
-          font-size: 1.05rem;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        .logout-btn:hover {
-          background-color: rgba(239, 68, 68, 0.1);
-        }
-        .avatar-container {
-          display: flex;
-          align-items: center;
-          gap: 1.25rem;
-          margin-bottom: 1.5rem;
-          padding-bottom: 1.5rem;
-          border-bottom: 1px solid #2A2A2A;
-        }
-        .avatar-circle {
-          width: 3.5rem;
-          height: 3.5rem;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: linear-gradient(135deg, #2E2E2E, #1A1A1A);
-          border-radius: 50%;
-          border: 1px solid #444;
-          box-shadow: inset 0 2px 4px rgba(255,255,255,0.05);
+        .premium-select option {
+          background-color: #1c1c1e;
+          color: #f3f3f5;
         }
       `}</style>
 
-      <header className="screen-header">
-        <div>
-          <p className="eyebrow">Profile &amp; Preferences</p>
-          <h1>Settings</h1>
-        </div>
-      </header>
+      <h1 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 24px 0', letterSpacing: '-0.5px' }}>Settings</h1>
 
-      <section className="section">
-        <div className="premium-card">
+      <div style={{ backgroundColor: '#1c1c1e', borderRadius: '24px', padding: '24px', border: '1px solid rgba(255,255,255,0.03)' }}>
+        
+        {/* PROFILE HEADER */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '24px', marginBottom: '24px' }}>
+          <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#28282a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <User size={28} color="#8e8e93" />
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#ffffff' }}>
+              {user?.name} {user?.surname}
+            </h2>
+            <p style={{ margin: '4px 0 0 0', color: '#b084e9', fontSize: '14px', fontWeight: 500 }}>
+              {user?.email}
+            </p>
+          </div>
+        </div>
+
+        {/* FORM FIELDS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          <div className="avatar-container">
-            <div className="avatar-circle">
-              <User size={24} color="#D4D4D8" />
-            </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#FFF', fontWeight: '600' }}>
-                {user ? `${user.name} ${user.surname}` : 'My Profile'}
-              </h3>
-              <span style={{ color: '#8B5CF6', fontSize: '0.85rem', fontWeight: '500' }}>
-                {user?.email || 'Edit your personal details'}
-              </span>
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '15px', fontWeight: 600, color: '#a1a1a6' }}>Age</label>
+            <input 
+              type="number" 
+              name="age"
+              value={formData.age}
+              onChange={handleChange}
+              className="hide-arrows"
+              style={{ width: '120px', padding: '12px 16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', color: '#ffffff', fontSize: '15px', fontWeight: 500, outline: 'none' }}
+            />
           </div>
 
-          <form onSubmit={handleSave}>
-            
-            <div className="settings-row">
-              <label className="settings-label">Age</label>
-              <input 
-                type="number" 
-                value={age} 
-                onChange={(e) => setAge(e.target.value)} 
-                className="settings-input"
-              />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '15px', fontWeight: 600, color: '#a1a1a6' }}>Weight (kg)</label>
+            <input 
+              type="number" 
+              name="weight"
+              value={formData.weight}
+              onChange={handleChange}
+              className="hide-arrows"
+              style={{ width: '120px', padding: '12px 16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', color: '#ffffff', fontSize: '15px', fontWeight: 500, outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '15px', fontWeight: 600, color: '#a1a1a6' }}>Height (cm)</label>
+            <input 
+              type="number" 
+              name="height"
+              value={formData.height}
+              onChange={handleChange}
+              className="hide-arrows"
+              style={{ width: '120px', padding: '12px 16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', color: '#ffffff', fontSize: '15px', fontWeight: 500, outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '20px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '15px', fontWeight: 600, color: '#a1a1a6' }}>Gender</label>
+              <span style={{ fontSize: '12px', color: '#545458', marginTop: '2px', display: 'block' }}>For BMR calculation</span>
             </div>
+            <select 
+              name="gender"
+              value={formData.gender}
+              onChange={handleChange}
+              className="premium-select"
+              style={{ width: '150px', padding: '12px 36px 12px 16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', color: '#ffffff', fontSize: '15px', fontWeight: 500, outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
 
-            <div className="settings-row">
-              <label className="settings-label">Weight (kg)</label>
-              <input 
-                type="number" 
-                step="0.1"
-                value={weight} 
-                onChange={(e) => setWeight(e.target.value)} 
-                className="settings-input"
-              />
-            </div>
-
-            <div className="settings-row">
-              <label className="settings-label">Height (cm)</label>
-              <input 
-                type="number" 
-                value={height} 
-                onChange={(e) => setHeight(e.target.value)} 
-                className="settings-input"
-              />
-            </div>
-
-            <div className="settings-row">
-              <label className="settings-label">
-                Gender <br/>
-                <span style={{fontSize: '0.75rem', color: '#52525B', fontWeight: 'normal'}}>For BMR calculation</span>
-              </label>
-              <select 
-                value={gender} 
-                onChange={(e) => setGender(e.target.value)} 
-                className="settings-input"
-                style={{ cursor: 'pointer' }}
-              >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-
-            <div className="settings-row">
-              <label className="settings-label">Main Goal</label>
-              <select 
-                value={objective} 
-                onChange={(e) => setObjective(e.target.value)} 
-                className="settings-input"
-                style={{ cursor: 'pointer' }}
-              >
-                <option value="Hypertrophy">Hypertrophy</option>
-                <option value="Strength">Strength</option>
-                <option value="Endurance">Endurance</option>
-                <option value="Weight Loss">Weight Loss</option>
-                <option value="Maintenance">Maintenance</option>
-              </select>
-            </div>
-
-            {notice && (
-              <div
-                className={`settings-notice ${notice.kind}`}
-                role={notice.kind === 'error' ? 'alert' : 'status'}
-              >
-                {notice.kind === 'success'
-                  ? <CheckCircle2 size={18} aria-hidden="true" />
-                  : <AlertCircle size={18} aria-hidden="true" />}
-                <span>{notice.text}</span>
-              </div>
-            )}
-
-            <button type="submit" className="settings-btn" disabled={isSaving}>
-              {isSaving
-                ? <><Loader2 size={20} className="animate-spin" aria-hidden="true" /> Saving...</>
-                : <><Save size={20} aria-hidden="true" /> Save Changes</>}
-            </button>
-          </form>
-
-          <button onClick={() => setIsLogoutOpen(true)} className="logout-btn">
-            <LogOut size={20} />
-            Log Out
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '15px', fontWeight: 600, color: '#a1a1a6' }}>Main Goal</label>
+            <select 
+              name="objective"
+              value={formData.objective}
+              onChange={handleChange}
+              className="premium-select"
+              style={{ width: '150px', padding: '12px 36px 12px 16px', backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', color: '#ffffff', fontSize: '15px', fontWeight: 500, outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="Lose Weight">Lose Weight</option>
+              <option value="Strength">Strength</option>
+              <option value="Hypertrophy">Hypertrophy</option>
+            </select>
+          </div>
 
         </div>
-      </section>
 
-      {isLogoutOpen && (
-        <div className="modal-backdrop">
-          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
-            <p className="eyebrow">Your session</p>
-            <h2 id="logout-title">Log out of SET&PLATE?</h2>
-            <p>Your meals and workouts stay in your account. You can sign back in any time.</p>
-            <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => setIsLogoutOpen(false)}>
-                Stay signed in
+        {/* SAVE BUTTON */}
+        <button 
+          onClick={handleSave}
+          disabled={isSaving}
+          style={{ 
+            width: '100%', marginTop: '32px', padding: '16px', 
+            background: 'linear-gradient(135deg, #9b51e0 0%, #b084e9 100%)', 
+            border: 'none', borderRadius: '14px', color: '#ffffff', 
+            fontSize: '16px', fontWeight: 700, cursor: isSaving ? 'not-allowed' : 'pointer',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
+            boxShadow: '0 4px 15px rgba(155, 81, 224, 0.3)', transition: 'opacity 0.2s'
+          }}
+        >
+          <Save size={20} />
+          {isSaving ? 'Saving...' : 'Save Changes'}
+        </button>
+
+        {saveMessage && (
+          <p style={{ textAlign: 'center', color: saveMessage.includes('Error') ? '#ff4d4d' : '#4cd964', fontSize: '14px', marginTop: '16px', fontWeight: 500 }}>
+            {saveMessage}
+          </p>
+        )}
+
+        {/* LOGOUT BUTTON */}
+        <button 
+          onClick={() => setShowLogoutConfirm(true)}
+          style={{ 
+            width: '100%', marginTop: '16px', padding: '16px', 
+            backgroundColor: 'transparent', border: '1px solid rgba(255, 77, 77, 0.2)', 
+            borderRadius: '14px', color: '#ff4d4d', 
+            fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
+            transition: 'background-color 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 77, 77, 0.05)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          <LogOut size={18} />
+          Disconnect
+        </button>
+
+      </div>
+
+      {/* LOGOUT CONFIRMATION MODAL */}
+      {showLogoutConfirm && (
+        <div style={{ 
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+          zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' 
+        }}>
+          <div style={{ 
+            backgroundColor: '#1c1c1e', padding: '24px', borderRadius: '24px', width: '90%', maxWidth: '340px',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>Disconnect?</h3>
+            <p style={{ margin: 0, color: '#d1d1d6', fontSize: '14px', lineHeight: '1.5' }}>
+              Are you sure you want to log out of your account? You will need to sign in again to access your data.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
+              <button 
+                onClick={() => setShowLogoutConfirm(false)} 
+                style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '10px 16px', fontSize: '14.5px', fontWeight: 600 }}
+              >
+                Cancel
               </button>
-              <button className="danger-action" type="button" onClick={confirmLogout}>
-                Log out
+              <button 
+                onClick={handleLogout} 
+                style={{ backgroundColor: '#ff4d4d', border: 'none', color: '#ffffff', borderRadius: '12px', padding: '10px 24px', cursor: 'pointer', fontSize: '14.5px', fontWeight: 600 }}
+              >
+                Log Out
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  )
-}
 
-export default Settings
+    </div>
+  );
+};

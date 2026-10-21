@@ -8,6 +8,7 @@ const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
 const Login = lazy(() => import('./pages/Login'))
 const LogMeals = lazy(() => import('./pages/LogMeals'))
+const MealHistory = lazy(() => import('./pages/MealHistory')) // <-- Import de la nouvelle page ajouté ici
 const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Settings = lazy(() => import('./pages/Settings'))
@@ -33,6 +34,7 @@ function App() {
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/nutrition/history" element={<MealHistory />} /> {/* <-- Nouvelle route ajoutée ici */}
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
@@ -42,4 +44,4 @@ function App() {
   )
 }
 
-export default App
+export default App;

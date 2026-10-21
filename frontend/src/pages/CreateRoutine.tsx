@@ -1,7 +1,8 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, CheckCircle2, Dumbbell, GripVertical, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { createRoutine, fetchExercises, fetchExerciseMuscleGroups, updateRoutine } from '../services/api'
+import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
+import { createRoutine, updateRoutine } from '../services/api'
 import type { Exercise } from '../types'
 import type { Routine } from '../types/workout'
 
@@ -23,13 +24,6 @@ function CreateRoutine() {
   const nameInputRef = useRef<HTMLInputElement>(null)
   const successDialogRef = useRef<HTMLDivElement>(null)
   const [name, setName] = useState(routineToEdit?.name ?? '')
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [exercisePage, setExercisePage] = useState(1)
-  const [exercises, setExercises] = useState<Exercise[]>([])
-  const [totalExercises, setTotalExercises] = useState(0)
-  const [muscleGroups, setMuscleGroups] = useState<string[]>([])
-  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState('')
   const [selectedExercises, setSelectedExercises] = useState<RoutineExerciseDraft[]>(() =>
     routineToEdit?.exercises.map((exercise) => ({
       exercise_id: exercise.exercise_id,
@@ -37,72 +31,16 @@ function CreateRoutine() {
       target_sets: exercise.target_sets ?? 3,
       target_reps: exercise.target_reps ?? 10,
     })) ?? [])
+  const [isExercisePickerOpen, setIsExercisePickerOpen] = useState(false)
   const [draggedExerciseId, setDraggedExerciseId] = useState<string | null>(null)
-  const [resolvedExerciseRequest, setResolvedExerciseRequest] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [nameError, setNameError] = useState<string | null>(null)
-  const [exerciseError, setExerciseError] = useState<string | null>(null)
-  const [muscleGroupError, setMuscleGroupError] = useState<string | null>(null)
-  const queryKey = `${debouncedSearch}|${selectedMuscleGroup}`
-  const exerciseRequestKey = `${queryKey}|${exercisePage}`
-  const isLoading = resolvedExerciseRequest !== exerciseRequestKey
 
   useEffect(() => {
     if (successMessage) successDialogRef.current?.focus()
   }, [successMessage])
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
-    return () => window.clearTimeout(timer)
-  }, [search])
-
-  useEffect(() => {
-    let isCurrent = true
-    fetchExerciseMuscleGroups()
-      .then((groups) => {
-        if (isCurrent) setMuscleGroups(groups)
-      })
-      .catch((requestError: Error) => {
-        if (isCurrent) setMuscleGroupError(requestError.message)
-      })
-
-    return () => {
-      isCurrent = false
-    }
-  }, [])
-
-  useEffect(() => {
-    let isCurrent = true
-    fetchExercises({
-      q: debouncedSearch || undefined,
-      muscle_group: selectedMuscleGroup || undefined,
-      page: exercisePage,
-      limit: 6,
-      compact: true,
-    })
-      .then((result) => {
-        if (isCurrent) {
-          setExercises((current) => exercisePage === 1
-            ? result.items
-            : [...current, ...result.items.filter((item) => !current.some((existing) => existing.id === item.id))])
-          setTotalExercises(result.total)
-          setExerciseError(null)
-          setResolvedExerciseRequest(exerciseRequestKey)
-        }
-      })
-      .catch((requestError: Error) => {
-        if (isCurrent) {
-          setExerciseError(requestError.message)
-          setResolvedExerciseRequest(exerciseRequestKey)
-        }
-      })
-
-    return () => {
-      isCurrent = false
-    }
-  }, [debouncedSearch, selectedMuscleGroup, exercisePage, queryKey, exerciseRequestKey])
 
   function addExercise(exercise: Exercise) {
     setSelectedExercises((current) => current.some((item) =>
@@ -166,14 +104,6 @@ function CreateRoutine() {
     }
   }
 
-  const selectedIds = new Set(selectedExercises.map((exercise) => exercise.exercise_id))
-  const groupedExercises = exercises.reduce((groups, exercise) => {
-    const group = exercise.muscle_group || 'Other'
-    const groupExercises = groups.get(group) ?? []
-    groupExercises.push(exercise)
-    groups.set(group, groupExercises)
-    return groups
-  }, new Map<string, Exercise[]>())
   const canSave = selectedExercises.length > 0 && !isSaving
 
   return (
@@ -214,67 +144,15 @@ function CreateRoutine() {
         <div className="routine-builder-section-heading">
           <h2 id="routine-exercises-title">Choose exercises</h2>
           <span>{selectedExercises.length} selected</span>
-        </div>
-
-        <label className="picker-search routine-builder-search">
-          <Search size={18} aria-hidden="true" />
-          <input value={search} onChange={(event) => { setSearch(event.target.value); setExercisePage(1) }} placeholder="Search the exercise library" aria-label="Search exercises" />
-        </label>
-
-        <label className="routine-muscle-group-filter">
-          Muscle group
-          <select value={selectedMuscleGroup} onChange={(event) => { setSelectedMuscleGroup(event.target.value); setExercisePage(1) }}>
-            <option value="">All muscle groups</option>
-            {muscleGroups.map((group) => <option key={group} value={group}>{group}</option>)}
-          </select>
-        </label>
-
-        {muscleGroupError && <div className="routine-builder-error" role="alert">{muscleGroupError}</div>}
-        {isLoading && <div className="card state-card" role="status">Loading exercises...</div>}
-        {exerciseError && <div className="card state-card" role="alert">{exerciseError}</div>}
-        {!isLoading && !exerciseError && exercises.length === 0 && <div className="routine-builder-empty">No exercises found. Try another search.</div>}
-
-        <div
-          className="routine-builder-results"
-          onScroll={(event) => {
-            const list = event.currentTarget
-            const isNearBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 48
-            if (isNearBottom && !isLoading && exercises.length < totalExercises) {
-              setExercisePage((current) => current + 1)
-            }
-          }}
-          aria-label="Exercise list. Scroll to load more."
-        >
-          {[...groupedExercises.entries()].map(([group, groupExercises]) => (
-            <section className="routine-muscle-group" key={group} aria-labelledby={`muscle-group-${group}`}>
-              <h3 className="routine-muscle-group-heading" id={`muscle-group-${group}`}>
-                {group}
-              </h3>
-              {groupExercises.map((exercise) => {
-                const isSelected = selectedIds.has(exercise.id) || selectedExercises.some((item) =>
-                  normalizeExerciseName(item.name) === normalizeExerciseName(exercise.name))
-                return (
-                  <button
-                    className="routine-builder-result"
-                    type="button"
-                    key={exercise.id}
-                    onClick={() => addExercise(exercise)}
-                    disabled={isSelected}
-                    aria-label={`${isSelected ? 'Added' : 'Add'} ${exercise.name}`}
-                  >
-                    {exercise.images[0]
-                      ? <img src={exercise.images[0]} alt="" />
-                      : <div className="routine-builder-result-art" aria-hidden="true"><Dumbbell size={18} /></div>}
-                    <span>{exercise.name}</span>
-                    {isSelected ? <Check size={17} aria-hidden="true" /> : <Plus size={17} aria-hidden="true" />}
-                  </button>
-                )
-              })}
-            </section>
-          ))}
-          {exercises.length > 0 && <p className="routine-builder-count">
-            Showing {exercises.length} of {totalExercises} exercises{isLoading ? ' · Loading…' : exercises.length < totalExercises ? ' · Scroll for more' : ''}
-          </p>}
+          <button
+            className="secondary-action"
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setIsExercisePickerOpen(true)}
+          >
+            <Plus size={16} aria-hidden="true" />
+            Add Exercise
+          </button>
         </div>
       </section>
 
@@ -354,6 +232,13 @@ function CreateRoutine() {
       </section>
 
       {error && <p className="routine-builder-error" role="alert">{error}</p>}
+      <SelectExerciseModal
+        isOpen={isExercisePickerOpen}
+        onClose={() => setIsExercisePickerOpen(false)}
+        onSelectExercise={addExercise}
+        excludedExerciseIds={selectedExercises.map((exercise) => exercise.exercise_id)}
+        excludedExerciseNames={selectedExercises.map((exercise) => exercise.name)}
+      />
       {successMessage && (
         <div className="routine-save-backdrop">
           <div

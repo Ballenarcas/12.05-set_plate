@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -12,6 +12,31 @@ class TrainerInsightRequest(BaseModel):
 class TrainerInsightResponse(BaseModel):
     insight: str
     model: str
+
+
+class CalorieAdjustmentResponse(BaseModel):
+    adjustment_id: str | None = None
+    previous_goal: int
+    proposed_goal: int
+    has_change: bool
+    reason: str
+    status: str
+    objective: str
+    avg_daily_intake: int
+    compliance_rate: float
+    weekly_volume: int
+
+
+class CalorieAdjustmentDecisionRequest(BaseModel):
+    user_id: str
+    adjustment_id: str
+    status: Literal["accepted", "rejected"]
+
+
+class CalorieAdjustmentDecisionResponse(BaseModel):
+    adjustment_id: str
+    status: str
+    calorie_goal: int
 
 
 class EntityType(str, Enum):

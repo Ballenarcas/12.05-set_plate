@@ -367,17 +367,37 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
             for set_item in exercise.sets
         )
 
+    plan = None
+    if payload.plan_id:
+        plan_rows = (
+            supabase.table("workout_plans")
+            .select("id,routine_id,title,ai_adjusted,ai_reasoning")
+            .eq("id", str(payload.plan_id))
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        if not plan_rows:
+            raise HTTPException(status_code=404, detail="Workout plan not found")
+        plan = plan_rows[0]
+
+    routine_id = payload.routine_id or (plan.get("routine_id") if plan else None)
     workout_id = None
     try:
+        record = {
+            "user_id": str(user_id),
+            "routine_id": str(routine_id) if routine_id else None,
+            "name": payload.name.strip(),
+            "start_time": payload.started_at.isoformat(),
+            "end_time": payload.completed_at.isoformat(),
+        }
+        if plan is not None:
+            record["ai_adjusted"] = bool(plan.get("ai_adjusted"))
+            record["ai_reasoning"] = plan.get("ai_reasoning")
         response = (
             supabase.table("workouts")
-            .insert({
-                "user_id": str(user_id),
-                "routine_id": str(payload.routine_id) if payload.routine_id else None,
-                "name": payload.name.strip(),
-                "start_time": payload.started_at.isoformat(),
-                "end_time": payload.completed_at.isoformat(),
-            })
+            .insert(record)
             .select("id")
             .execute()
         )
@@ -387,9 +407,13 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
             raise RuntimeError("Supabase did not return the saved workout ID")
         workout_id = workout_row["id"]
         if set_records:
-            for record in set_records:
-                record["workout_id"] = workout_id
+            for set_item in set_records:
+                set_item["workout_id"] = workout_id
             supabase.table("workout_sets").insert(set_records).execute()
+        if plan is not None:
+            supabase.table("workout_plans").delete().eq("id", str(payload.plan_id)).eq("user_id", str(user_id)).execute()
+    except HTTPException:
+        raise
     except Exception as err:
         logger.exception("Failed to persist workout and workout sets")
         if workout_id:
@@ -481,3 +505,34 @@ def delete_workout_history_entry(user_id: UUID, workout_id: UUID) -> None:
     except Exception as err:
         logger.exception("Failed to delete workout history entry")
         raise HTTPException(status_code=502, detail="Could not delete workout history entry") from err
+
+
+def summarize_today_workouts(user_id: UUID | str, today_start: datetime, today_end: datetime) -> int:
+    """Total completed-workout seconds whose end falls inside [today_start, today_end)."""
+    supabase = get_supabase(admin=True)
+    if supabase is None:
+        return 0
+    try:
+        rows = (
+            supabase.table("workouts")
+            .select("start_time,end_time")
+            .eq("user_id", str(user_id))
+            .not_.is_("end_time", "null")
+            .gte("end_time", today_start.isoformat())
+            .lt("end_time", today_end.isoformat())
+            .execute()
+            .data or []
+        )
+        total = 0.0
+        for row in rows:
+            start = row.get("start_time")
+            end = row.get("end_time")
+            if not start or not end:
+                continue
+            started = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            completed = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            total += max(0.0, (completed - started).total_seconds())
+        return int(total)
+    except Exception as err:
+        logger.warning("Could not summarize today's workouts: %s", err)
+        return 0

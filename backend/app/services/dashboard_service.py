@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.db.supabase_client import get_supabase
-from app.schemas.dashboard import DashboardSummary, NutritionDashboard, WorkoutDashboard
+from app.schemas.dashboard import CompletedWorkoutToday, DashboardSummary, NutritionDashboard, PlanExercise, WorkoutDashboard, WorkoutPlanSummary
 from app.services.user_profile_service import calculate_calorie_goal
 
 
@@ -67,8 +67,10 @@ def _query_workout(user_id: UUID) -> WorkoutDashboard | None:
     routines = (
         get_supabase(admin=True)
         .table("routines")
-        .select("id,name")
+        .select("id,name,routine_exercises(id),workouts(start_time,end_time)")
         .eq("user_id", str(user_id))
+        .eq("workouts.user_id", str(user_id))
+        .not_.is_("workouts.end_time", "null")
         .limit(1)
         .execute()
     ).data or []
@@ -76,31 +78,8 @@ def _query_workout(user_id: UUID) -> WorkoutDashboard | None:
         return None
 
     routine = routines[0]
-    def query_exercise_rows():
-        return (
-            get_supabase(admin=True)
-            .table("routine_exercises")
-            .select("id")
-            .eq("routine_id", routine["id"])
-            .execute()
-        ).data or []
-
-    def query_completed_workouts():
-        return (
-            get_supabase(admin=True)
-            .table("workouts")
-            .select("start_time,end_time")
-            .eq("user_id", str(user_id))
-            .eq("routine_id", routine["id"])
-            .not_.is_("end_time", "null")
-            .execute()
-        ).data or []
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        exercise_future = executor.submit(query_exercise_rows)
-        workouts_future = executor.submit(query_completed_workouts)
-        exercise_rows = exercise_future.result()
-        workouts = workouts_future.result()
+    exercise_rows = routine.get("routine_exercises") or []
+    workouts = routine.get("workouts") or []
 
     durations = []
     for workout in workouts:
@@ -118,18 +97,67 @@ def _query_workout(user_id: UUID) -> WorkoutDashboard | None:
     )
 
 
+def _query_todays_plan(user_id: UUID) -> WorkoutPlanSummary | None:
+    today = datetime.now(timezone.utc).date()
+    rows = (
+        get_supabase(admin=True)
+        .table("workout_plans")
+        .select("id,routine_id,title,plan_date,is_rest_day,ai_adjusted,ai_reasoning,exercises")
+        .eq("user_id", str(user_id))
+        .eq("plan_date", today.isoformat())
+        .limit(1)
+        .execute()
+    ).data or []
+    if not rows:
+        return None
+    row = rows[0]
+    return WorkoutPlanSummary(
+        id=str(row["id"]),
+        routine_id=str(row["routine_id"]) if row.get("routine_id") else None,
+        title=row.get("title") or "Today's workout",
+        plan_date=row["plan_date"],
+        is_rest_day=bool(row.get("is_rest_day")),
+        ai_adjusted=bool(row.get("ai_adjusted")),
+        ai_reasoning=row.get("ai_reasoning"),
+        exercises=[PlanExercise(**exercise) for exercise in row.get("exercises") or []],
+    )
+
+
+def _query_completed_workout_today(user_id: UUID) -> CompletedWorkoutToday | None:
+    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = (
+        get_supabase(admin=True)
+        .table("workouts")
+        .select("id,name")
+        .eq("user_id", str(user_id))
+        .gte("start_time", start.isoformat())
+        .lt("start_time", (start + timedelta(days=1)).isoformat())
+        .not_.is_("end_time", "null")
+        .order("end_time", desc=True)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not rows:
+        return None
+    return CompletedWorkoutToday(id=str(rows[0]["id"]), name=rows[0].get("name") or "Workout")
+
+
 def get_dashboard_summary(user_id: UUID) -> DashboardSummary:
     client = get_supabase(admin=True)
     if client is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         user_future = executor.submit(_query_user, user_id)
         meals_future = executor.submit(_query_today_meals, user_id)
         workout_future = executor.submit(_query_workout, user_id)
+        plan_future = executor.submit(_query_todays_plan, user_id)
+        completed_future = executor.submit(_query_completed_workout_today, user_id)
         user = user_future.result()
         meals = meals_future.result()
         workout = workout_future.result()
+        plan = plan_future.result()
+        completed_workout = completed_future.result()
 
     target_kcals = _calculate_target_calories(user)
     target_protein = round(float(user["weight"]) * 1.6, 1)
@@ -152,4 +180,6 @@ def get_dashboard_summary(user_id: UUID) -> DashboardSummary:
         ai_notification=None,
         nutrition=nutrition,
         workout=workout,
+        plan=plan,
+        completed_workout_today=completed_workout,
     )

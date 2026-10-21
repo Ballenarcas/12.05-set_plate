@@ -46,8 +46,14 @@ class MealCreateRequest(BaseModel):
 class DailyNutritionResponse(BaseModel):
     consumed_calories: int
     daily_goal: int
-    active_calories: int
     calories_progress_percentage: int
+    remaining_calories: int = 0
+    target_proteins_g: float = 0.0
+    target_carbs_g: float = 0.0
+    target_fats_g: float = 0.0
+    remaining_proteins_g: float = 0.0
+    remaining_carbs_g: float = 0.0
+    remaining_fats_g: float = 0.0
     carbs_g: float
     proteins_g: float
     fats_g: float

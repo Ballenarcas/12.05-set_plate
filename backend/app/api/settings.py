@@ -1,20 +1,22 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
-from app.schemas.settings import UserSettingsUpdate
+
 from app.facades.settings_facade import settings_facade
+from app.schemas.settings import UserSettingsUpdate
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
+logger = logging.getLogger(__name__)
 
 
 @router.put("/update")
-async def update_settings(
+def update_settings(
     settings: UserSettingsUpdate,
-    user_id: str = Query(..., description="ID de l'utilisateur à mettre à jour"),
+    user_id: str = Query(..., description="User ID to update"),
 ):
     try:
-        await settings_facade.update(user_id, settings)
-        return {
-            "status": "success",
-            "message": "Changes have been successfully saved in the database."
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        settings_facade.update(user_id, settings)
+    except Exception as err:
+        logger.exception("Failed to update user settings")
+        raise HTTPException(status_code=500, detail="Could not save your settings.") from err
+    return {"status": "success", "message": "Settings saved."}

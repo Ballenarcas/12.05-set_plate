@@ -67,6 +67,12 @@
 .primary-button { width: 100%; margin-top: 1rem; border: 0; color: #071c0e; background: var(--green); }
 .training-card { padding: 1.1rem; }
 .training-card h3 { margin: 0 0 0.35rem; font-size: 1.3rem; }
+.scheduled-training-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.scheduled-exercises { display: grid; gap: 0.55rem; margin: 0.85rem 0 0; padding-left: 1.1rem; color: var(--text); font-size: 0.82rem; }
+.scheduled-exercises li { display: grid; gap: 0.12rem; }
+.scheduled-exercise-sets { color: var(--text-muted); font-size: 0.72rem; }
+.ai-adjusted-badge { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0 0.45rem; border-radius: 0.35rem; color: #16120a; background: #d6b85a; font-size: 0.62rem; font-weight: 800; white-space: nowrap; }
+.training-reasoning { margin: 0.7rem 0 0; color: var(--text-muted); font-size: 0.78rem; line-height: 1.45; }
 .training-meta { display: grid; gap: 0.35rem; margin: 0; padding-left: 1.1rem; color: var(--text-muted); font-size: 0.8rem; }
 .home-routines-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .home-routines-heading .section-title { margin-bottom: 0.75rem; }
@@ -113,13 +119,38 @@
 .routine-card .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; }
 .empty-state { display: flex; min-height: 8rem; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; color: var(--text-muted); text-align: center; }
 .active-workout-screen { padding-bottom: calc(2rem + env(safe-area-inset-bottom)); }
-.active-workout-header { position: sticky; z-index: 2; top: 0; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto auto; align-items: center; gap: 0.55rem; margin: -1.25rem -1.25rem 0.85rem; padding: max(0.7rem, env(safe-area-inset-top)) 1.25rem 0.75rem; border-bottom: 1px solid var(--line); background: rgba(18, 18, 18, 0.98); }
+.active-workout-header { position: sticky; z-index: 2; top: 0; display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.55rem; margin: -1.25rem -1.25rem 0.85rem; padding: max(0.7rem, env(safe-area-inset-top)) 1.25rem 0.75rem; border-bottom: 1px solid var(--line); background: rgba(18, 18, 18, 0.98); }
 .active-workout-header h1 { overflow: hidden; margin: 0; font-size: 1.05rem; text-overflow: ellipsis; white-space: nowrap; }
 .header-clock { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .session-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0 0 1rem; padding: 0.85rem 0.4rem; }
 .session-stats div { display: grid; gap: 0.2rem; justify-items: center; text-align: center; }
 .session-stats span { color: var(--text-muted); font-size: 0.68rem; font-weight: 600; }
 .session-stats strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.ai-adjust-trigger { display: inline-flex; min-height: 2.75rem; align-items: center; gap: 0.25rem; padding: 0 0.6rem; border: 1px solid var(--line); border-radius: 0.7rem; color: #d6b85a; background: var(--surface); cursor: pointer; font-size: 0.7rem; font-weight: 800; }
+.ai-adjust-trigger svg { color: #f6e86c; }
+.ai-adjust-trigger:disabled { cursor: wait; opacity: 0.6; }
+.ai-adjust-modal .ai-adjust-result { padding: 0; border: 0; border-radius: 0; }
+.ai-adjust-feedback { display: grid; gap: 0.6rem; justify-items: start; }
+.ai-adjust-loading { margin: 0; color: var(--text-muted); font-size: 0.82rem; line-height: 1.5; }
+.ai-adjust-result { display: grid; gap: 0.6rem; margin: 0; padding: 0.7rem 0.8rem; border: 1px solid var(--line); border-radius: 0.7rem; background: var(--surface); }
+.ai-adjust-result ul { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+.ai-adjust-result li { display: grid; gap: 0.15rem; justify-items: start; padding-left: 1.1rem; font-size: 0.78rem; }
+.ai-adjust-result li span { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; }
+.ai-adjust-result li p { margin: 0; color: var(--text); line-height: 1.45; }
+.ai-adjust-result li.is-applied span { color: #6f6f6f; }
+.ai-adjust-result li.is-applied p { color: var(--text-muted); }
+.ai-adjust-applied { color: var(--green); font-size: 0.68rem; font-weight: 700; }
+.ai-adjust-accept { min-height: 2.1rem; padding: 0 0.7rem; border: 1px solid rgba(40, 205, 98, 0.4); border-radius: 0.55rem; color: var(--green); background: transparent; cursor: pointer; font: inherit; font-size: 0.7rem; font-weight: 700; }
+.ai-adjust-accept:active { transform: translateY(1px); }
+.ai-adjust-accept-all { justify-self: start; min-height: 2.3rem; padding: 0 0.75rem; border: 0; border-radius: 0.55rem; color: #071c0e; background: var(--green); cursor: pointer; font-size: 0.7rem; font-weight: 800; }
+.ai-adjust-accept-all:active { transform: translateY(1px); }
+.ai-adjust-result-none { display: block; color: var(--text-muted); font-size: 0.76rem; line-height: 1.45; }
+.ai-adjust-error { padding: 0.5rem 0.7rem; border: 1px solid rgba(255, 105, 105, 0.3); border-radius: 0.65rem; color: #ff9c9c; font-size: 0.72rem; line-height: 1.45; }
+.confirmation-modal:focus { outline: none; }
+@media (max-width: 360px) {
+  .header-clock-label { display: none; }
+  .active-workout-header { gap: 0.4rem; }
+}
 .icon-button, .done-button, .remove-set-button, .modal-close { display: inline-grid; min-width: 2.75rem; min-height: 2.75rem; place-items: center; border: 1px solid var(--line); border-radius: 0.7rem; color: #fff; background: var(--surface); cursor: pointer; }
 .finish-button { min-height: 2.75rem; padding: 0 0.7rem; border: 0; border-radius: 0.7rem; color: #071c0e; background: var(--green); cursor: pointer; font-size: 0.7rem; font-weight: 800; }
 .active-exercise-list { display: grid; gap: 1rem; }
@@ -206,6 +237,8 @@
 .modal-actions .primary-button { margin-top: 0; }
 .danger-action { min-height: 2.75rem; border: 1px solid #813d3d; border-radius: 0.7rem; color: #ffb1b1; background: transparent; cursor: pointer; font-size: 0.78rem; font-weight: 700; }
 .form-error { margin-top: 0.8rem; color: #ff9e9e; font-size: 0.78rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
 .picker-header { display: grid; grid-template-columns: 2.75rem 1fr; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
 .picker-header h1 { margin: 0; font-size: 1.45rem; }
 .picker-search { display: flex; min-height: 2.9rem; align-items: center; gap: 0.55rem; margin-bottom: 1rem; padding: 0 0.85rem; border: 1px solid var(--line); border-radius: 0.7rem; color: var(--text-muted); background: var(--surface); }

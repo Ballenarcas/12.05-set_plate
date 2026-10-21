@@ -13,7 +13,7 @@ from app.db.supabase_client import get_supabase
 
 ADJUSTMENTS_TABLE = "ai_calorie_adjustments"
 EVALUATION_DAYS = 7
-REVIEW_COOLDOWN_DAYS = 7
+REVIEW_COOLDOWN_DAYS = 1
 COMPLIANCE_BAND = 0.10
 LOW_COMPLIANCE = 0.50
 HIGH_COMPLIANCE = 0.80

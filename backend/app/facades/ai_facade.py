@@ -1,6 +1,7 @@
 from app.core.config import get_settings
 from app.schemas.ai import ParseNaturalLanguageResponse
 from app.services.ai_service import generate_trainer_insight, get_groq_client
+from app.services.calorie_adjustment_service import decide_adjustment, get_adjustment
 from app.services.fuzzy_matcher import get_fuzzy_matcher
 
 
@@ -47,6 +48,12 @@ class AIFacade:
 
     def trainer_insight(self, **data):
         return generate_trainer_insight(**data)
+
+    def calorie_adjustment(self, **data):
+        return get_adjustment(**data)
+
+    def decide_calorie_adjustment(self, **data):
+        return decide_adjustment(**data)
 
 
 def _format_entities(matched):

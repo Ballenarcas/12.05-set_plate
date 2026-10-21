@@ -2,10 +2,27 @@ from uuid import UUID
 
 from app.schemas.workout import RoutineSummary
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
+from app.db.supabase_client import get_supabase
 from app.services import workout_service, wger_importer
+from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
+from app.schemas.workout import (
+    LiveWorkoutAdjustmentRequest,
+    LiveWorkoutAdjustmentSuggestion,
+    RoutineSummary,
+)
+from fastapi import HTTPException
 
 
 class WorkoutFacade:
+    async def plan_today(self, user_id: UUID):
+        supabase = get_supabase(admin=True)
+        if supabase is None:
+            raise HTTPException(status_code=503, detail="Supabase is not configured")
+        return await plan_daily_workout(user_id, supabase)
+
+    async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
+        return await suggest_live_adjustment(payload.model_dump(mode="json"))
+
     def save_log(self, user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
         return workout_service.save_workout_log(user_id, payload)
 

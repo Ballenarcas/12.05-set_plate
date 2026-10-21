@@ -16,6 +16,9 @@ import type {
 } from '../types/workout'
 import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 
+// IMPORT AJOUTÉ ICI POUR LA MODALE :
+import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
+
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
 const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {

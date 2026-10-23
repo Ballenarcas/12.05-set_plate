@@ -563,8 +563,15 @@ export interface TodayNutritionData {
   meals: MealLogItem[]
 }
 
-export function localDayWindow(): { today_start: string; today_end: string } {
+// Fonction modifiée pour accepter une date optionnelle
+export function localDayWindow(dateString?: string): { today_start: string; today_end: string } {
   const start = new Date()
+  if (dateString) {
+    const parts = dateString.split('-')
+    if (parts.length === 3) {
+      start.setFullYear(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))
+    }
+  }
   start.setHours(0, 0, 0, 0)
   const end = new Date(start)
   end.setDate(end.getDate() + 1)
@@ -575,10 +582,10 @@ function nutritionCacheKey(userId: string, windowStart: string): string {
   return `${NUTRITION_CACHE_PREFIX}${userId}:${windowStart}`
 }
 
-export function getCachedTodayNutrition(userId: string): TodayNutritionData | null {
+export function getCachedTodayNutrition(userId: string, dateString?: string): TodayNutritionData | null {
   if (!userId) return null
   try {
-    const window = localDayWindow()
+    const window = localDayWindow(dateString)
     const saved = sessionStorage.getItem(nutritionCacheKey(userId, window.today_start))
     if (!saved) return null
     const cached = JSON.parse(saved) as { data: TodayNutritionData; at: number }
@@ -590,8 +597,9 @@ export function getCachedTodayNutrition(userId: string): TodayNutritionData | nu
   }
 }
 
-export async function fetchTodayNutrition(userId: string): Promise<TodayNutritionData> {
-  const window = localDayWindow()
+// Fonction modifiée pour transférer les bonnes dates au backend
+export async function fetchTodayNutrition(userId: string, dateString?: string): Promise<TodayNutritionData> {
+  const window = localDayWindow(dateString)
   const requestKey = `${userId}:${window.today_start}`
   const existing = nutritionRequests.get(requestKey)
   if (existing) return existing
@@ -718,4 +726,4 @@ export async function deleteMealLog(mealId: string): Promise<void> {
     throw new Error("We couldn't remove this meal. Please try again.")
   }
   clearDashboardCache()
-}
+};

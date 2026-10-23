@@ -7,8 +7,7 @@ import type { MealLogItem } from '../services/api';
 export default function Nutrition() {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [allMeals, setAllMeals] = useState<MealLogItem[]>([]);
-  const [displayedMeals, setDisplayedMeals] = useState<MealLogItem[]>([]);
+  const [meals, setMeals] = useState<MealLogItem[]>([]);
   const [dateError, setDateError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -33,15 +32,14 @@ export default function Nutrition() {
     // On utilise ta nouvelle fonction API qui gère les dates
     fetchTodayNutrition(user.id, formattedDate)
       .then(data => {
-        const mealsList = data.meals || [];
-        setAllMeals(mealsList);
+        setMeals(data.meals || []);
       })
       .catch(error => {
         console.error("Erreur de chargement des repas:", error);
         setMeals([]);
       })
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [selectedDate]); // L'ajout de selectedDate ici est la clé du fonctionnement !
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = new Date(e.target.value);
@@ -88,7 +86,6 @@ export default function Nutrition() {
   const confirmEdit = () => {
     if (!editingMeal) return;
     const ratio = Number(editQuantity) / (Number(editingMeal.weight_g) || 1);
-    
     const updatedMeals = meals.map(m => {
       if (m.id === editingMeal.id) {
         return {
@@ -147,10 +144,10 @@ export default function Nutrition() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {isLoading ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>Loading your meals...</div>
-        ) : displayedMeals.length === 0 ? (
+        ) : meals.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>No meals recorded for this day.</div>
         ) : (
-          displayedMeals.map((meal) => (
+          meals.map((meal) => (
             <div key={meal.id} style={{ backgroundColor: '#1c1c1e', borderRadius: '20px', padding: '20px', position: 'relative', border: '1px solid rgba(255,255,255,0.03)' }}>
               
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>

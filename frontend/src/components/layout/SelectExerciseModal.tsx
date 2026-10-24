@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Search, ChevronRight, Dumbbell } from 'lucide-react';
 import { fetchExercises } from '../../services/api';
 import type { Exercise } from '../../types';
@@ -46,7 +47,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -80,7 +81,8 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
           color: '#ffffff',
           display: 'flex',
           flexDirection: 'column',
-          maxHeight: '65vh',       
+          maxHeight: '65vh',
+          overflow: 'hidden',
           boxSizing: 'border-box',
         }}
         onClick={(e) => e.stopPropagation()}
@@ -136,6 +138,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
         <div
           style={{
             flex: 1,
+            minHeight: 0,
             overflowY: 'auto',
             paddingRight: '2px',
             scrollbarWidth: 'thin',
@@ -213,7 +216,8 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

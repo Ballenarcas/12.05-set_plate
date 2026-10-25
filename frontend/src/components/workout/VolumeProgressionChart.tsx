@@ -23,6 +23,12 @@ function axisVolume(value: number): string {
   return formatVolumeKg(value)
 }
 
+function axisLabelAnchor(x: number): 'start' | 'middle' | 'end' {
+  if (x <= PADDING.left + 16) return 'start'
+  if (x >= WIDTH - PADDING.right - 16) return 'end'
+  return 'middle'
+}
+
 export default function VolumeProgressionChart({ points, granularity, rangeStart, rangeEnd }: VolumeProgressionChartProps) {
   const maxVolume = Math.max(...points.map((point) => point.volume_kg), 1)
   const plotWidth = WIDTH - PADDING.left - PADDING.right
@@ -61,7 +67,7 @@ export default function VolumeProgressionChart({ points, granularity, rangeStart
       <div
         className="stats-chart-graphic"
         role="img"
-        aria-label={`Volume progression chart: ${points.length} recorded periods totaling ${formatVolumeKg(total)} kilograms`}
+        aria-label={`Volume progression chart: ${points.length} recorded ${points.length === 1 ? 'period' : 'periods'} totaling ${formatVolumeKg(total)} kilograms`}
       >
         <svg className="stats-line-chart" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} aria-hidden="true">
           {yTicks.map((tick) => {
@@ -95,7 +101,7 @@ export default function VolumeProgressionChart({ points, granularity, rangeStart
                 key={point.date}
                 x={point.x}
                 y={HEIGHT - 12}
-                textAnchor={index === 0 ? 'start' : index === coordinates.length - 1 ? 'end' : 'middle'}
+                textAnchor={axisLabelAnchor(point.x)}
               >
                 {formatChartDate(point.date, granularity)}
               </text>

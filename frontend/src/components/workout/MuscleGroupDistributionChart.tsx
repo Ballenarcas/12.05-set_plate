@@ -43,7 +43,7 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
           className="stats-doughnut"
           viewBox="0 0 200 200"
           role="img"
-          aria-label={`Muscle group distribution: ${distribution.length} classified muscle groups totaling ${formatVolumeKg(classifiedTotal)} kilograms`}
+          aria-label={`Muscle group distribution: ${distribution.length} classified muscle ${distribution.length === 1 ? 'group' : 'groups'} totaling ${formatVolumeKg(classifiedTotal)} kilograms`}
         >
           <circle className="stats-doughnut-track" cx="100" cy="100" r={RADIUS} fill="none" strokeWidth={STROKE} />
           {segments.map((segment) => (

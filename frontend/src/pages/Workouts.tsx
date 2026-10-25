@@ -13,7 +13,7 @@ function formatWorkoutDuration(seconds: number): string {
 }
 
 function formatWorkoutDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 function createActiveExercises(routine: Routine): ActiveExercise[] {

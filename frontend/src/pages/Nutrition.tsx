@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog } from '../services/api';
+import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog } from '../services/api';
 import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
 import '../styles/log-meals.css';
 
@@ -32,6 +32,8 @@ export default function Nutrition() {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deletingMeal, setDeletingMeal] = useState<MealLogItem | null>(null);
+  const [isDeletingMeal, setIsDeletingMeal] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // SE DÉCLENCHE À CHAQUE CHANGEMENT DE DATE DANS LE CALENDRIER
   useEffect(() => {
@@ -203,11 +205,24 @@ export default function Nutrition() {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deletingMeal) return;
-    const updatedMeals = meals.filter(m => m.id !== deletingMeal.id);
-    setMeals(updatedMeals);
-    setDeletingMeal(null);
+    const user = getCurrentUser();
+    if (!user?.id) {
+      setDeleteError('Sign in again to remove this meal.');
+      return;
+    }
+    setIsDeletingMeal(true);
+    setDeleteError(null);
+    try {
+      await deleteMealLog(user.id, deletingMeal.id);
+      setMeals((current) => current.filter((meal) => meal.id !== deletingMeal.id));
+      setDeletingMeal(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "We couldn't remove this meal.");
+    } finally {
+      setIsDeletingMeal(false);
+    }
   };
 
   return (
@@ -297,6 +312,11 @@ export default function Nutrition() {
                 {meal.carbs_g !== undefined && <li>{meal.carbs_g}g Carbs</li>}
                 {meal.fats_g !== undefined && <li>{meal.fats_g}g Fat</li>}
               </ul>
+              {meal.ingredient_details_saved === false && (
+                <p style={{ margin: '10px 0 0', color: '#d6b85a', fontSize: '12px', lineHeight: 1.4 }}>
+                  Saved without ingredient details. Apply the meal ingredients database migration to enable ingredient editing.
+                </p>
+              )}
             </div>
           ))
         )}
@@ -433,10 +453,13 @@ export default function Nutrition() {
           <div style={{ backgroundColor: '#1c1c1e', padding: '24px', borderRadius: '24px', width: '90%', maxWidth: '340px', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
             <h3 style={{ margin: '0 0 8px 0', fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>Delete Meal?</h3>
             <p style={{ margin: 0, color: '#d1d1d6', fontSize: '14px', lineHeight: '1.5' }}>Are you sure you want to remove <strong style={{color: '#fff'}}>{deletingMeal.meal_name}</strong> from this day? This cannot be undone.</p>
+            {deleteError && <p role="alert" style={{ margin: '12px 0 0', color: '#ff8585', fontSize: '13px' }}>{deleteError}</p>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
-              <button onClick={() => setDeletingMeal(null)} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '10px 16px', fontSize: '14.5px', fontWeight: 600 }}>Cancel</button>
-              <button onClick={confirmDelete} style={{ backgroundColor: '#ff4d4d', border: 'none', color: '#ffffff', borderRadius: '12px', padding: '10px 24px', cursor: 'pointer', fontSize: '14.5px', fontWeight: 600 }}>Delete</button>
+              <button onClick={() => { setDeletingMeal(null); setDeleteError(null) }} disabled={isDeletingMeal} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '10px 16px', fontSize: '14.5px', fontWeight: 600 }}>Cancel</button>
+              <button onClick={confirmDelete} disabled={isDeletingMeal} style={{ backgroundColor: '#ff4d4d', border: 'none', color: '#ffffff', borderRadius: '12px', padding: '10px 24px', cursor: isDeletingMeal ? 'wait' : 'pointer', fontSize: '14.5px', fontWeight: 600 }}>
+                {isDeletingMeal ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>

@@ -406,7 +406,10 @@ export function LogMeals() {
 
     try {
       if (mealId) {
-        await deleteMealLog(mealId)
+        if (!currentUser?.id) {
+          throw new Error('Sign in again to remove this meal.')
+        }
+        await deleteMealLog(currentUser.id, mealId)
       }
       setMealList((prev) => prev.filter((meal) => meal.id !== mealId))
       setNutritionData((prev) => (prev

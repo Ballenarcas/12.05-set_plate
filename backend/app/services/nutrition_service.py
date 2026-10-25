@@ -21,6 +21,34 @@ from app.schemas.nutrition import (
 logger = logging.getLogger(__name__)
 
 
+def _missing_meal_ingredients_table(error: Exception) -> bool:
+    message = str(error).lower()
+    return "meal_ingredients" in message and any(
+        marker in message for marker in ("schema cache", "does not exist", "could not find", "undefined table")
+    )
+
+
+class MealIngredientStorageUnavailable(RuntimeError):
+    pass
+
+
+def _meal_ingredient_records(
+    meal_id: str,
+    user_id: str,
+    meal_type: str,
+    ingredients: list[MealIngredient],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "meal_id": meal_id,
+            "user_id": user_id,
+            "meal_type": meal_type,
+            **ingredient.model_dump(),
+        }
+        for ingredient in ingredients
+    ]
+
+
 def get_daily_macros() -> MacroSummary:
     return MacroSummary(protein_grams=45, carbs_grams=120, fat_grams=30, calories_remaining=1420)
 
@@ -101,14 +129,35 @@ def _load_today_meals(
     try:
         meals_res = (
             supabase.table("meals")
-            .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at,ingredients,quantity_g,meal_type")
+            .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at")
             .eq("user_id", user_id)
             .gte("consumed_at", window_start.isoformat())
             .lt("consumed_at", window_end.isoformat())
             .order("consumed_at", desc=True)
             .execute()
         )
-        for row in meals_res.data or []:
+        rows = meals_res.data or []
+        ingredients_by_meal: dict[str, list[dict[str, Any]]] = {}
+        has_ingredient_table = True
+        if rows:
+            try:
+                ingredient_rows = (
+                    supabase.table("meal_ingredients")
+                    .select("meal_id,user_id,meal_type,name,quantity_g,calories_per_100g,proteins_per_100g,carbs_per_100g,fats_per_100g")
+                    .eq("user_id", user_id)
+                    .in_("meal_id", [str(row["id"]) for row in rows])
+                    .order("created_at")
+                    .execute()
+                    .data or []
+                )
+                for ingredient in ingredient_rows:
+                    ingredients_by_meal.setdefault(str(ingredient["meal_id"]), []).append(ingredient)
+            except Exception as err:
+                if not _missing_meal_ingredients_table(err):
+                    raise
+                logger.warning("Meal ingredient table is not applied; loading meals without ingredient details.")
+                has_ingredient_table = False
+        for row in rows:
             cals = int(row.get("calories") or 0)
             proteins = float(row.get("proteins") or 0.0)
             carbs = float(row.get("carbs") or 0.0)
@@ -125,15 +174,26 @@ def _load_today_meals(
                     id=str(row.get("id")),
                     user_id=str(row.get("user_id")),
                     meal_name=row.get("name") or "Unnamed Meal",
-                    meal_type=row.get("meal_type") or infer_meal_type(consumed_at),
+                    meal_type=(ingredients_by_meal.get(str(row["id"])) or [{}])[0].get("meal_type") or infer_meal_type(consumed_at),
                     portion_amount="1",
-                    weight_g=str(row.get("quantity_g") or 100),
+                    weight_g=str(round(sum(float(item["quantity_g"]) for item in ingredients_by_meal.get(str(row["id"]), []))) or 100),
                     item_calories=cals,
                     consumed_at=consumed_at,
                     proteins_g=round(proteins, 1),
                     carbs_g=round(carbs, 1),
                     fats_g=round(fats, 1),
-                    ingredients=row.get("ingredients") or [],
+                    ingredients=[
+                        {
+                            "name": item["name"],
+                            "quantity_g": item["quantity_g"],
+                            "calories_per_100g": item["calories_per_100g"],
+                            "proteins_per_100g": item["proteins_per_100g"],
+                            "carbs_per_100g": item["carbs_per_100g"],
+                            "fats_per_100g": item["fats_per_100g"],
+                        }
+                        for item in ingredients_by_meal.get(str(row["id"]), [])
+                    ],
+                    ingredient_details_saved=has_ingredient_table and bool(ingredients_by_meal.get(str(row["id"]))),
                 )
             )
     except Exception as err:
@@ -387,12 +447,30 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
         "carbs": carbs or 0.0,
         "fats": fats or 0.0,
         "consumed_at": now_iso,
-        "quantity_g": qty,
-        "meal_type": payload.meal_type or infer_meal_type(now_iso),
-        "ingredients": [ingredient.model_dump() for ingredient in ingredients],
     }
-
     supabase.table("meals").insert(record).execute()
+    ingredient_details_saved = False
+    if ingredients:
+        try:
+            supabase.table("meal_ingredients").insert(
+                _meal_ingredient_records(
+                    meal_id,
+                    payload.user_id,
+                    payload.meal_type or infer_meal_type(now_iso),
+                    ingredients,
+                )
+            ).execute()
+            ingredient_details_saved = True
+        except Exception as err:
+            try:
+                supabase.table("meals").delete().eq("id", meal_id).eq("user_id", payload.user_id).execute()
+            except Exception:
+                logger.exception("Could not roll back meal after ingredient storage failed")
+            if _missing_meal_ingredients_table(err):
+                raise MealIngredientStorageUnavailable(
+                    "Apply add_meal_ingredients.sql to create the meal_ingredients table."
+                ) from err
+            raise
 
     return MealItem(
         id=meal_id,
@@ -406,7 +484,8 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
         proteins_g=round(proteins or 0.0, 1),
         carbs_g=round(carbs or 0.0, 1),
         fats_g=round(fats or 0.0, 1),
-        ingredients=ingredients,
+        ingredients=ingredients if ingredient_details_saved else [],
+        ingredient_details_saved=ingredient_details_saved,
     )
 
 
@@ -441,22 +520,62 @@ def update_user_meal(user_id: str, meal_id: str, payload: MealUpdateRequest) -> 
     quantity, calories, proteins, carbs, fats = _summarize_ingredients(payload.ingredients)
     record = {
         "name": payload.name,
-        "meal_type": payload.meal_type,
-        "quantity_g": quantity,
         "calories": calories,
         "proteins": proteins,
         "carbs": carbs,
         "fats": fats,
-        "ingredients": [ingredient.model_dump() for ingredient in payload.ingredients],
     }
-    response = (
+    existing_meal = (
         supabase.table("meals")
-        .update(record)
+        .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at")
         .eq("id", meal_id)
         .eq("user_id", user_id)
-        .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at,ingredients,quantity_g,meal_type")
+        .maybe_single()
         .execute()
+        .data
     )
+    if not existing_meal:
+        raise LookupError("Meal not found")
+    try:
+        existing_ingredients = (
+            supabase.table("meal_ingredients")
+            .select("meal_id,user_id,meal_type,name,quantity_g,calories_per_100g,proteins_per_100g,carbs_per_100g,fats_per_100g")
+            .eq("meal_id", meal_id)
+            .eq("user_id", user_id)
+            .execute()
+            .data or []
+        )
+    except Exception as err:
+        if _missing_meal_ingredients_table(err):
+            raise MealIngredientStorageUnavailable(
+                "Apply add_meal_ingredients.sql to create the meal_ingredients table."
+            ) from err
+        raise
+    try:
+        response = (
+            supabase.table("meals")
+            .update(record)
+            .eq("id", meal_id)
+            .eq("user_id", user_id)
+            .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at")
+            .execute()
+        )
+        supabase.table("meal_ingredients").delete().eq("meal_id", meal_id).eq("user_id", user_id).execute()
+        supabase.table("meal_ingredients").insert(
+            _meal_ingredient_records(meal_id, user_id, payload.meal_type, payload.ingredients)
+        ).execute()
+    except Exception:
+        try:
+            supabase.table("meals").update({
+                key: existing_meal[key]
+                for key in ("name", "calories", "proteins", "carbs", "fats")
+            }).eq("id", meal_id).eq("user_id", user_id).execute()
+            supabase.table("meal_ingredients").delete().eq("meal_id", meal_id).eq("user_id", user_id).execute()
+            if existing_ingredients:
+                supabase.table("meal_ingredients").insert(existing_ingredients).execute()
+        except Exception:
+            logger.exception("Could not roll back meal after ingredient update failed")
+        raise
     if not response.data:
         raise LookupError("Meal not found")
     row = response.data[0]
@@ -464,22 +583,32 @@ def update_user_meal(user_id: str, meal_id: str, payload: MealUpdateRequest) -> 
         id=str(row["id"]),
         user_id=str(row["user_id"]),
         meal_name=row["name"],
-        meal_type=row.get("meal_type") or payload.meal_type,
+        meal_type=payload.meal_type,
         portion_amount="1",
-        weight_g=str(round(float(row.get("quantity_g") or 0))),
+        weight_g=str(round(quantity)),
         item_calories=int(row.get("calories") or 0),
         consumed_at=row.get("consumed_at"),
         proteins_g=round(float(row.get("proteins") or 0), 1),
         carbs_g=round(float(row.get("carbs") or 0), 1),
         fats_g=round(float(row.get("fats") or 0), 1),
-        ingredients=row.get("ingredients") or [],
+        ingredients=payload.ingredients,
+        ingredient_details_saved=True,
     )
 
 
-def delete_user_meal(meal_id: str) -> bool:
+def delete_user_meal(user_id: str, meal_id: str) -> bool:
     supabase = get_supabase(admin=True)
     if not supabase:
         raise RuntimeError("Database connection unavailable")
 
-    supabase.table("meals").delete().eq("id", meal_id).execute()
+    response = (
+        supabase.table("meals")
+        .delete()
+        .eq("id", meal_id)
+        .eq("user_id", user_id)
+        .select("id")
+        .execute()
+    )
+    if not response.data:
+        raise LookupError("Meal not found")
     return True

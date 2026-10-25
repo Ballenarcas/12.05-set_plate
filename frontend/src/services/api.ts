@@ -81,6 +81,13 @@ function readDashboardCache(userId: string): { data: DashboardSummary; at: numbe
 
 export function clearDashboardCache(): void {
   dashboardRequests.clear()
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith(DASHBOARD_CACHE_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key))
+  } catch {
+    // The next dashboard request remains authoritative if browser storage is unavailable.
+  }
 }
 
 export function getCachedDashboardSummary(): DashboardSummary | null {
@@ -554,6 +561,7 @@ export interface MealLogItem {
   carbs_g?: number
   fats_g?: number
   ingredients?: MealIngredient[]
+  ingredient_details_saved?: boolean
 }
 
 export interface TodayNutritionData {
@@ -723,7 +731,8 @@ export async function addMealLog(payload: MealCreateRequest): Promise<MealLogIte
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    throw new Error("We couldn't save this meal. Please try again.")
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this meal. Please try again.")
   }
   clearDashboardCache()
   return response.json()
@@ -742,7 +751,8 @@ export async function updateMealLog(
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't update this meal. Please try again.")
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this meal. Please try again.")
   }
   clearDashboardCache()
   try {
@@ -755,12 +765,22 @@ export async function updateMealLog(
   return response.json() as Promise<MealLogItem>
 }
 
-export async function deleteMealLog(mealId: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${mealId}`, {
+export async function deleteMealLog(userId: string, mealId: string): Promise<void> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${encodeURIComponent(mealId)}?${query}`, {
     method: 'DELETE',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) {
-    throw new Error("We couldn't remove this meal. Please try again.")
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this meal. Please try again.")
   }
   clearDashboardCache()
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith(NUTRITION_CACHE_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key))
+  } catch {
+    // The server-side deletion remains authoritative when browser storage is unavailable.
+  }
 };

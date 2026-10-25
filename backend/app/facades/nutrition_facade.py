@@ -35,8 +35,8 @@ class NutritionFacade:
     def update_meal(self, user_id: str, meal_id: str, payload: MealUpdateRequest) -> MealItem:
         return nutrition_service.update_user_meal(user_id, meal_id, payload)
 
-    def delete_meal(self, meal_id: str) -> bool:
-        return nutrition_service.delete_user_meal(meal_id)
+    def delete_meal(self, user_id: str, meal_id: str) -> bool:
+        return nutrition_service.delete_user_meal(user_id, meal_id)
 
 
 nutrition_facade = NutritionFacade()

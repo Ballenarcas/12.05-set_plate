@@ -30,6 +30,7 @@ class MealItem(BaseModel):
     carbs_g: float = 0.0
     fats_g: float = 0.0
     ingredients: list[MealIngredient] = Field(default_factory=list)
+    ingredient_details_saved: bool = True
 
 
 class FoodSearchItem(BaseModel):

@@ -11,6 +11,7 @@ from app.schemas.nutrition import (
     MealUpdateRequest,
 )
 from app.facades.nutrition_facade import nutrition_facade
+from app.services.nutrition_service import MealIngredientStorageUnavailable
 
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 logger = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ def get_today_nutrition(
 def add_meal(payload: MealCreateRequest) -> MealItem:
     try:
         return nutrition_facade.create_meal(payload)
+    except MealIngredientStorageUnavailable as err:
+        raise HTTPException(status_code=503, detail=str(err)) from err
     except Exception as err:
         logger.exception("Failed to save meal")
         raise HTTPException(status_code=500, detail="Could not save this meal.") from err
@@ -62,6 +65,8 @@ def update_meal(
 ) -> MealItem:
     try:
         return nutrition_facade.update_meal(user_id, meal_id, payload)
+    except MealIngredientStorageUnavailable as err:
+        raise HTTPException(status_code=503, detail=str(err)) from err
     except LookupError as err:
         raise HTTPException(status_code=404, detail="Meal not found.") from err
     except Exception as err:
@@ -70,10 +75,15 @@ def update_meal(
 
 
 @router.delete("/meals/{meal_id}")
-def remove_meal(meal_id: str) -> dict[str, str]:
+def remove_meal(
+    meal_id: str,
+    user_id: str = Query(..., description="Meal owner user ID"),
+) -> dict[str, str]:
     try:
-        nutrition_facade.delete_meal(meal_id)
+        nutrition_facade.delete_meal(user_id, meal_id)
         return {"status": "success", "deleted_id": meal_id}
+    except LookupError as err:
+        raise HTTPException(status_code=404, detail="Meal not found.") from err
     except Exception as err:
         logger.exception("Failed to delete meal")
         raise HTTPException(status_code=500, detail="Could not remove this meal.") from err

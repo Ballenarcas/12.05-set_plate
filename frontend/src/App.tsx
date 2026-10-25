@@ -11,6 +11,7 @@ const Login = lazy(() => import('./pages/Login'))
 const LogMeals = lazy(() => import('./pages/LogMeals'))
 const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
+const Premium = lazy(() => import('./pages/Premium'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Welcome = lazy(() => import('./pages/Welcome'))
 const Workouts = lazy(() => import('./pages/Workouts'))
@@ -35,6 +36,7 @@ function App() {
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/premium" element={<Premium />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

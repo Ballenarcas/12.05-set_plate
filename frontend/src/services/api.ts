@@ -2,12 +2,14 @@
 // computer hosting the frontend instead of their own localhost.
 const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
+const PURCHASE_TIMEOUT_MS = 10_000
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
 import type { Routine, RoutineCreatePayload, WorkoutHistoryEntry } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
+import type { PremiumPlan, UserProfile } from '../types'
 
 export interface DashboardSummary {
   user_name: string
@@ -527,6 +529,64 @@ export function getCurrentUser(): import('../types').UserProfile | null {
   } catch {
     return null
   }
+}
+
+export interface PremiumStatus {
+  status: string
+  is_premium: boolean
+  plan: PremiumPlan
+  started_at: string
+  expires_at: string
+}
+
+export const PREMIUM_UPDATED_EVENT = 'set_plate:premium-updated'
+
+export function isPremiumActive(profile: UserProfile | null = getCurrentUser()): boolean {
+  if (!profile?.is_premium) return false
+  if (!profile.premium_expires_at) return true
+  const expiresAt = Date.parse(profile.premium_expires_at)
+  return Number.isFinite(expiresAt) ? expiresAt > Date.now() : false
+}
+
+export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Sign in before upgrading to premium')
+
+  const response = await fetch(
+    `${API_URL}/api/v1/premium/subscribe?user_id=${encodeURIComponent(user.id)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan }),
+      signal: AbortSignal.timeout(PURCHASE_TIMEOUT_MS),
+    },
+  )
+
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
+      ? error.detail
+      : `Unable to activate premium (server error ${response.status})`
+    throw new Error(detail)
+  }
+
+  const status = await response.json() as PremiumStatus
+  const updatedProfile: UserProfile = {
+    ...user,
+    is_premium: true,
+    premium_plan: status.plan,
+    premium_started_at: status.started_at,
+    premium_expires_at: status.expires_at,
+  }
+
+  try {
+    localStorage.setItem('set_plate_user', JSON.stringify(updatedProfile))
+  } catch {
+    // The server response is still authoritative when browser storage is unavailable.
+  }
+  clearDashboardCache()
+  window.dispatchEvent(new Event(PREMIUM_UPDATED_EVENT))
+  return status
 }
 
 export async function updateUserSettings(

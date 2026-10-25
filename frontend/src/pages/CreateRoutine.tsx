@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowLeft, ArrowUp, Check, CheckCircle2, Dumbbell, GripVertical, Plus, Search, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { createRoutine, fetchExercises, fetchExerciseMuscleGroups, updateRoutine } from '../services/api'
 import type { Exercise } from '../types'
 import type { Routine } from '../types/workout'
@@ -184,6 +185,7 @@ function CreateRoutine() {
           <ArrowLeft size={20} aria-hidden="true" />
         </button>
         <div><p className="eyebrow">{routineToEdit ? 'Update your training plan' : 'Build your training plan'}</p><h1>{routineToEdit ? 'Edit Routine' : 'Create Routine'}</h1></div>
+        <PremiumUpsellButton compact />
       </header>
 
       <section className="routine-builder-intro">

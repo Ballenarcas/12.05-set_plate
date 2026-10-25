@@ -21,6 +21,7 @@ import {
   type MealLogItem,
   type TodayNutritionData,
 } from '../services/api'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { summarizeMeal } from '../utils/mealComposition.js'
 import '../styles/log-meals.css'
 
@@ -313,13 +314,16 @@ export function LogMeals() {
 
           <h1 className="log-meals-title">Log Meals</h1>
 
-          <button
-            type="button"
-            className="btn-star-circle"
-            aria-label="Saved Meals"
-          >
-            <Star size={17} strokeWidth={1.5} />
-          </button>
+          <div className="log-meals-header-actions">
+            <button
+              type="button"
+              className="btn-star-circle"
+              aria-label="Saved Meals"
+            >
+              <Star size={17} strokeWidth={1.5} />
+            </button>
+            <PremiumUpsellButton />
+          </div>
         </header>
 
         {/* 2. SEARCH BAR */}

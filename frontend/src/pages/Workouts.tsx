@@ -1,6 +1,7 @@
 import { ArrowRight, Dumbbell, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { deleteRoutine, fetchRoutines } from '../services/api'
 import type { ActiveExercise, Routine } from '../types/workout'
 
@@ -94,6 +95,7 @@ function Workouts() {
         <div className="workouts-header-actions">
           <button className="secondary-action create-routine-action" type="button" onClick={() => navigate('/workouts/create')}><Plus size={16} /> Create Routine</button>
           <button className="secondary-action" type="button" onClick={requestEmptyWorkout}><Plus size={16} /> Start empty workout</button>
+          <PremiumUpsellButton />
         </div>
       </header>
 

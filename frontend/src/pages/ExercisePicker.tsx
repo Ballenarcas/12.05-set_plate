@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchExercises } from '../services/api'
 import type { Exercise } from '../types'
 
@@ -68,6 +69,7 @@ function ExercisePicker() {
       <header className="picker-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts/active')} aria-label="Back to active workout"><ArrowLeft size={21} /></button>
         <div><p className="eyebrow">Active workout</p><h1>{replaceExerciseIndex === undefined ? 'Add exercise' : 'Replace exercise'}</h1></div>
+        <PremiumUpsellButton compact />
       </header>
 
       <label className="picker-search"><Search size={18} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search exercises" aria-label="Search exercises" /></label>

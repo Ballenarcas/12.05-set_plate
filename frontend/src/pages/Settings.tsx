@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { User, Save, LogOut } from 'lucide-react'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { getCurrentUser, updateUserSettings } from '../services/api'
 
 function Settings() {
@@ -160,6 +161,7 @@ function Settings() {
           <p className="eyebrow">Profile &amp; Preferences</p>
           <h1>Settings</h1>
         </div>
+        <PremiumUpsellButton />
       </header>
 
       <section className="section">

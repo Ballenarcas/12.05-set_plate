@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchExerciseById, fetchExercises, getCurrentUser, saveWorkoutLog } from '../services/api'
 import type { Exercise } from '../types'
 import type { ActiveExercise, WorkoutLogCreate, WorkoutSet } from '../types/workout'
@@ -432,6 +433,7 @@ function ActiveWorkout() {
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
         <h1>Log Workout</h1>
         <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} />{formatClock(durationSeconds)}</span>
+        <PremiumUpsellButton compact />
         <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>Finish</button>
       </header>
 

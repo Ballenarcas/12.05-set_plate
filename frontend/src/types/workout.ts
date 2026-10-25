@@ -3,6 +3,7 @@ export interface RoutineExercise {
   name: string
   target_sets: number | null
   target_reps: number | null
+  reps_by_set?: number[] | null
 }
 
 export interface Routine {
@@ -18,6 +19,7 @@ export interface RoutineCreatePayload {
     exercise_id: string
     target_sets: number
     target_reps: number
+    reps_by_set: number[]
   }>
 }
 

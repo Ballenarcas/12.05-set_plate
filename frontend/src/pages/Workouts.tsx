@@ -17,7 +17,7 @@ function createActiveExercises(routine: Routine): ActiveExercise[] {
     sets: Array.from({ length: exercise.target_sets ?? 1 }, (_, index) => ({
       set_number: index + 1,
       weight_kg: 0,
-      reps: exercise.target_reps ?? 0,
+      reps: exercise.reps_by_set?.[index] ?? exercise.target_reps ?? 0,
       is_completed: false,
     })),
   }))

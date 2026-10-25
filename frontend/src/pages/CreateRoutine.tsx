@@ -12,6 +12,7 @@ type RoutineExerciseDraft = {
   name: string
   target_sets: number
   target_reps: number
+  reps_by_set: number[]
 }
 
 function normalizeExerciseName(name: string): string {
@@ -31,6 +32,9 @@ function CreateRoutine() {
       name: exercise.name,
       target_sets: exercise.target_sets ?? 3,
       target_reps: exercise.target_reps ?? 10,
+      reps_by_set: exercise.reps_by_set?.length === (exercise.target_sets ?? 3)
+        ? [...exercise.reps_by_set]
+        : Array.from({ length: exercise.target_sets ?? 3 }, () => exercise.target_reps ?? 10),
     })) ?? [])
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState(false)
   const [replacementIndex, setReplacementIndex] = useState<number | null>(null)
@@ -53,6 +57,7 @@ function CreateRoutine() {
         name: exercise.name,
         target_sets: 3,
         target_reps: 10,
+        reps_by_set: [10, 10, 10],
       }])
   }
 
@@ -69,10 +74,30 @@ function CreateRoutine() {
     setReplacementIndex(null)
   }
 
-  function updateExercise(index: number, field: 'target_sets' | 'target_reps', value: number) {
+  function updateSetCount(index: number, value: number) {
     const safeValue = Math.min(30, Math.max(1, value || 1))
     setSelectedExercises((current) => current.map((exercise, exerciseIndex) =>
-      exerciseIndex === index ? { ...exercise, [field]: safeValue } : exercise))
+      exerciseIndex === index
+        ? {
+          ...exercise,
+          target_sets: safeValue,
+          reps_by_set: Array.from({ length: safeValue }, (_, setIndex) =>
+            exercise.reps_by_set[setIndex] ?? exercise.reps_by_set[exercise.reps_by_set.length - 1] ?? exercise.target_reps),
+        }
+        : exercise))
+  }
+
+  function updateSetReps(index: number, setIndex: number, value: number) {
+    const safeValue = Math.min(30, Math.max(1, value || 1))
+    setSelectedExercises((current) => current.map((exercise, exerciseIndex) =>
+      exerciseIndex === index
+        ? {
+          ...exercise,
+          target_reps: setIndex === 0 ? safeValue : exercise.target_reps,
+          reps_by_set: exercise.reps_by_set.map((reps, currentSetIndex) =>
+            currentSetIndex === setIndex ? safeValue : reps),
+        }
+        : exercise))
   }
 
   function moveExercise(fromIndex: number, toIndex: number) {
@@ -98,10 +123,11 @@ function CreateRoutine() {
     try {
       const payload = {
         name: name.trim(),
-        exercises: selectedExercises.map(({ exercise_id, target_sets, target_reps }) => ({
+        exercises: selectedExercises.map(({ exercise_id, target_sets, target_reps, reps_by_set }) => ({
           exercise_id,
           target_sets,
           target_reps,
+          reps_by_set,
         })),
       }
       if (routineToEdit) {
@@ -255,15 +281,15 @@ function CreateRoutine() {
                     type="number"
                     min="1"
                     max="30"
-                    value={exercise.target_reps}
-                    onChange={(event) => updateExercise(index, 'target_reps', Number(event.target.value))}
+                    value={exercise.reps_by_set[setIndex]}
+                    onChange={(event) => updateSetReps(index, setIndex, Number(event.target.value))}
                   />
                   <button
                     className="routine-target-remove"
                     type="button"
                     aria-label={`Remove set ${setIndex + 1} from ${exercise.name}`}
                     disabled={exercise.target_sets <= 1}
-                    onClick={() => updateExercise(index, 'target_sets', exercise.target_sets - 1)}
+                    onClick={() => updateSetCount(index, exercise.target_sets - 1)}
                   >
                     <Trash2 size={16} aria-hidden="true" />
                   </button>
@@ -272,7 +298,7 @@ function CreateRoutine() {
               <button
                 className="secondary-action routine-target-add"
                 type="button"
-                onClick={() => updateExercise(index, 'target_sets', exercise.target_sets + 1)}
+                onClick={() => updateSetCount(index, exercise.target_sets + 1)}
                 disabled={exercise.target_sets >= 30}
               >
                 <Plus size={16} aria-hidden="true" /> Add Set

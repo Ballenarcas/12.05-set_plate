@@ -103,6 +103,14 @@ def get_exercise_muscle_groups() -> list[str]:
     return sorted({muscle_group_for(exercise) for exercise in load_cached_exercises()})
 
 
+def _routine_reps_by_set(row: dict) -> list[int]:
+    target_sets = int(row.get("target_sets") or 0)
+    reps_by_set = row.get("reps_by_set")
+    if isinstance(reps_by_set, list) and len(reps_by_set) == target_sets:
+        return [int(reps) for reps in reps_by_set]
+    return [int(row.get("target_reps") or 0)] * target_sets
+
+
 def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
     supabase = get_supabase(admin=True)
     if supabase is None:
@@ -115,7 +123,7 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
     routine_ids = [routine["id"] for routine in routines]
     rows = (
         supabase.table("routine_exercises")
-        .select("routine_id,exercise_id,target_sets,target_reps,set_order,exercises(name)")
+        .select("routine_id,exercise_id,target_sets,target_reps,reps_by_set,set_order,exercises(name)")
         .in_("routine_id", routine_ids)
         .order("set_order")
         .execute()
@@ -130,6 +138,7 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
                 name=exercise.get("name", "Exercise"),
                 target_sets=row.get("target_sets"),
                 target_reps=row.get("target_reps"),
+                reps_by_set=_routine_reps_by_set(row),
             )
         )
     return [
@@ -193,6 +202,7 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
                 "set_order": index,
                 "target_sets": exercise.target_sets,
                 "target_reps": exercise.target_reps,
+                "reps_by_set": exercise.reps_by_set or [exercise.target_reps] * exercise.target_sets,
             }
             for index, (exercise, resolved_exercise_id) in enumerate(
                 zip(payload.exercises, resolved_exercise_ids),
@@ -220,6 +230,7 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
                 name=exercise_names.get(resolved_exercise_id, "Exercise"),
                 target_sets=exercise.target_sets,
                 target_reps=exercise.target_reps,
+                reps_by_set=exercise.reps_by_set or [exercise.target_reps] * exercise.target_sets,
             )
             for exercise, resolved_exercise_id in zip(payload.exercises, resolved_exercise_ids)
         ],
@@ -266,7 +277,7 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
 
     existing_rows = (
         supabase.table("routine_exercises")
-        .select("id,routine_id,exercise_id,target_sets,target_reps,set_order")
+        .select("id,routine_id,exercise_id,target_sets,target_reps,reps_by_set,set_order")
         .eq("routine_id", str(routine_id))
         .execute()
         .data or []
@@ -279,6 +290,7 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
             "set_order": index,
             "target_sets": exercise.target_sets,
             "target_reps": exercise.target_reps,
+            "reps_by_set": exercise.reps_by_set or [exercise.target_reps] * exercise.target_sets,
         }
         for index, (exercise, exercise_id) in enumerate(zip(payload.exercises, resolved_exercise_ids), start=1)
     ]
@@ -308,6 +320,7 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
                 name=exercise_names[exercise_id],
                 target_sets=exercise.target_sets,
                 target_reps=exercise.target_reps,
+                reps_by_set=exercise.reps_by_set or [exercise.target_reps] * exercise.target_sets,
             )
             for exercise, exercise_id in zip(payload.exercises, resolved_exercise_ids)
         ],

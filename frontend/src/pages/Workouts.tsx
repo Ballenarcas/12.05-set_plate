@@ -108,6 +108,39 @@ function Workouts() {
     })
   }
 
+  function editWorkout(workout: WorkoutHistoryEntry) {
+    const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
+      const sets = [...exercise.sets]
+        .sort((first, second) => first.set_number - second.set_number)
+        .map((set, index) => ({
+          set_number: index + 1,
+          weight_kg: set.weight_kg,
+          reps: set.reps,
+          rpe: set.rpe,
+          is_completed: set.is_completed,
+        }))
+
+      return {
+        exercise_id: exercise.exercise_id,
+        name: exercise.name,
+        previous_weight_kg: sets[sets.length - 1]?.weight_kg ?? null,
+        previous_reps: sets[sets.length - 1]?.reps ?? null,
+        target_sets: sets.length || 1,
+        target_reps: sets[sets.length - 1]?.reps ?? null,
+        sets: sets.length > 0 ? sets : [{ set_number: 1, weight_kg: 0, reps: 0, is_completed: false }],
+      }
+    })
+
+    navigate('/workouts/active', {
+      state: {
+        editWorkoutId: workout.id,
+        name: workout.name,
+        startedAt: new Date().toISOString(),
+        exercises,
+      },
+    })
+  }
+
   function requestEmptyWorkout() {
     const saved = sessionStorage.getItem('set_plate_active_workout')
     if (saved) {
@@ -191,6 +224,14 @@ function Workouts() {
                 <div className="routine-card-heading workout-history-heading">
                   <div><p className="eyebrow">Completed workout</p><h2>{workout.name}</h2></div>
                   <div className="workout-history-actions">
+                    <button
+                      className="routine-edit-button"
+                      type="button"
+                      aria-label={`Edit ${workout.name} workout`}
+                      onClick={() => editWorkout(workout)}
+                    >
+                      <Pencil size={17} aria-hidden="true" />
+                    </button>
                     <button
                       className="history-delete-button"
                       type="button"

@@ -48,6 +48,7 @@ export interface ActiveExercise {
 export interface ActiveSession {
   planId?: string
   routineId?: string
+  editWorkoutId?: string
   name: string
   startedAt: string
   exercises: ActiveExercise[]

@@ -10,7 +10,7 @@ from app.schemas.workout import (
     LiveWorkoutAdjustmentResponse,
     LiveWorkoutAdjustmentSuggestion,
 )
-from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
+from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
@@ -57,6 +57,15 @@ def get_workout_history(
     limit: int = Query(30, ge=1, le=100),
 ) -> WorkoutHistoryResponse:
     return workout_facade.list_history(user_id, limit)
+
+
+@router.put("/history/{workout_id}", response_model=WorkoutLogResponse)
+def update_workout_history(
+    workout_id: UUID,
+    payload: WorkoutLogUpdate,
+    user_id: UUID = Query(..., description="Supabase users.id"),
+) -> WorkoutLogResponse:
+    return workout_facade.update_history_entry(user_id, workout_id, payload)
 
 
 @router.delete("/history/{workout_id}")

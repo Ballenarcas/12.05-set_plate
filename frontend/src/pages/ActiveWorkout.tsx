@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical,
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog } from '../services/api'
+import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
 import type {
@@ -513,12 +513,19 @@ function ActiveWorkout() {
         exercise_id,
         sets: sets.map((set) => ({
           ...set,
-          rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? null,
+          rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null,
         })),
       })),
     }
     try {
-      await saveWorkoutLog(user.id, payload)
+      if (currentSession.editWorkoutId) {
+        await updateWorkoutHistoryEntry(user.id, currentSession.editWorkoutId, {
+          name: payload.name,
+          exercises: payload.exercises,
+        })
+      } else {
+        await saveWorkoutLog(user.id, payload)
+      }
       sessionStorage.removeItem('set_plate_active_workout')
       navigate('/workouts')
     } catch (error) {
@@ -648,7 +655,7 @@ function ActiveWorkout() {
     <div className="screen active-workout-screen">
       <header className="active-workout-header">
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
-        <h1>Log Workout</h1>
+        <h1>{session?.editWorkoutId ? 'Edit Workout' : 'Log Workout'}</h1>
         <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} aria-hidden="true" /><span className="header-clock-label">{formatClock(durationSeconds)}</span></span>
         <button
           className="ai-adjust-trigger"
@@ -662,7 +669,7 @@ function ActiveWorkout() {
           AI
         </button>
         <PremiumUpsellButton compact />
-        <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>Finish</button>
+        <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{session?.editWorkoutId ? 'Save' : 'Finish'}</button>
       </header>
 
       <section className="session-stats" aria-label="Workout stats">
@@ -835,9 +842,9 @@ function ActiveWorkout() {
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowFinish(false) }}>
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="finish-title" tabIndex={-1} ref={finishDialogRef}>
             <button className="modal-close" type="button" onClick={() => setShowFinish(false)} aria-label="Close"><X size={20} /></button>
-            <p className="eyebrow">Session complete</p>
-            <h2 id="finish-title">Finish workout?</h2>
-            <p>{formatDuration(durationSeconds)} tracked. Save your completed sets or discard this session.</p>
+            <p className="eyebrow">{session?.editWorkoutId ? 'Edit workout history' : 'Session complete'}</p>
+            <h2 id="finish-title">{session?.editWorkoutId ? 'Save workout changes?' : 'Finish workout?'}</h2>
+            <p>{session?.editWorkoutId ? 'Your original date and duration will be kept. Changes are saved to this workout only when confirmed.' : `${formatDuration(durationSeconds)} tracked. Save your completed sets or discard this session.`}</p>
             <div className="workout-name-field">
               <label htmlFor="completed-workout-name">Workout name (e.g. Best chest day)</label>
               <input
@@ -853,8 +860,8 @@ function ActiveWorkout() {
             {saveError && <p className="form-error">{saveError}</p>}
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={() => setShowFinish(false)} disabled={isSaving}>Keep training</button>
-              <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>Discard workout</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving}>{isSaving ? 'SAVING...' : 'SAVE WORKOUT'}</button>
+              <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
             </div>
           </div>
         </div>

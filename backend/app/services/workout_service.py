@@ -14,6 +14,7 @@ from app.schemas.workout_log import (
     WorkoutHistorySet,
     WorkoutLogCreate,
     WorkoutLogResponse,
+    WorkoutLogUpdate,
 )
 from app.services.wger_importer import (
     get_cached_exercise,
@@ -481,6 +482,87 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
             exercises=[WorkoutHistoryExercise(**exercise) for exercise in exercises.values()],
         ))
     return WorkoutHistoryResponse(items=history)
+
+
+def update_workout_history_entry(
+    user_id: UUID,
+    workout_id: UUID,
+    payload: WorkoutLogUpdate,
+) -> WorkoutLogResponse:
+    supabase = get_supabase(admin=True)
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="Supabase is not configured")
+
+    workout_rows = (
+        supabase.table("workouts")
+        .select("id")
+        .eq("id", str(workout_id))
+        .eq("user_id", str(user_id))
+        .limit(1)
+        .execute()
+        .data or []
+    )
+    if not workout_rows:
+        raise HTTPException(status_code=404, detail="Workout history entry not found")
+
+    set_records = []
+    for exercise in payload.exercises:
+        try:
+            resolved_id = resolve_exercise_log_id(exercise.exercise_id)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=f"Unknown exercise '{exercise.exercise_id}'") from err
+        set_records.extend(
+            {
+                "workout_id": str(workout_id),
+                "exercise_id": resolved_id,
+                "set_number": set_item.set_number,
+                "weight": set_item.weight_kg,
+                "reps": set_item.reps,
+                "rpe": set_item.rpe,
+                "is_done": set_item.is_completed,
+            }
+            for set_item in exercise.sets
+        )
+
+    existing_sets = (
+        supabase.table("workout_sets")
+        .select("exercise_id,set_number,reps,weight,rpe,is_done")
+        .eq("workout_id", str(workout_id))
+        .execute()
+        .data or []
+    )
+    updated_sets = False
+    try:
+        supabase.table("workout_sets").delete().eq("workout_id", str(workout_id)).execute()
+        updated_sets = True
+        if set_records:
+            supabase.table("workout_sets").insert(set_records).execute()
+        response = (
+            supabase.table("workouts")
+            .update({"name": payload.name.strip()})
+            .eq("id", str(workout_id))
+            .eq("user_id", str(user_id))
+            .select("id")
+            .execute()
+        )
+        if not response.data:
+            raise RuntimeError("Workout history entry was not updated")
+    except Exception as err:
+        if updated_sets:
+            try:
+                supabase.table("workout_sets").delete().eq("workout_id", str(workout_id)).execute()
+                if existing_sets:
+                    restored_sets = [
+                        {"workout_id": str(workout_id), **set_item}
+                        for set_item in existing_sets
+                    ]
+                    supabase.table("workout_sets").insert(restored_sets).execute()
+            except Exception:
+                logger.exception("Could not restore workout sets after edit failed")
+        logger.exception("Failed to update workout history entry")
+        raise HTTPException(status_code=502, detail="Could not update workout history") from err
+
+    return WorkoutLogResponse(id=workout_id, status="updated")
 
 
 def delete_workout_history_entry(user_id: UUID, workout_id: UUID) -> None:

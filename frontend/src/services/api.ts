@@ -313,6 +313,25 @@ export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistor
   return result.items
 }
 
+export async function updateWorkoutHistoryEntry(
+  userId: string,
+  workoutId: string,
+  payload: Pick<WorkoutLogCreate, 'name' | 'exercises'>,
+): Promise<{ id: string; status: string }> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this workout. Please try again.")
+  }
+  return response.json()
+}
+
 export async function deleteWorkoutHistoryEntry(userId: string, workoutId: string): Promise<void> {
   const query = new URLSearchParams({ user_id: userId })
   const response = await fetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {

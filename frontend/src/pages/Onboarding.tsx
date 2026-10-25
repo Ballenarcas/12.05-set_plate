@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { submitUserOnboarding } from '../services/api'
+import { describeError } from '../utils/errors.js'
 import type { FitnessGoal, UserOnboardingFormData } from '../types'
 import '../styles/onboarding.css'
 
@@ -166,7 +167,7 @@ function Onboarding() {
         navigate('/')
       }, 1600)
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Could not save profile to database'
+      const message = describeError(err, "We couldn't save your profile. Please try again.")
       setSubmitError(message)
     } finally {
       setIsSubmitting(false)

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronLeft,
@@ -10,19 +10,25 @@ import {
   Utensils,
   X,
   Scale,
+  Sparkles,
 } from 'lucide-react'
 import {
   addMealLog,
+  decideCalorieAdjustment,
   deleteMealLog,
+  fetchCalorieAdjustment,
   fetchTodayNutrition,
+  getCachedTodayNutrition,
   getCurrentUser,
   searchFoodItems,
+  type CalorieAdjustmentData,
   type FoodSearchItem,
   type MealLogItem,
   type TodayNutritionData,
 } from '../services/api'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { summarizeMeal } from '../utils/mealComposition.js'
+import { describeError } from '../utils/errors.js'
 import '../styles/log-meals.css'
 
 type PlateFood = {
@@ -32,6 +38,31 @@ type PlateFood = {
   protein: number
   carbs: number
   fat: number
+}
+
+type MealDelta = { calories: number; protein: number; carbs: number; fat: number }
+
+function applyMealDelta(prev: TodayNutritionData, delta: MealDelta, sign: 1 | -1): TodayNutritionData {
+  const targetGoal = prev.daily_goal
+  const consumed = Math.max(0, prev.consumed_calories + sign * (delta.calories || 0))
+  const consumedProteins = Math.max(0, Math.round(((prev.proteins_g || 0) + sign * (delta.protein || 0)) * 10) / 10)
+  const consumedCarbs = Math.max(0, Math.round(((prev.carbs_g || 0) + sign * (delta.carbs || 0)) * 10) / 10)
+  const consumedFats = Math.max(0, Math.round(((prev.fats_g || 0) + sign * (delta.fat || 0)) * 10) / 10)
+  const remaining = (target: number, consumedValue: number) => Math.max(0, Math.round((target - consumedValue) * 10) / 10)
+  const progress = targetGoal > 0 ? Math.round((consumed / targetGoal) * 100) : 0
+
+  return {
+    ...prev,
+    consumed_calories: consumed,
+    calories_progress_percentage: Math.min(100, Math.max(0, progress)),
+    remaining_calories: Math.max(0, targetGoal - consumed),
+    proteins_g: consumedProteins,
+    carbs_g: consumedCarbs,
+    fats_g: consumedFats,
+    remaining_proteins_g: remaining(prev.target_proteins_g, consumedProteins),
+    remaining_carbs_g: remaining(prev.target_carbs_g, consumedCarbs),
+    remaining_fats_g: remaining(prev.target_fats_g, consumedFats),
+  }
 }
 
 export function LogMeals() {
@@ -45,9 +76,15 @@ export function LogMeals() {
     }
   }, [currentUser, navigate])
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [nutritionData, setNutritionData] = useState<TodayNutritionData | null>(null)
-  const [mealList, setMealList] = useState<MealLogItem[]>([])
+  const [initialNutrition] = useState(() => getCachedTodayNutrition(currentUser?.id ?? ''))
+  const hadCachedNutrition = useRef(Boolean(initialNutrition))
+  const [isLoading, setIsLoading] = useState(!initialNutrition)
+  const [nutritionData, setNutritionData] = useState<TodayNutritionData | null>(initialNutrition)
+  const [mealList, setMealList] = useState<MealLogItem[]>(initialNutrition?.meals ?? [])
+  const [adjustment, setAdjustment] = useState<CalorieAdjustmentData | null>(null)
+  const [adjustmentError, setAdjustmentError] = useState<string | null>(null)
+  const [isDeciding, setIsDeciding] = useState(false)
+  const [isTipOpen, setIsTipOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   // Modal & Register state
@@ -81,7 +118,6 @@ export function LogMeals() {
     if (!currentUser?.id) return
 
     let isMounted = true
-    setIsLoading(true)
 
     fetchTodayNutrition(currentUser.id)
       .then((data) => {
@@ -91,8 +127,8 @@ export function LogMeals() {
         setErrorMessage(null)
       })
       .catch((err: Error) => {
-        if (!isMounted) return
-        setErrorMessage(err.message || 'Unable to load nutrition data from database')
+        if (!isMounted || hadCachedNutrition.current) return
+        setErrorMessage(describeError(err, "We couldn't load today's meals. Please try again."))
       })
       .finally(() => {
         if (isMounted) setIsLoading(false)
@@ -102,6 +138,99 @@ export function LogMeals() {
       isMounted = false
     }
   }, [currentUser?.id])
+
+  const refetchNutrition = () => {
+    if (!currentUser?.id) return
+    fetchTodayNutrition(currentUser.id)
+      .then((data) => {
+        setNutritionData(data)
+        setMealList(data.meals)
+      })
+      .catch(() => undefined)
+  }
+
+  // 2b. Fetch the calorie adjustment proposal for the popup (pending one is stored server side)
+  useEffect(() => {
+    if (!currentUser?.id) return
+
+    let isMounted = true
+
+    fetchCalorieAdjustment(currentUser.id)
+      .then((data) => {
+        if (!isMounted) return
+        setAdjustment(data)
+        setIsTipOpen(data.status === 'pending' && data.has_change)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      isMounted = false
+    }
+  }, [currentUser?.id])
+
+  const handleOpenTip = () => {
+    if (adjustment) {
+      setIsTipOpen(true)
+      return
+    }
+    if (!currentUser?.id) return
+    setIsTipOpen(true)
+    setAdjustmentError(null)
+    fetchCalorieAdjustment(currentUser.id)
+      .then((data) => {
+        setAdjustment(data)
+        setAdjustmentError(null)
+      })
+      .catch((err: unknown) => {
+        setAdjustmentError(describeError(err, "We couldn't load your progress. Please try again."))
+      })
+  }
+
+  const handleConfirmTip = () => {
+    if (!adjustment || !currentUser?.id) return
+    const current = adjustment
+    if (!current.adjustment_id || !current.has_change) {
+      setIsTipOpen(false)
+      setAdjustment({ ...current, status: 'accepted' })
+      return
+    }
+    setIsDeciding(true)
+    setAdjustmentError(null)
+    decideCalorieAdjustment(currentUser.id, current.adjustment_id, 'accepted')
+      .then((result) => {
+        setAdjustment({ ...current, status: 'accepted', proposed_goal: result.calorie_goal })
+        setIsTipOpen(false)
+        refetchNutrition()
+      })
+      .catch((err: unknown) => {
+        setAdjustmentError(describeError(err, "We couldn't update your goal. Please try again."))
+      })
+      .finally(() => setIsDeciding(false))
+  }
+
+  const handleDeclineTip = () => {
+    if (!adjustment || !currentUser?.id) {
+      setIsTipOpen(false)
+      setAdjustmentError(null)
+      return
+    }
+    const current = adjustment
+    if (!current.adjustment_id || !current.has_change) {
+      setIsTipOpen(false)
+      return
+    }
+    setIsDeciding(true)
+    setAdjustmentError(null)
+    decideCalorieAdjustment(currentUser.id, current.adjustment_id, 'rejected')
+      .then(() => {
+        setAdjustment({ ...current, status: 'rejected' })
+        setIsTipOpen(false)
+      })
+      .catch((err: unknown) => {
+        setAdjustmentError(describeError(err, "We couldn't save your choice. Please try again."))
+      })
+      .finally(() => setIsDeciding(false))
+  }
 
   // 3. Search suggestions as user types in modal
   useEffect(() => {
@@ -120,7 +249,7 @@ export function LogMeals() {
         .catch((err: unknown) => {
           if (!isCurrent) return
           setSuggestions([])
-          setFoodSearchMessage(err instanceof Error ? err.message : 'Food search is unavailable.')
+          setFoodSearchMessage(describeError(err, 'Food search is not available right now. Please try again.'))
         })
         .finally(() => {
           if (isCurrent) setIsSearchingFoods(false)
@@ -233,27 +362,22 @@ export function LogMeals() {
 
       // Dynamically update metrics
       setMealList((prev) => [createdMeal, ...prev])
-      setNutritionData((prev) => {
-        if (!prev) return null
-        const newConsumed = prev.consumed_calories + plateNutrition.calories
-        const newProgress = prev.daily_goal > 0 ? Math.round((newConsumed / prev.daily_goal) * 100) : 0
-        return {
-          ...prev,
-          consumed_calories: newConsumed,
-          calories_progress_percentage: Math.min(100, Math.max(0, newProgress)),
-          carbs_g: Math.round(((prev.carbs_g || 0) + plateNutrition.carbs) * 10) / 10,
-          proteins_g: Math.round(((prev.proteins_g || 0) + plateNutrition.protein) * 10) / 10,
-          fats_g: Math.round(((prev.fats_g || 0) + plateNutrition.fat) * 10) / 10,
-        }
-      })
+      setNutritionData((prev) => (prev
+        ? applyMealDelta(prev, {
+          calories: plateNutrition.calories,
+          protein: plateNutrition.protein,
+          carbs: plateNutrition.carbs,
+          fat: plateNutrition.fat,
+        }, 1)
+        : null))
+      refetchNutrition()
 
       setIsModalOpen(false)
       setIsFoodSearchOpen(false)
       setFoodInput('')
       setPlateFoods([])
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save meal'
-      setErrorMessage(msg)
+      setErrorMessage(describeError(err, "We couldn't save this meal. Please try again."))
     } finally {
       setIsSubmitting(false)
     }
@@ -269,19 +393,17 @@ export function LogMeals() {
         await deleteMealLog(mealId)
       }
       setMealList((prev) => prev.filter((meal) => meal.id !== mealId))
-      setNutritionData((prev) => {
-        if (!prev) return null
-        const newConsumed = Math.max(0, prev.consumed_calories - (targetMeal.item_calories || 0))
-        const newProgress = prev.daily_goal > 0 ? Math.round((newConsumed / prev.daily_goal) * 100) : 0
-        return {
-          ...prev,
-          consumed_calories: newConsumed,
-          calories_progress_percentage: Math.min(100, Math.max(0, newProgress)),
-        }
-      })
+      setNutritionData((prev) => (prev
+        ? applyMealDelta(prev, {
+          calories: targetMeal.item_calories || 0,
+          protein: targetMeal.proteins_g || 0,
+          carbs: targetMeal.carbs_g || 0,
+          fat: targetMeal.fats_g || 0,
+        }, -1)
+        : null))
+      refetchNutrition()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete meal'
-      setErrorMessage(msg)
+      setErrorMessage(describeError(err, "We couldn't remove this meal. Please try again."))
     }
   }
 
@@ -292,10 +414,18 @@ export function LogMeals() {
   )
 
   const consumedCaloriesText = nutritionData ? nutritionData.consumed_calories.toLocaleString() : '-'
-  const dailyGoalText = nutritionData ? nutritionData.daily_goal.toLocaleString() : '-'
-  const carbsText = nutritionData && nutritionData.carbs_g !== undefined ? `${nutritionData.carbs_g}` : '-'
-  const proteinsText = nutritionData && nutritionData.proteins_g !== undefined ? `${nutritionData.proteins_g}` : '-'
-  const fatsText = nutritionData && nutritionData.fats_g !== undefined ? `${nutritionData.fats_g}` : '-'
+  const targetGoal = nutritionData ? nutritionData.daily_goal : 0
+  const dailyGoalText = nutritionData ? targetGoal.toLocaleString() : '-'
+  const remainingCaloriesText = nutritionData ? Math.max(0, targetGoal - nutritionData.consumed_calories).toLocaleString() : '-'
+  const carbsText = nutritionData && nutritionData.remaining_carbs_g !== undefined ? `${nutritionData.remaining_carbs_g}g` : '-'
+  const proteinsText = nutritionData && nutritionData.remaining_proteins_g !== undefined ? `${nutritionData.remaining_proteins_g}g` : '-'
+  const fatsText = nutritionData && nutritionData.remaining_fats_g !== undefined ? `${nutritionData.remaining_fats_g}g` : '-'
+  const appliedAdjustment = adjustment && adjustment.status === 'accepted' && adjustment.has_change
+    ? adjustment.proposed_goal - adjustment.previous_goal
+    : 0
+  const adjustmentNote = appliedAdjustment !== 0
+    ? `AI adjusted your goal by ${appliedAdjustment > 0 ? '+' : ''}${appliedAdjustment.toLocaleString()} kcal`
+    : null
   const progressPercent = nutritionData ? Math.min(Math.max(nutritionData.calories_progress_percentage, 0), 100) : 0
 
   return (
@@ -340,13 +470,21 @@ export function LogMeals() {
 
         {/* 3. DAILY SUMMARY CARD */}
         <section className="daily-summary-card" aria-label="Daily Calorie Summary">
-          <span className="summary-header">TODAY CALORIES</span>
+          <div className="summary-header-row">
+            <span className="summary-header">TODAY CALORIES</span>
+            <button type="button" className="summary-tip-btn" onClick={handleOpenTip}>
+              <Sparkles size={14} aria-hidden="true" /> AI Tip
+            </button>
+          </div>
 
-          <div className="summary-metrics-row">
-            <span className="main-calorie-metric">
-              {consumedCaloriesText} / {dailyGoalText} kcal
-            </span>
-
+          <div className="summary-metrics-block">
+            <div className="summary-metrics-row">
+              <span className="main-calorie-metric">
+                {consumedCaloriesText} / {dailyGoalText} kcal
+              </span>
+              <span className="summary-remaining">{remainingCaloriesText} kcal left</span>
+            </div>
+            {adjustmentNote && <p className="summary-ai-note">{adjustmentNote}</p>}
           </div>
 
           <div
@@ -364,9 +502,18 @@ export function LogMeals() {
           </div>
 
           <div className="macros-row">
-            <div className="macro-pill">Carbs: {carbsText}g</div>
-            <div className="macro-pill">Proteins: {proteinsText}g</div>
-            <div className="macro-pill">Fats: {fatsText}g</div>
+            <div className="macro-pill">
+              <span className="macro-pill-label">Carbs left</span>
+              <span className="macro-pill-value">{carbsText}</span>
+            </div>
+            <div className="macro-pill">
+              <span className="macro-pill-label">Protein left</span>
+              <span className="macro-pill-value">{proteinsText}</span>
+            </div>
+            <div className="macro-pill">
+              <span className="macro-pill-label">Fat left</span>
+              <span className="macro-pill-value">{fatsText}</span>
+            </div>
           </div>
         </section>
 
@@ -643,9 +790,9 @@ export function LogMeals() {
               </section>
 
               {errorMessage && (
-                <p className="field-hint" style={{ color: '#f87171', margin: 0 }}>
+                <div className="inline-alert" role="alert">
                   {errorMessage}
-                </p>
+                </div>
               )}
 
               {/* Modal Submit Button */}
@@ -664,6 +811,83 @@ export function LogMeals() {
                 )}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isTipOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="calorie-adjustment-title">
+          <div className="modal-dialog tip-dialog">
+            <div className="modal-header">
+              <h2 className="modal-title" id="calorie-adjustment-title">
+                {adjustment?.has_change ? 'Calorie Goal Adjustment' : 'AI Trainer Tip'}
+              </h2>
+              <button type="button" className="btn-modal-close" onClick={handleDeclineTip} aria-label="Close tip">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="tip-body">
+              {adjustmentError ? (
+                <p className="tip-error" role="alert">{adjustmentError}</p>
+              ) : !adjustment ? (
+                <p className="tip-message">Checking your last 7 days...</p>
+              ) : (
+                <>
+                  {adjustment.has_change && (
+                    <p className="tip-goals">
+                      <span className="tip-goal-old">{adjustment.previous_goal} kcal</span>
+                      <span className="tip-goal-arrow">→</span>
+                      <span className="tip-goal-new">{adjustment.proposed_goal} kcal</span>
+                    </p>
+                  )}
+                  <p className="tip-message">{adjustment.reason}</p>
+                  {(adjustment.status === 'pending' || adjustment.status === 'advice') && (
+                    <p className="tip-reasoning">
+                      <strong>Why:</strong> last 7 days, {Math.round(adjustment.compliance_rate * 100)}% of days
+                      on target, averaging {adjustment.avg_daily_intake} kcal, weekly training volume{' '}
+                      {adjustment.weekly_volume} kg.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="tip-actions">
+              {adjustment ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-modal-submit tip-accept-btn"
+                    onClick={handleConfirmTip}
+                    disabled={isDeciding}
+                  >
+                    {isDeciding
+                      ? 'Saving...'
+                      : adjustment.has_change
+                        ? `Apply ${adjustment.proposed_goal} kcal`
+                        : 'Got it'}
+                  </button>
+                  {adjustment.has_change && (
+                    <button
+                      type="button"
+                      className="tip-decline-btn"
+                      onClick={handleDeclineTip}
+                      disabled={isDeciding}
+                    >
+                      Keep {adjustment.previous_goal} kcal
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-modal-submit tip-accept-btn"
+                  onClick={handleOpenTip}
+                  disabled={!adjustmentError}
+                >
+                  {adjustmentError ? 'Try again' : 'Checking...'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

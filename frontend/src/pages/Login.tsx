@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { loginUser } from '../services/api'
+import { describeError } from '../utils/errors.js'
 import type { UserProfile } from '../types'
 import '../styles/onboarding.css'
 import '../styles/login.css'
@@ -26,7 +27,7 @@ function Login() {
       setProfile(signedInProfile)
       window.setTimeout(() => navigate('/'), 1600)
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not look up this profile')
+      setNotice(describeError(error, "We couldn't sign you in. Please try again."))
     } finally {
       setIsSubmitting(false)
     }

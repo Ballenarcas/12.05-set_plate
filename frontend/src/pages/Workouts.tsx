@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { deleteRoutine, fetchRoutines } from '../services/api'
+import { describeError } from '../utils/errors.js'
 import type { ActiveExercise, Routine } from '../types/workout'
 
 function createActiveExercises(routine: Routine): ActiveExercise[] {
@@ -11,6 +12,8 @@ function createActiveExercises(routine: Routine): ActiveExercise[] {
     name: exercise.name,
     previous_weight_kg: null,
     previous_reps: null,
+    target_sets: exercise.target_sets,
+    target_reps: exercise.target_reps,
     sets: Array.from({ length: exercise.target_sets ?? 1 }, (_, index) => ({
       set_number: index + 1,
       weight_kg: 0,
@@ -34,7 +37,7 @@ function Workouts() {
   useEffect(() => {
     fetchRoutines()
       .then(setRoutines)
-      .catch((requestError: Error) => setError(requestError.message))
+      .catch((requestError: Error) => setError(describeError(requestError, "We couldn't load your routines. Please try again.")))
       .finally(() => setIsLoading(false))
   }, [])
 

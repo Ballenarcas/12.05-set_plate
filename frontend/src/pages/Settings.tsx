@@ -1,54 +1,88 @@
-import { useState, useEffect } from 'react'
-import { User, Save, LogOut } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { AlertCircle, CheckCircle2, Loader2, LogOut, Save, User } from 'lucide-react'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { getCurrentUser, updateUserSettings } from '../services/api'
+import { clearDashboardCache, getCurrentUser, updateUserSettings } from '../services/api'
+import { describeError } from '../utils/errors.js'
+
+type Notice = { kind: 'success' | 'error'; text: string }
 
 function Settings() {
   const user = getCurrentUser()
+  const navigate = useNavigate()
 
   const [age, setAge] = useState(user?.age?.toString() || '')
   const [weight, setWeight] = useState(user?.weight?.toString() || '')
   const [height, setHeight] = useState(user?.height?.toString() || '')
   const [gender, setGender] = useState(user?.gender || 'Male')
   const [objective, setObjective] = useState<string>(user?.objective || 'Hypertrophy')
+  const [notice, setNotice] = useState<Notice | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLogoutOpen, setIsLogoutOpen] = useState(false)
 
   useEffect(() => {
-    if (user) {
-      setAge(user.age?.toString() || '')
-      setWeight(user.weight?.toString() || '')
-      setHeight(user.height?.toString() || '')
-      setGender(user.gender || 'Male')
-      setObjective(user.objective || 'Hypertrophy')
-    }
-  }, [user?.id])
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), notice.kind === 'success' ? 5000 : 8000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    const ageValue = Number(age)
+    const weightValue = Number(weight)
+    const heightValue = Number(height)
+
     if (!age.trim() || !weight.trim() || !height.trim() || !gender.trim() || !objective.trim()) {
-      return alert("All fields must be filled out.")
+      setNotice({ kind: 'error', text: 'Fill in every field before saving your changes.' })
+      return
+    }
+    if (!Number.isInteger(ageValue) || ageValue < 12 || ageValue > 120) {
+      setNotice({ kind: 'error', text: 'Age must be a whole number between 12 and 120.' })
+      return
+    }
+    if (!Number.isFinite(weightValue) || weightValue < 20 || weightValue > 350) {
+      setNotice({ kind: 'error', text: 'Weight must be between 20 and 350 kg.' })
+      return
+    }
+    if (!Number.isInteger(heightValue) || heightValue < 80 || heightValue > 250) {
+      setNotice({ kind: 'error', text: 'Height must be a whole number between 80 and 250 cm.' })
+      return
     }
 
+    setIsSaving(true)
+    setNotice(null)
     try {
-      if (!user?.id) throw new Error('Your user profile could not be found. Please sign in again.')
+      if (!user?.id) throw new Error('Your profile could not be found. Please sign in again.')
       await updateUserSettings(user.id, {
-        age: parseInt(age, 10),
-        weight: parseFloat(weight),
-        height: parseInt(height, 10),
+        age: ageValue,
+        weight: weightValue,
+        height: heightValue,
         gender,
         objective,
       })
-      alert("Changes have been successfully saved!")
+      setNotice({
+        kind: 'success',
+        text: 'Profile updated. Your next calorie and workout estimates will use these details.',
+      })
     } catch (error) {
-      alert("Failed to save changes. Please try again.")
-      console.error(error)
+      setNotice({ kind: 'error', text: describeError(error, "We couldn't save your changes. Please try again.") })
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  const handleLogout = () => {
-    // Logique de déconnexion (à adapter plus tard)
-    alert("You have been logged out.")
-    window.location.href = '/login'
+  const confirmLogout = () => {
+    try {
+      localStorage.removeItem('set_plate_user')
+      sessionStorage.removeItem('set_plate_active_workout')
+      sessionStorage.removeItem('set_plate_pending_exercise')
+    } catch {
+      // The redirect still signs the user out when storage is unavailable.
+    }
+    clearDashboardCache()
+    setIsLogoutOpen(false)
+    navigate('/login', { replace: true })
   }
 
   return (
@@ -114,6 +148,36 @@ function Settings() {
         .settings-btn:hover {
           transform: translateY(-2px);
           box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+        }
+        .settings-btn:disabled {
+          opacity: 0.7;
+          cursor: progress;
+          transform: none;
+          box-shadow: none;
+        }
+        .settings-notice {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.6rem;
+          margin-top: 1.5rem;
+          padding: 0.75rem 0.9rem;
+          border-radius: 12px;
+          font-size: 0.9rem;
+          line-height: 1.45;
+        }
+        .settings-notice svg {
+          flex: none;
+          margin-top: 0.1rem;
+        }
+        .settings-notice.success {
+          color: #bbf7d0;
+          background: rgba(34, 197, 94, 0.12);
+          border: 1px solid rgba(34, 197, 94, 0.35);
+        }
+        .settings-notice.error {
+          color: #fecaca;
+          background: rgba(248, 113, 113, 0.12);
+          border: 1px solid rgba(248, 113, 113, 0.35);
         }
         .logout-btn {
           display: flex;
@@ -247,20 +311,50 @@ function Settings() {
               </select>
             </div>
 
-            <button type="submit" className="settings-btn">
-              <Save size={20} />
-              Save Changes
+            {notice && (
+              <div
+                className={`settings-notice ${notice.kind}`}
+                role={notice.kind === 'error' ? 'alert' : 'status'}
+              >
+                {notice.kind === 'success'
+                  ? <CheckCircle2 size={18} aria-hidden="true" />
+                  : <AlertCircle size={18} aria-hidden="true" />}
+                <span>{notice.text}</span>
+              </div>
+            )}
+
+            <button type="submit" className="settings-btn" disabled={isSaving}>
+              {isSaving
+                ? <><Loader2 size={20} className="animate-spin" aria-hidden="true" /> Saving...</>
+                : <><Save size={20} aria-hidden="true" /> Save Changes</>}
             </button>
           </form>
 
-          {/* Nouveau bouton de déconnexion */}
-          <button onClick={handleLogout} className="logout-btn">
+          <button onClick={() => setIsLogoutOpen(true)} className="logout-btn">
             <LogOut size={20} />
             Log Out
           </button>
 
         </div>
       </section>
+
+      {isLogoutOpen && (
+        <div className="modal-backdrop">
+          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+            <p className="eyebrow">Your session</p>
+            <h2 id="logout-title">Log out of SET&PLATE?</h2>
+            <p>Your meals and workouts stay in your account. You can sign back in any time.</p>
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => setIsLogoutOpen(false)}>
+                Stay signed in
+              </button>
+              <button className="danger-action" type="button" onClick={confirmLogout}>
+                Log out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,13 +3,50 @@
 const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
 const PURCHASE_TIMEOUT_MS = 10_000
+const WRITE_TIMEOUT_MS = 15000
+const LOGIN_TIMEOUT_MS = 15000
+const DASHBOARD_TIMEOUT_MS = 15000
+const LLM_TIMEOUT_MS = 20000
 const dashboardRequests = new Map<string, Promise<DashboardSummary>>()
 const DASHBOARD_CACHE_PREFIX = 'set_plate_dashboard:'
 const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
-import type { Routine, RoutineCreatePayload, WorkoutHistoryEntry } from '../types/workout'
+const nutritionRequests = new Map<string, Promise<TodayNutritionData>>()
+const adjustmentRequests = new Map<string, Promise<CalorieAdjustmentData>>()
+const NUTRITION_CACHE_PREFIX = 'set_plate_nutrition:'
+const NUTRITION_CACHE_TTL_MS = 60_000
+import type {
+  LiveWorkoutAdjustmentRequest,
+  LiveWorkoutAdjustmentResponse,
+  Routine,
+  RoutineCreatePayload,
+  WorkoutHistoryEntry,
+} from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 import type { PremiumPlan, UserProfile } from '../types'
+
+export interface PlanExercise {
+  exercise_id: string
+  name: string
+  sets: number
+  reps: number
+}
+
+export interface WorkoutPlanSummary {
+  id: string
+  routine_id: string | null
+  title: string
+  plan_date: string
+  is_rest_day: boolean
+  ai_adjusted: boolean
+  ai_reasoning: string | null
+  exercises: PlanExercise[]
+}
+
+export interface CompletedWorkoutToday {
+  id: string
+  name: string
+}
 
 export interface DashboardSummary {
   user_name: string
@@ -30,6 +67,8 @@ export interface DashboardSummary {
     exercise_count: number
     estimated_duration_minutes: number
   } | null
+  plan: WorkoutPlanSummary | null
+  completed_workout_today: CompletedWorkoutToday | null
 }
 
 function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
@@ -54,7 +93,7 @@ export function getCachedDashboardSummary(): DashboardSummary | null {
 
 export async function fetchDashboardSummary(options: { forceRefresh?: boolean } = {}): Promise<DashboardSummary> {
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Complete onboarding before loading the dashboard')
+  if (!user?.id) throw new Error('Finish setting up your profile to see your dashboard')
   const userId = user.id
   const cached = readDashboardCache(userId)
   if (!options.forceRefresh && cached && Date.now() - cached.at < DASHBOARD_CACHE_TTL_MS) return cached.data
@@ -62,10 +101,10 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
   if (inflight) return inflight
 
   const request = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}`, {
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error('Unable to load dashboard summary')
+      if (!response.ok) throw new Error("We couldn't load your dashboard. Please try again.")
       const data = await response.json() as DashboardSummary
       try {
         sessionStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now() }))
@@ -82,6 +121,17 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
   return request
 }
 
+export async function planTodaysWorkout(userId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/v1/workouts/plan-today?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't build today's workout. Please try again.")
+  }
+  clearDashboardCache()
+}
+
 let routinesRequest: Promise<Routine[]> | null = null
 
 export function clearRoutinesCache(): void {
@@ -91,12 +141,12 @@ export function clearRoutinesCache(): void {
 export async function fetchRoutines(): Promise<Routine[]> {
   if (routinesRequest) return routinesRequest
   const user = getCurrentUser()
-  if (!user?.id) throw new Error('Complete onboarding before loading routines')
+  if (!user?.id) throw new Error('Finish setting up your profile to see your routines')
   routinesRequest = fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error('Unable to load routines')
+      if (!response.ok) throw new Error("We couldn't load your routines. Please try again.")
       return response.json() as Promise<Routine[]>
     })
     .catch((error: unknown) => {
@@ -207,10 +257,48 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.detail || 'Unable to save workout')
+    throw new Error("We couldn't save your workout. Please try again.")
   }
   return response.json() as Promise<{ id: string; status: string }>
+}
+
+function workoutAdjustmentError(response: Response, payload: unknown): string {
+  if (response.status === 422) {
+    return "The AI couldn't read your workout data. Refresh the page and try again."
+  }
+  if (payload && typeof payload === 'object' && 'detail' in payload) {
+    const detail = (payload as { detail?: unknown }).detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+  }
+  return 'Unable to get AI adjustments'
+}
+
+export async function requestWorkoutAdjustment(
+  userId: string,
+  payload: LiveWorkoutAdjustmentRequest,
+): Promise<LiveWorkoutAdjustmentResponse> {
+  const query = new URLSearchParams({ user_id: userId })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/workouts/adjust?${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error('The AI trainer is taking too long. Please try again.', { cause: error })
+    }
+    throw error
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    if (response.status === 422) console.error('Workout adjustment request rejected', JSON.stringify(body))
+    throw new Error(workoutAdjustmentError(response, body))
+  }
+  return response.json() as Promise<LiveWorkoutAdjustmentResponse>
 }
 
 export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
@@ -219,8 +307,7 @@ export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistor
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.detail || 'Unable to load workout history')
+    throw new Error("We couldn't load your workout history. Please try again.")
   }
   const result = await response.json() as { items: WorkoutHistoryEntry[] }
   return result.items
@@ -233,35 +320,38 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.detail || 'Unable to delete workout history entry')
+    throw new Error("We couldn't remove that workout. Please try again.")
   }
 }
 
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
-  const response = await fetch(`${API_URL}/api/v1/users/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+      signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error('Sign-in is taking longer than expected. Check your connection and try again.', { cause: error })
+    }
+    throw error
+  }
 
   if (!response.ok) {
-    let errorMessage = `Server error (${response.status})`
-    try {
-      const errorData = await response.json()
-      if (typeof errorData.detail === 'string') errorMessage = errorData.detail
-    } catch {
-      // Keep the status-based error when the server response is not JSON.
+    if (response.status === 401 || response.status === 404) {
+      throw new Error('That email and password do not match. Please try again.')
     }
-    throw new Error(errorMessage)
+    throw new Error("We couldn't sign you in right now. Please try again.")
   }
 
   const profile = await response.json() as import('../types').UserProfile
   try {
     localStorage.setItem('set_plate_user', JSON.stringify(profile))
   } catch {
-    throw new Error('Could not save the signed-in profile in this browser')
+    throw new Error("We couldn't keep you signed in on this device. Please try again.")
   }
   return profile
 }
@@ -279,7 +369,7 @@ export interface TrainerInsightResponse {
 
 export async function getHealth(): Promise<{ status: string }> {
   const response = await fetch(`${API_URL}/api/v1/health`)
-  if (!response.ok) throw new Error('Unable to reach SET&PLATE API')
+  if (!response.ok) throw new Error("We couldn't reach SET&PLATE. Check your connection and try again.")
   return response.json() as Promise<{ status: string }>
 }
 
@@ -297,7 +387,7 @@ export async function generateTrainerInsight(
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error('Unable to generate trainer insight')
+      if (!response.ok) throw new Error("We couldn't get a trainer tip right now. Please try again later.")
       return response.json() as Promise<TrainerInsightResponse>
     })
     .finally(() => insightRequests.delete(requestKey))
@@ -346,7 +436,7 @@ export async function parseNaturalLanguage(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, threshold }),
   })
-  if (!response.ok) throw new Error('Failed to parse natural language')
+  if (!response.ok) throw new Error("We couldn't understand that. Please rephrase and try again.")
   return response.json() as Promise<ParseNaturalLanguageResponse>
 }
 
@@ -358,7 +448,7 @@ export async function conversationalSetup(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   })
-  if (!response.ok) throw new Error('Conversational setup request failed')
+  if (!response.ok) throw new Error("We couldn't continue the setup. Please try again.")
   return response.json() as Promise<ConversationalSetupResponse>
 }
 
@@ -398,7 +488,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
-      if (!response.ok) throw new Error('Failed to fetch exercises')
+      if (!response.ok) throw new Error("We couldn't load exercises. Please try again.")
       const data = (await response.json()) as import('../types').ExerciseListResponse
       exerciseListCache.set(queryString, { at: Date.now(), data })
       return data
@@ -413,7 +503,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
 
 export async function fetchExerciseCategories(): Promise<string[]> {
   const response = await fetch(`${API_URL}/api/v1/workouts/exercises/categories`)
-  if (!response.ok) throw new Error('Failed to fetch categories')
+  if (!response.ok) throw new Error("We couldn't load exercise categories. Please try again.")
   const data = await response.json()
   return data.categories ?? []
 }
@@ -427,7 +517,7 @@ export async function fetchExerciseMuscleGroups(): Promise<string[]> {
 
 export async function fetchExerciseById(exerciseId: string) {
   const response = await fetch(`${API_URL}/api/v1/workouts/exercises/${exerciseId}`)
-  if (!response.ok) throw new Error(`Failed to fetch exercise ${exerciseId}`)
+  if (!response.ok) throw new Error("We couldn't load that exercise. Please try again.")
   return response.json()
 }
 
@@ -436,7 +526,7 @@ export async function triggerWgerImport(maxItems?: number) {
     ? `${API_URL}/api/v1/workouts/exercises/import-wger?max_items=${maxItems}`
     : `${API_URL}/api/v1/workouts/exercises/import-wger`
   const response = await fetch(url, { method: 'POST' })
-  if (!response.ok) throw new Error('Failed to import exercises from wger')
+  if (!response.ok) throw new Error("We couldn't import exercises right now. Please try again.")
   return response.json()
 }
 
@@ -494,19 +584,12 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
   })
 
   if (!response.ok) {
-    let errorMsg = `Server error (${response.status})`
-    try {
-      const errorData = await response.json()
-      if (errorData.detail) errorMsg = errorData.detail
-    } catch {
-      // Ignore json parse error
-    }
-    throw new Error(errorMsg)
+    throw new Error("We couldn't save your profile. Please try again.")
   }
 
   const data = await response.json()
   if (!data.saved_to_supabase) {
-    throw new Error('User was not saved to database. Please try again.')
+    throw new Error("We couldn't save your account. Please try again.")
   }
 
   localProfile.id = data.user_id
@@ -598,10 +681,10 @@ export async function updateUserSettings(
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.detail || `Unable to save settings (${response.status})`)
+    throw new Error("We couldn't save your settings. Please try again.")
   }
 
   try {
@@ -633,18 +716,121 @@ export interface MealLogItem {
 export interface TodayNutritionData {
   consumed_calories: number
   daily_goal: number
-  active_calories: number
   calories_progress_percentage: number
+  remaining_calories: number
+  target_proteins_g: number
+  target_carbs_g: number
+  target_fats_g: number
+  remaining_proteins_g: number
+  remaining_carbs_g: number
+  remaining_fats_g: number
   carbs_g: number
   proteins_g: number
   fats_g: number
   meals: MealLogItem[]
 }
 
+export function localDayWindow(): { today_start: string; today_end: string } {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { today_start: start.toISOString(), today_end: end.toISOString() }
+}
+
+function nutritionCacheKey(userId: string, windowStart: string): string {
+  return `${NUTRITION_CACHE_PREFIX}${userId}:${windowStart}`
+}
+
+export function getCachedTodayNutrition(userId: string): TodayNutritionData | null {
+  if (!userId) return null
+  try {
+    const window = localDayWindow()
+    const saved = sessionStorage.getItem(nutritionCacheKey(userId, window.today_start))
+    if (!saved) return null
+    const cached = JSON.parse(saved) as { data: TodayNutritionData; at: number }
+    if (!cached?.data || typeof cached.at !== 'number') return null
+    if (Date.now() - cached.at > NUTRITION_CACHE_TTL_MS) return null
+    return cached.data
+  } catch {
+    return null
+  }
+}
+
 export async function fetchTodayNutrition(userId: string): Promise<TodayNutritionData> {
-  const response = await fetch(`${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}`)
+  const window = localDayWindow()
+  const requestKey = `${userId}:${window.today_start}`
+  const existing = nutritionRequests.get(requestKey)
+  if (existing) return existing
+
+  const request = fetch(
+    `${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}&today_start=${encodeURIComponent(window.today_start)}&today_end=${encodeURIComponent(window.today_end)}`,
+    { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
+  )
+    .then((response) => {
+      if (!response.ok) throw new Error("We couldn't load today's nutrition. Please try again.")
+      return response.json() as Promise<TodayNutritionData>
+    })
+    .then((data) => {
+      try {
+        sessionStorage.setItem(
+          nutritionCacheKey(userId, window.today_start),
+          JSON.stringify({ data, at: Date.now() }),
+        )
+      } catch {
+        // The fresh response remains usable when browser storage is unavailable.
+      }
+      return data
+    })
+    .finally(() => nutritionRequests.delete(requestKey))
+
+  nutritionRequests.set(requestKey, request)
+  return request
+}
+
+export interface CalorieAdjustmentData {
+  adjustment_id: string | null
+  previous_goal: number
+  proposed_goal: number
+  has_change: boolean
+  reason: string
+  status: 'pending' | 'accepted' | 'rejected' | 'advice'
+  objective: string
+  avg_daily_intake: number
+  compliance_rate: number
+  weekly_volume: number
+}
+
+export async function fetchCalorieAdjustment(userId: string): Promise<CalorieAdjustmentData> {
+  const existing = adjustmentRequests.get(userId)
+  if (existing) return existing
+
+  const request = fetch(
+    `${API_URL}/api/v1/ai/calorie-adjustment?user_id=${encodeURIComponent(userId)}`,
+    { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
+  )
+    .then((response) => {
+      if (!response.ok) throw new Error("We couldn't check your progress right now. Please try again.")
+      return response.json() as Promise<CalorieAdjustmentData>
+    })
+    .finally(() => adjustmentRequests.delete(userId))
+
+  adjustmentRequests.set(userId, request)
+  return request
+}
+
+export async function decideCalorieAdjustment(
+  userId: string,
+  adjustmentId: string,
+  status: 'accepted' | 'rejected',
+): Promise<{ calorie_goal: number }> {
+  const response = await fetch(`${API_URL}/api/v1/ai/calorie-adjustment/decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, adjustment_id: adjustmentId, status }),
+  })
   if (!response.ok) {
-    throw new Error('Failed to fetch today nutrition from database')
+    throw new Error("We couldn't update your goal. Please try again.")
   }
   return response.json()
 }
@@ -662,7 +848,7 @@ export interface FoodSearchItem {
 export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
   const response = await fetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
   if (!response.ok) {
-    throw new Error(`Food search unavailable (${response.status}). Try again.`)
+    throw new Error('Food search is not available right now. Please try again.')
   }
   return response.json()
 }
@@ -685,8 +871,7 @@ export async function addMealLog(payload: MealCreateRequest): Promise<MealLogIte
     body: JSON.stringify(payload),
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.detail || 'Failed to save meal to database')
+    throw new Error("We couldn't save this meal. Please try again.")
   }
   clearDashboardCache()
   return response.json()
@@ -697,7 +882,7 @@ export async function deleteMealLog(mealId: string): Promise<void> {
     method: 'DELETE',
   })
   if (!response.ok) {
-    throw new Error('Failed to delete meal from database')
+    throw new Error("We couldn't remove this meal. Please try again.")
   }
   clearDashboardCache()
 }

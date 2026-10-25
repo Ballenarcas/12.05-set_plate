@@ -1,10 +1,13 @@
 import calendar
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
 
 from app.db.supabase_client import get_supabase
 from app.schemas.premium import PremiumPlan, PremiumPurchaseResponse
+
+logger = logging.getLogger(__name__)
 
 USERS_TABLE_NAME = os.getenv("USERS_TABLE_NAME", "users")
 SUBSCRIPTIONS_TABLE_NAME = os.getenv("SUBSCRIPTIONS_TABLE_NAME", "subscriptions")
@@ -76,7 +79,12 @@ def purchase_premium_db(user_id: str, plan: PremiumPlan) -> PremiumPurchaseRespo
             .execute()
         )
     except Exception as err:
-        raise RuntimeError("Could not read the subscription from the database") from err
+        logger.exception("Could not read the subscription table")
+        raise RuntimeError(
+            "Could not read the subscription from the database. The backend role needs access to "
+            "the subscriptions table; run backend/app/db/migrations/grant_subscriptions_access.sql "
+            "in the Supabase SQL editor."
+        ) from err
 
     existing = subscription_result.data[0] if subscription_result.data else None
     current_end = _parse_timestamp(existing.get("current_period_end")) if existing else None
@@ -115,7 +123,11 @@ def purchase_premium_db(user_id: str, plan: PremiumPlan) -> PremiumPurchaseRespo
         )
         client.table(USERS_TABLE_NAME).update({"is_premium": True}).eq("id", user_id).execute()
     except Exception as err:
-        raise RuntimeError("Could not activate premium. Please try again.") from err
+        logger.exception("Could not persist the premium subscription")
+        raise RuntimeError(
+            "Could not activate premium. The backend role needs write access to the subscriptions "
+            "table; run backend/app/db/migrations/grant_subscriptions_access.sql in the Supabase SQL editor."
+        ) from err
 
     return PremiumPurchaseResponse(
         status="success",

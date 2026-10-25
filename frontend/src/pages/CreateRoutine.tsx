@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
@@ -32,6 +32,7 @@ function CreateRoutine() {
       target_reps: exercise.target_reps ?? 10,
     })) ?? [])
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState(false)
+  const [replacementIndex, setReplacementIndex] = useState<number | null>(null)
   const [draggedExerciseId, setDraggedExerciseId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +53,19 @@ function CreateRoutine() {
         target_sets: 3,
         target_reps: 10,
       }])
+  }
+
+  function selectExercise(exercise: Exercise) {
+    if (replacementIndex === null) {
+      addExercise(exercise)
+      return
+    }
+
+    setSelectedExercises((current) => current.map((selected, index) =>
+      index === replacementIndex
+        ? { ...selected, exercise_id: exercise.id, name: exercise.name }
+        : selected))
+    setReplacementIndex(null)
   }
 
   function updateExercise(index: number, field: 'target_sets' | 'target_reps', value: number) {
@@ -209,6 +223,17 @@ function CreateRoutine() {
                   <ArrowDown size={16} aria-hidden="true" />
                 </button>
                 <button
+                  className="routine-reorder-button"
+                  type="button"
+                  aria-label={`Replace ${exercise.name}`}
+                  onClick={() => {
+                    setReplacementIndex(index)
+                    setIsExercisePickerOpen(true)
+                  }}
+                >
+                  <RefreshCw size={16} aria-hidden="true" />
+                </button>
+                <button
                   className="routine-remove-exercise"
                   type="button"
                   aria-label={`Remove ${exercise.name}`}
@@ -218,13 +243,38 @@ function CreateRoutine() {
                 </button>
               </div>
             </div>
-            <div className="routine-exercise-config-grid">
-              <label>Sets
-                <input type="number" min="1" max="30" value={exercise.target_sets} onChange={(event) => updateExercise(index, 'target_sets', Number(event.target.value))} />
-              </label>
-              <label>Reps
-                <input type="number" min="1" max="30" value={exercise.target_reps} onChange={(event) => updateExercise(index, 'target_reps', Number(event.target.value))} />
-              </label>
+            <div className="routine-target-table">
+              <div className="set-row set-heading routine-target-heading" aria-hidden="true"><span>SET</span><span>REPS</span><span /></div>
+              {Array.from({ length: exercise.target_sets }, (_, setIndex) => (
+                <div className="set-row routine-target-row" key={setIndex}>
+                  <span className="routine-target-number">{setIndex + 1}</span>
+                  <input
+                    aria-label={`Target reps for ${exercise.name}, set ${setIndex + 1}`}
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={exercise.target_reps}
+                    onChange={(event) => updateExercise(index, 'target_reps', Number(event.target.value))}
+                  />
+                  <button
+                    className="routine-target-remove"
+                    type="button"
+                    aria-label={`Remove set ${setIndex + 1} from ${exercise.name}`}
+                    disabled={exercise.target_sets <= 1}
+                    onClick={() => updateExercise(index, 'target_sets', exercise.target_sets - 1)}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+              <button
+                className="secondary-action routine-target-add"
+                type="button"
+                onClick={() => updateExercise(index, 'target_sets', exercise.target_sets + 1)}
+                disabled={exercise.target_sets >= 30}
+              >
+                <Plus size={16} aria-hidden="true" /> Add Set
+              </button>
             </div>
           </article>
         ))}
@@ -234,10 +284,13 @@ function CreateRoutine() {
       {error && <p className="routine-builder-error" role="alert">{error}</p>}
       <SelectExerciseModal
         isOpen={isExercisePickerOpen}
-        onClose={() => setIsExercisePickerOpen(false)}
-        onSelectExercise={addExercise}
-        excludedExerciseIds={selectedExercises.map((exercise) => exercise.exercise_id)}
-        excludedExerciseNames={selectedExercises.map((exercise) => exercise.name)}
+        onClose={() => {
+          setIsExercisePickerOpen(false)
+          setReplacementIndex(null)
+        }}
+        onSelectExercise={selectExercise}
+        excludedExerciseIds={selectedExercises.filter((_, index) => index !== replacementIndex).map((exercise) => exercise.exercise_id)}
+        excludedExerciseNames={selectedExercises.filter((_, index) => index !== replacementIndex).map((exercise) => exercise.name)}
       />
       {successMessage && (
         <div className="routine-save-backdrop">

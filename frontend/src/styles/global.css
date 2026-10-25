@@ -297,7 +297,13 @@
 .routine-reorder-button:disabled { cursor: not-allowed; opacity: 0.35; }
 .routine-exercise-config.is-dragging { border-color: var(--green); opacity: 0.55; }
 .routine-remove-exercise { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border: 1px solid rgba(255, 105, 105, 0.25); border-radius: 0.6rem; color: #ff9c9c; background: rgba(255, 105, 105, 0.07); cursor: pointer; }
-.routine-exercise-config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.routine-target-table { display: grid; gap: 0.4rem; }
+.routine-target-row { grid-template-columns: minmax(2.3rem, 0.65fr) minmax(0, 1fr) 2.4rem; gap: 0.25rem; }
+.routine-target-number { display: grid; min-height: 2.65rem; place-items: center; border-radius: 0.65rem; color: #fff; background: #252527; font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.routine-target-remove { display: grid; min-width: 0; min-height: 2.65rem; place-items: center; border: 1px solid transparent; border-radius: 0.65rem; color: var(--text-muted); background: transparent; cursor: pointer; }
+.routine-target-remove:disabled { cursor: not-allowed; opacity: 0.3; }
+.routine-target-add { min-height: 2.65rem; justify-content: center; border: 1px dashed #444; color: var(--green); background: transparent; }
+.routine-target-add:disabled { cursor: not-allowed; opacity: 0.45; }
 .routine-builder-empty { padding: 1rem; border: 1px dashed #3a3a3a; border-radius: 0.75rem; color: var(--text-muted); font-size: 0.78rem; text-align: center; }
 .routine-builder-empty-error { border-color: rgba(255, 107, 107, 0.42); color: #ff8585; }
 .routine-builder-submit { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }

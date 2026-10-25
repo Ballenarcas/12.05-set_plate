@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, ChevronRight, Dumbbell } from 'lucide-react';
-import { fetchExercises } from '../../services/api';
+import { X, Search, Plus, Dumbbell } from 'lucide-react';
+import { fetchExerciseMuscleGroups, fetchExercises } from '../../services/api';
 import type { Exercise } from '../../types';
 
 interface SelectExerciseModalProps {
@@ -22,34 +22,69 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
 }) => {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [resolvedSearchQuery, setResolvedSearchQuery] = useState<string | null>(null);
+  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState('');
+  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
+  const [muscleGroupsLoaded, setMuscleGroupsLoaded] = useState(false);
+  const [muscleGroupError, setMuscleGroupError] = useState<string | null>(null);
+  const [resolvedExerciseRequest, setResolvedExerciseRequest] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const loading = isOpen && resolvedSearchQuery !== searchQuery;
+  const exerciseRequestKey = `${searchQuery}|${selectedMuscleGroup}`;
+  const loading = isOpen && resolvedExerciseRequest !== exerciseRequestKey;
 
   useEffect(() => {
     if (!isOpen) return;
 
     let isCurrent = true;
 
-    fetchExercises({ q: searchQuery.trim() || undefined, limit: 30, compact: true })
-      .then((response) => {
+    fetchExerciseMuscleGroups()
+      .then((groups) => {
         if (isCurrent) {
-          setExercises(response.items);
-          setLoadError(null);
-          setResolvedSearchQuery(searchQuery);
+          setMuscleGroups(groups);
+          setMuscleGroupError(null);
+          setMuscleGroupsLoaded(true);
         }
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (isCurrent) {
-          setLoadError(error instanceof Error ? error.message : 'Unable to load exercises.');
-          setResolvedSearchQuery(searchQuery);
+          setMuscleGroupError(error instanceof Error ? error.message : 'Unable to load muscle groups.');
+          setMuscleGroupsLoaded(true);
         }
       });
 
     return () => {
       isCurrent = false;
     };
-  }, [searchQuery, isOpen]);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let isCurrent = true;
+
+    fetchExercises({
+      q: searchQuery.trim() || undefined,
+      muscle_group: selectedMuscleGroup || undefined,
+      limit: 30,
+      compact: true,
+    })
+      .then((response) => {
+        if (isCurrent) {
+          setExercises(response.items);
+          setLoadError(null);
+          setResolvedExerciseRequest(exerciseRequestKey);
+        }
+      })
+      .catch((error: unknown) => {
+        if (isCurrent) {
+          setLoadError(error instanceof Error ? error.message : 'Unable to load exercises.');
+          setResolvedExerciseRequest(exerciseRequestKey);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [searchQuery, selectedMuscleGroup, isOpen, exerciseRequestKey]);
 
   if (!isOpen) return null;
 
@@ -146,6 +181,30 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
           <Search size={17} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7c7c80', pointerEvents: 'none' }} />
         </div>
 
+        <label style={{ display: 'grid', gap: '6px', marginBottom: '14px', color: '#a1a1a6', fontSize: '12px', fontWeight: 600 }}>
+          Muscle group
+          <select
+            aria-label="Filter exercises by muscle group"
+            value={selectedMuscleGroup}
+            onChange={(event) => setSelectedMuscleGroup(event.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              backgroundColor: '#28282a',
+              border: 'none',
+              borderRadius: '12px',
+              color: '#ffffff',
+              fontSize: '13px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <option value="">All muscle groups</option>
+            {muscleGroups.map((group) => <option key={group} value={group}>{group}</option>)}
+          </select>
+          {muscleGroupError && <span role="alert" style={{ color: '#ff9c9c', fontWeight: 400 }}>{muscleGroupError}</span>}
+          {!muscleGroupsLoaded && <span role="status" style={{ color: '#8e8e93', fontWeight: 400 }}>Loading muscle groups...</span>}
+        </label>
+
         {/* Liste des exercices */}
         <div
           style={{
@@ -204,7 +263,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
                     </div>
                   </div>
                 </div>
-                <ChevronRight size={16} style={{ color: '#545458', flexShrink: 0, marginLeft: '8px' }} />
+                <Plus size={16} style={{ color: '#545458', flexShrink: 0, marginLeft: '8px' }} />
               </div>
             ))
           )}

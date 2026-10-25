@@ -82,8 +82,12 @@
 .secondary-action { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: 0.4rem; padding: 0 0.8rem; border: 1px solid var(--line); border-radius: 0.7rem; color: #fff; background: var(--surface); cursor: pointer; font-size: 0.72rem; font-weight: 700; }
 .routine-list { display: grid; gap: 0.9rem; }
 .workout-history-section { margin-bottom: 1.5rem; }
+.workout-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
+.workout-history-heading .section-title { margin: 0; }
+.workout-history-heading .secondary-action { min-height: 2.4rem; }
 .workout-history-list { display: grid; gap: 0.75rem; }
 .workout-history-card { padding: 0.95rem; }
+.workout-history-card .routine-card-heading h3 { margin: 0; font-size: 1.1rem; }
 .workout-history-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.65rem; }
 .history-delete-button { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 1px solid rgba(255, 105, 105, 0.3); border-radius: 0.7rem; color: #ff9c9c; background: rgba(255, 105, 105, 0.08); cursor: pointer; }
 .history-delete-button:disabled { cursor: wait; opacity: 0.55; }

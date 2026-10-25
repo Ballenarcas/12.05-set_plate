@@ -2,8 +2,9 @@ from uuid import UUID
 
 from app.schemas.workout import RoutineSummary
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
+from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 from app.db.supabase_client import get_supabase
-from app.services import workout_service, wger_importer
+from app.services import workout_service, workout_statistics_service, wger_importer
 from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
 from app.schemas.workout import (
     LiveWorkoutAdjustmentRequest,
@@ -28,6 +29,16 @@ class WorkoutFacade:
 
     def list_history(self, user_id: UUID, limit: int = 30) -> WorkoutHistoryResponse:
         return workout_service.list_workout_history(user_id, limit)
+
+    def get_statistics(
+        self,
+        user_id: UUID,
+        range_key: WorkoutStatisticsRange,
+        timezone_offset_minutes: int = 0,
+    ) -> WorkoutStatisticsResponse:
+        return workout_statistics_service.get_workout_statistics(
+            user_id, range_key, timezone_offset_minutes
+        )
 
     def delete_history_entry(self, user_id: UUID, workout_id: UUID) -> None:
         workout_service.delete_workout_history_entry(user_id, workout_id)

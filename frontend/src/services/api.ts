@@ -19,6 +19,8 @@ import type {
   LiveWorkoutAdjustmentResponse,
   Routine,
   WorkoutHistoryEntry,
+  WorkoutStatistics,
+  WorkoutStatisticsRange,
 } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 
@@ -222,6 +224,27 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
   if (!response.ok) {
     throw new Error("We couldn't remove that workout. Please try again.")
   }
+}
+
+export async function fetchWorkoutStatistics(
+  userId: string,
+  range: WorkoutStatisticsRange,
+  signal?: AbortSignal,
+): Promise<WorkoutStatistics> {
+  const query = new URLSearchParams({
+    user_id: userId,
+    range,
+    timezone_offset_minutes: String(new Date().getTimezoneOffset()),
+  })
+  const timeout = AbortSignal.timeout(DASHBOARD_TIMEOUT_MS)
+  const response = await fetch(`${API_URL}/api/v1/workouts/statistics?${query}`, {
+    cache: 'no-store',
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your workout statistics. Please try again.")
+  }
+  return response.json() as Promise<WorkoutStatistics>
 }
 
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {

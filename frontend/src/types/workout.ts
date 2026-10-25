@@ -78,6 +78,34 @@ export interface WorkoutHistoryEntry {
   }>
 }
 
+export type WorkoutStatisticsRange = '1W' | '1M' | '3M'
+
+export interface WorkoutStatisticsVolumePoint {
+  date: string
+  volume_kg: number
+}
+
+export interface WorkoutStatisticsMuscleGroup {
+  muscle_group: string
+  volume_kg: number
+}
+
+export interface WorkoutStatistics {
+  range: WorkoutStatisticsRange
+  start_date: string
+  end_date: string
+  total_workouts: number
+  total_volume_kg: number
+  total_duration_seconds: number
+  workouts_with_duration: number
+  eligible_set_count: number
+  progression_granularity: 'day' | 'week'
+  volume_progression: WorkoutStatisticsVolumePoint[]
+  muscle_group_distribution: WorkoutStatisticsMuscleGroup[]
+  classified_volume_kg: number
+  unclassified_volume_kg: number
+}
+
 export type LiveWorkoutAdjustmentAction = 'reduce_load' | 'reduce_reps' | 'drop_set' | 'stop_exercise'
 
 export interface LiveWorkoutAdjustmentSuggestion {

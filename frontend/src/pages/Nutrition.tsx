@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, MoreHorizontal, Utensils, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Camera, MoreHorizontal, Plus, Utensils, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { fetchTodayNutrition, getCurrentUser } from '../services/api';
 import type { MealLogItem } from '../services/api';
@@ -140,6 +140,27 @@ export default function Nutrition() {
       <h2 style={{ color: '#8e8e93', fontSize: '12.5px', marginBottom: '16px', fontWeight: 500, letterSpacing: '0.02em' }}>
         {formatDateLabel(selectedDate)}
       </h2>
+
+      <div style={{ display: 'flex', gap: '14px', marginBottom: '20px' }}>
+        <button
+          type="button"
+          onClick={() => navigate('/log-meals')}
+          style={{ flex: 1, minWidth: 0, minHeight: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', border: '1px solid #333', borderRadius: '16px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '15px', fontWeight: 700 }}
+        >
+          <Plus size={20} aria-hidden="true" />
+          Manual Register
+        </button>
+        <button
+          type="button"
+          disabled
+          aria-label="Scan plate, available with Pro"
+          style={{ flex: 1, minWidth: 0, minHeight: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', border: '1px solid #292929', borderRadius: '16px', color: '#969696', backgroundColor: '#191919', cursor: 'not-allowed', fontSize: '15px', fontWeight: 700, opacity: 0.8 }}
+        >
+          <Camera size={21} aria-hidden="true" />
+          <span>Scan plate</span>
+          <span style={{ padding: '4px 8px', borderRadius: '7px', color: '#161616', backgroundColor: '#b99a45', fontSize: '11px', fontWeight: 800 }}>PRO</span>
+        </button>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {isLoading ? (

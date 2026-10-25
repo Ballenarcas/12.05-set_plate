@@ -532,6 +532,15 @@ export async function updateUserSettings(
   clearDashboardCache()
 }
 
+export interface MealIngredient {
+  name: string
+  quantity_g: number
+  calories_per_100g: number
+  proteins_per_100g: number
+  carbs_per_100g: number
+  fats_per_100g: number
+}
+
 export interface MealLogItem {
   id: string
   user_id: string
@@ -544,6 +553,7 @@ export interface MealLogItem {
   proteins_g?: number
   carbs_g?: number
   fats_g?: number
+  ingredients?: MealIngredient[]
 }
 
 export interface TodayNutritionData {
@@ -703,6 +713,7 @@ export interface MealCreateRequest {
   proteins?: number
   carbs?: number
   fats?: number
+  ingredients?: MealIngredient[]
 }
 
 export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
@@ -716,6 +727,32 @@ export async function addMealLog(payload: MealCreateRequest): Promise<MealLogIte
   }
   clearDashboardCache()
   return response.json()
+}
+
+export async function updateMealLog(
+  userId: string,
+  mealId: string,
+  payload: { name: string; meal_type: string; ingredients: MealIngredient[] },
+): Promise<MealLogItem> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${encodeURIComponent(mealId)}?${query}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't update this meal. Please try again.")
+  }
+  clearDashboardCache()
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith(NUTRITION_CACHE_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key))
+  } catch {
+    // The updated server response remains authoritative when browser storage is unavailable.
+  }
+  return response.json() as Promise<MealLogItem>
 }
 
 export async function deleteMealLog(mealId: string): Promise<void> {

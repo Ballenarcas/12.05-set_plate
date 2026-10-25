@@ -8,6 +8,7 @@ from app.schemas.nutrition import (
     FoodSearchItem,
     MealCreateRequest,
     MealItem,
+    MealUpdateRequest,
 )
 from app.facades.nutrition_facade import nutrition_facade
 
@@ -51,6 +52,21 @@ def add_meal(payload: MealCreateRequest) -> MealItem:
     except Exception as err:
         logger.exception("Failed to save meal")
         raise HTTPException(status_code=500, detail="Could not save this meal.") from err
+
+
+@router.put("/meals/{meal_id}", response_model=MealItem)
+def update_meal(
+    meal_id: str,
+    payload: MealUpdateRequest,
+    user_id: str = Query(..., description="Meal owner user ID"),
+) -> MealItem:
+    try:
+        return nutrition_facade.update_meal(user_id, meal_id, payload)
+    except LookupError as err:
+        raise HTTPException(status_code=404, detail="Meal not found.") from err
+    except Exception as err:
+        logger.exception("Failed to update meal")
+        raise HTTPException(status_code=500, detail="Could not update this meal.") from err
 
 
 @router.delete("/meals/{meal_id}")

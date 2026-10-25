@@ -1,8 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, Camera, MoreHorizontal, Plus, Utensils, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { fetchTodayNutrition, getCurrentUser } from '../services/api';
-import type { MealLogItem } from '../services/api';
+import { fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog } from '../services/api';
+import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import '../styles/log-meals.css';
+
+const DEFAULT_FOOD_DENSITY = {
+  calories_per_100g: 130,
+  proteins_per_100g: 8,
+  carbs_per_100g: 15,
+  fats_per_100g: 3.5,
+};
 
 export default function Nutrition() {
   const navigate = useNavigate();
@@ -13,7 +21,16 @@ export default function Nutrition() {
   
   // États pour l'édition et la suppression
   const [editingMeal, setEditingMeal] = useState<MealLogItem | null>(null);
-  const [editQuantity, setEditQuantity] = useState<string>('');
+  const [editIngredients, setEditIngredients] = useState<MealIngredient[]>([]);
+  const [editMealType, setEditMealType] = useState('Meal');
+  const [editFoodName, setEditFoodName] = useState('');
+  const [editQuantity, setEditQuantity] = useState('100');
+  const [editDensity, setEditDensity] = useState(DEFAULT_FOOD_DENSITY);
+  const [foodSuggestions, setFoodSuggestions] = useState<FoodSearchItem[]>([]);
+  const [isFoodSearchOpen, setIsFoodSearchOpen] = useState(false);
+  const [isSearchingFoods, setIsSearchingFoods] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [deletingMeal, setDeletingMeal] = useState<MealLogItem | null>(null);
 
   // SE DÉCLENCHE À CHAQUE CHANGEMENT DE DATE DANS LE CALENDRIER
@@ -40,6 +57,32 @@ export default function Nutrition() {
       })
       .finally(() => setIsLoading(false));
   }, [selectedDate]); // L'ajout de selectedDate ici est la clé du fonctionnement !
+
+  useEffect(() => {
+    if (!editingMeal || !isFoodSearchOpen || !editFoodName.trim()) {
+      return;
+    }
+
+    let isCurrent = true;
+    const timer = window.setTimeout(() => {
+      setIsSearchingFoods(true);
+      searchFoodItems(editFoodName.trim())
+        .then((items) => {
+          if (isCurrent) setFoodSuggestions(items);
+        })
+        .catch((error: unknown) => {
+          if (isCurrent) setEditError(error instanceof Error ? error.message : 'Food search is unavailable.');
+        })
+        .finally(() => {
+          if (isCurrent) setIsSearchingFoods(false);
+        });
+    }, 200);
+
+    return () => {
+      isCurrent = false;
+      window.clearTimeout(timer);
+    };
+  }, [editingMeal, editFoodName, isFoodSearchOpen]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = new Date(e.target.value);
@@ -80,27 +123,84 @@ export default function Nutrition() {
 
   const openEditModal = (meal: MealLogItem) => {
     setEditingMeal(meal);
-    setEditQuantity(meal.weight_g || '0');
+    const quantity = Math.max(1, Number(meal.weight_g) || 100);
+    setEditIngredients(meal.ingredients?.length ? meal.ingredients.map((ingredient) => ({ ...ingredient })) : [{
+      name: meal.meal_name,
+      quantity_g: quantity,
+      calories_per_100g: meal.item_calories / quantity * 100,
+      proteins_per_100g: (meal.proteins_g ?? 0) / quantity * 100,
+      carbs_per_100g: (meal.carbs_g ?? 0) / quantity * 100,
+      fats_per_100g: (meal.fats_g ?? 0) / quantity * 100,
+    }]);
+    setEditMealType(meal.meal_type || 'Meal');
+    setEditFoodName('');
+    setIsFoodSearchOpen(false);
+    setIsSearchingFoods(false);
+    setEditQuantity('100');
+    setEditDensity(DEFAULT_FOOD_DENSITY);
+    setEditError(null);
   };
 
-  const confirmEdit = () => {
-    if (!editingMeal) return;
-    const ratio = Number(editQuantity) / (Number(editingMeal.weight_g) || 1);
-    const updatedMeals = meals.map(m => {
-      if (m.id === editingMeal.id) {
-        return {
-          ...m,
-          weight_g: editQuantity,
-          item_calories: Math.round(m.item_calories * ratio),
-          proteins_g: m.proteins_g ? Math.round(m.proteins_g * ratio) : undefined,
-          carbs_g: m.carbs_g ? Math.round(m.carbs_g * ratio) : undefined,
-          fats_g: m.fats_g ? Math.round(m.fats_g * ratio) : undefined,
-        };
-      }
-      return m;
+  const selectFoodSuggestion = (food: FoodSearchItem) => {
+    setEditFoodName(food.name);
+    setIsFoodSearchOpen(false);
+    setIsSearchingFoods(false);
+    setEditDensity({
+      calories_per_100g: food.calories_per_100g,
+      proteins_per_100g: food.proteins_per_100g,
+      carbs_per_100g: food.carbs_per_100g,
+      fats_per_100g: food.fats_per_100g,
     });
-    setMeals(updatedMeals);
-    setEditingMeal(null);
+    setFoodSuggestions([]);
+  };
+
+  const addEditIngredient = () => {
+    const name = editFoodName.trim();
+    const quantity = Number(editQuantity);
+    if (!name || !Number.isFinite(quantity) || quantity <= 0) return;
+    setEditIngredients((current) => [...current, { name, quantity_g: quantity, ...editDensity }]);
+    setEditFoodName('');
+    setIsFoodSearchOpen(false);
+    setIsSearchingFoods(false);
+    setEditQuantity('100');
+    setEditDensity(DEFAULT_FOOD_DENSITY);
+    setFoodSuggestions([]);
+  };
+
+  const editNutrition = editIngredients.reduce((total, ingredient) => {
+    const ratio = ingredient.quantity_g / 100;
+    return {
+      quantity: total.quantity + ingredient.quantity_g,
+      calories: total.calories + ingredient.calories_per_100g * ratio,
+      protein: total.protein + ingredient.proteins_per_100g * ratio,
+      carbs: total.carbs + ingredient.carbs_per_100g * ratio,
+      fat: total.fat + ingredient.fats_per_100g * ratio,
+    };
+  }, { quantity: 0, calories: 0, protein: 0, carbs: 0, fat: 0 });
+
+  const confirmEdit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingMeal || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)) return;
+    const user = getCurrentUser();
+    if (!user?.id) {
+      setEditError('Sign in again to update this meal.');
+      return;
+    }
+    setIsSavingEdit(true);
+    setEditError(null);
+    try {
+      const updatedMeal = await updateMealLog(user.id, editingMeal.id, {
+        name: editIngredients.map((ingredient) => ingredient.name).join(' + '),
+        meal_type: editMealType,
+        ingredients: editIngredients,
+      });
+      setMeals((current) => current.map((meal) => meal.id === updatedMeal.id ? updatedMeal : meal));
+      setEditingMeal(null);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "We couldn't update this meal.");
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const confirmDelete = () => {
@@ -141,11 +241,11 @@ export default function Nutrition() {
         {formatDateLabel(selectedDate)}
       </h2>
 
-      <div style={{ display: 'flex', gap: '14px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
         <button
           type="button"
           onClick={() => navigate('/log-meals')}
-          style={{ flex: 1, minWidth: 0, minHeight: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', border: '1px solid #333', borderRadius: '16px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '15px', fontWeight: 700 }}
+          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
         >
           <Plus size={20} aria-hidden="true" />
           Manual Register
@@ -154,11 +254,11 @@ export default function Nutrition() {
           type="button"
           disabled
           aria-label="Scan plate, available with Pro"
-          style={{ flex: 1, minWidth: 0, minHeight: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', border: '1px solid #292929', borderRadius: '16px', color: '#969696', backgroundColor: '#191919', cursor: 'not-allowed', fontSize: '15px', fontWeight: 700, opacity: 0.8 }}
+          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid #292929', borderRadius: '14px', color: '#969696', backgroundColor: '#191919', cursor: 'not-allowed', fontSize: '14px', fontWeight: 700, opacity: 0.8 }}
         >
-          <Camera size={21} aria-hidden="true" />
+          <Camera size={18} aria-hidden="true" />
           <span>Scan plate</span>
-          <span style={{ padding: '4px 8px', borderRadius: '7px', color: '#161616', backgroundColor: '#b99a45', fontSize: '11px', fontWeight: 800 }}>PRO</span>
+          <span style={{ padding: '3px 7px', borderRadius: '6px', color: '#161616', backgroundColor: '#b99a45', fontSize: '10px', fontWeight: 800 }}>PRO</span>
         </button>
       </div>
 
@@ -182,8 +282,8 @@ export default function Nutrition() {
                   <span style={{ color: '#8e8e93', fontSize: '13.5px', fontWeight: 500 }}>
                     {formatTime(meal.consumed_at)}
                   </span>
-                  <button onClick={() => openEditModal(meal)} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                    <MoreHorizontal size={20} strokeWidth={2.5} />
+                  <button onClick={() => openEditModal(meal)} aria-label={`Edit ${meal.meal_name}`} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                    <Pencil size={18} strokeWidth={2} />
                   </button>
                   <button onClick={() => setDeletingMeal(meal)} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', padding: 0, display: 'flex' }}>
                     <Trash2 size={18} strokeWidth={2} />
@@ -203,22 +303,127 @@ export default function Nutrition() {
       </div>
 
       {editingMeal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <style>{`.hide-arrows::-webkit-outer-spin-button, .hide-arrows::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; } .hide-arrows { -moz-appearance: textfield; }`}</style>
-          
-          <div style={{ backgroundColor: '#1c1c1e', padding: '24px', borderRadius: '24px', width: '90%', maxWidth: '340px', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            <h3 style={{ margin: '0 0 4px 0', fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>Edit Quantity</h3>
-            <p style={{ margin: 0, color: '#8e8e93', fontSize: '13.5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{editingMeal.meal_name}</p>
-            
-            <div style={{ marginTop: '20px', position: 'relative' }}>
-              <input type="number" className="hide-arrows" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} style={{ width: '100%', padding: '14px 40px 14px 16px', backgroundColor: '#28282a', border: '1px solid transparent', borderRadius: '12px', color: '#ffffff', fontSize: '16px', boxSizing: 'border-box', outline: 'none' }} placeholder="Quantity" autoFocus />
-              <span style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', color: '#8e8e93', fontSize: '15px' }}>g</span>
+        <div className="modal-backdrop" onClick={() => !isSavingEdit && setEditingMeal(null)}>
+          <div className="modal-dialog" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="edit-meal-title">
+            <div className="modal-header">
+              <div>
+                <h2 id="edit-meal-title" className="modal-title">Edit meal</h2>
+                <p className="card-subtitle">Update ingredients and portion sizes.</p>
+              </div>
+              <button type="button" className="btn-modal-close" onClick={() => setEditingMeal(null)} aria-label="Close editor" disabled={isSavingEdit}>
+                <X size={20} />
+              </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
-              <button onClick={() => setEditingMeal(null)} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '10px 16px', fontSize: '14.5px', fontWeight: 600 }}>Cancel</button>
-              <button onClick={confirmEdit} style={{ backgroundColor: '#b084e9', border: 'none', color: '#ffffff', borderRadius: '12px', padding: '10px 24px', cursor: 'pointer', fontSize: '14.5px', fontWeight: 600 }}>Confirm</button>
-            </div>
+            <form className="modal-form" onSubmit={confirmEdit}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-meal-type">Meal type</label>
+                <select id="edit-meal-type" className="form-input" value={editMealType} onChange={(event) => setEditMealType(event.target.value)}>
+                  {['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Meal'].map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ position: 'relative' }}>
+                <label className="form-label" htmlFor="edit-food-name">Add an ingredient</label>
+                <div className="input-with-icon">
+                  <input
+                    id="edit-food-name"
+                    className="form-input"
+                    value={editFoodName}
+                    onChange={(event) => {
+                      setEditFoodName(event.target.value);
+                      setIsFoodSearchOpen(true);
+                      setFoodSuggestions([]);
+                      setIsSearchingFoods(false);
+                      setEditDensity(DEFAULT_FOOD_DENSITY);
+                      setEditError(null);
+                    }}
+                    placeholder="Search foods..."
+                    autoComplete="off"
+                  />
+                  {isSearchingFoods
+                    ? <Loader2 size={16} className="animate-spin input-spinner" aria-label="Searching" />
+                    : <Search size={16} className="input-spinner" aria-hidden="true" />}
+                </div>
+                {isFoodSearchOpen && foodSuggestions.length > 0 && (
+                  <ul className="suggestions-list">
+                    {foodSuggestions.map((food) => (
+                      <li key={food.id}>
+                        <button type="button" className="suggestion-item" onClick={() => selectFoodSuggestion(food)}>
+                          <span className="suggestion-name">{food.name}</span>
+                          <span className="suggestion-cals">{food.calories_per_100g} kcal / 100g</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="inputs-row">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="edit-food-quantity">Quantity</label>
+                  <div className="input-with-suffix">
+                    <input id="edit-food-quantity" className="form-input" type="number" min="1" value={editQuantity} onChange={(event) => setEditQuantity(event.target.value)} />
+                    <span className="input-suffix"><Scale size={16} aria-hidden="true" /> grams</span>
+                  </div>
+                </div>
+                <button className="btn-add-food" type="button" onClick={addEditIngredient} disabled={!editFoodName.trim() || Number(editQuantity) <= 0}>
+                  <Plus size={16} aria-hidden="true" /> Add ingredient
+                </button>
+              </div>
+
+              <section className="plate-foods" aria-label="Ingredients in this meal">
+                <div className="calc-header-row">
+                  <span className="calc-label">Ingredients</span>
+                  <span className="plate-food-count">{editIngredients.length}</span>
+                </div>
+                {editIngredients.length === 0 ? (
+                  <p className="calc-disclaimer">Add at least one ingredient to save this meal.</p>
+                ) : (
+                  <ul className="plate-food-list">
+                    {editIngredients.map((ingredient, index) => (
+                      <li className="plate-food-row" key={`${ingredient.name}-${index}`}>
+                        <span>{ingredient.name}</span>
+                        <label className="edit-ingredient-quantity">
+                          <input
+                            aria-label={`${ingredient.name} quantity in grams`}
+                            type="number"
+                            min="1"
+                            value={ingredient.quantity_g || ''}
+                            onChange={(event) => {
+                              const quantity = Number(event.target.value);
+                              setEditIngredients((current) => current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, quantity_g: quantity } : item));
+                            }}
+                          />
+                          <small>g</small>
+                        </label>
+                        <button type="button" onClick={() => setEditIngredients((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove ${ingredient.name}`}>
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <div className="calculation-preview-card">
+                <div className="calc-header-row">
+                  <span className="calc-label">Meal total · {Math.round(editNutrition.quantity)}g</span>
+                  <span className="calc-cals-badge">{Math.round(editNutrition.calories)} kcal</span>
+                </div>
+                <div className="calc-macros-grid">
+                  <div className="calc-macro-item"><span className="macro-name">Protein</span><span className="macro-num">{editNutrition.protein.toFixed(1)}g</span></div>
+                  <div className="calc-macro-item"><span className="macro-name">Carbs</span><span className="macro-num">{editNutrition.carbs.toFixed(1)}g</span></div>
+                  <div className="calc-macro-item"><span className="macro-name">Fat</span><span className="macro-num">{editNutrition.fat.toFixed(1)}g</span></div>
+                </div>
+              </div>
+
+              {editError && <div className="inline-alert" role="alert">{editError}</div>}
+              <button className="btn-modal-submit" type="submit" disabled={isSavingEdit || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)}>
+                {isSavingEdit ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save changes'}
+              </button>
+            </form>
           </div>
         </div>
       )}

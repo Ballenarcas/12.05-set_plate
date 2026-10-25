@@ -23,6 +23,7 @@ import {
   searchFoodItems,
   type CalorieAdjustmentData,
   type FoodSearchItem,
+  type MealIngredient,
   type MealLogItem,
   type TodayNutritionData,
 } from '../services/api'
@@ -37,6 +38,10 @@ type PlateFood = {
   protein: number
   carbs: number
   fat: number
+  caloriesPer100g: number
+  proteinPer100g: number
+  carbsPer100g: number
+  fatPer100g: number
 }
 
 type MealDelta = { calories: number; protein: number; carbs: number; fat: number }
@@ -299,6 +304,10 @@ export function LogMeals() {
       name: foodInput.trim(),
       quantityGrams: quantity,
       ...calculatedNutrition,
+      caloriesPer100g: selectedFoodDensity.caloriesPer100g,
+      proteinPer100g: selectedFoodDensity.proteinPer100g,
+      carbsPer100g: selectedFoodDensity.carbsPer100g,
+      fatPer100g: selectedFoodDensity.fatPer100g,
     }])
     setFoodInput('')
     setQuantityGrams('100')
@@ -357,6 +366,14 @@ export function LogMeals() {
         proteins: Math.round(plateNutrition.protein * 10) / 10,
         carbs: Math.round(plateNutrition.carbs * 10) / 10,
         fats: Math.round(plateNutrition.fat * 10) / 10,
+        ingredients: plateFoods.map((food): MealIngredient => ({
+          name: food.name,
+          quantity_g: food.quantityGrams,
+          calories_per_100g: food.caloriesPer100g,
+          proteins_per_100g: food.proteinPer100g,
+          carbs_per_100g: food.carbsPer100g,
+          fats_per_100g: food.fatPer100g,
+        })),
       })
 
       // Dynamically update metrics

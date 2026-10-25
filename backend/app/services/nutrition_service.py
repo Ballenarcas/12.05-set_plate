@@ -13,7 +13,9 @@ from app.schemas.nutrition import (
     FoodSearchItem,
     MacroSummary,
     MealCreateRequest,
+    MealIngredient,
     MealItem,
+    MealUpdateRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,7 +101,7 @@ def _load_today_meals(
     try:
         meals_res = (
             supabase.table("meals")
-            .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at")
+            .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at,ingredients,quantity_g,meal_type")
             .eq("user_id", user_id)
             .gte("consumed_at", window_start.isoformat())
             .lt("consumed_at", window_end.isoformat())
@@ -123,14 +125,15 @@ def _load_today_meals(
                     id=str(row.get("id")),
                     user_id=str(row.get("user_id")),
                     meal_name=row.get("name") or "Unnamed Meal",
-                    meal_type=infer_meal_type(consumed_at),
+                    meal_type=row.get("meal_type") or infer_meal_type(consumed_at),
                     portion_amount="1",
-                    weight_g="100",
+                    weight_g=str(row.get("quantity_g") or 100),
                     item_calories=cals,
                     consumed_at=consumed_at,
                     proteins_g=round(proteins, 1),
                     carbs_g=round(carbs, 1),
                     fats_g=round(fats, 1),
+                    ingredients=row.get("ingredients") or [],
                 )
             )
     except Exception as err:
@@ -353,21 +356,25 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
     if not supabase:
         raise RuntimeError("Database connection unavailable")
 
-    qty = float(payload.quantity_g if payload.quantity_g and payload.quantity_g > 0 else 100.0)
-    cals = payload.calories
-    proteins = payload.proteins
-    carbs = payload.carbs
-    fats = payload.fats
+    ingredients = payload.ingredients
+    if ingredients:
+        qty, cals, proteins, carbs, fats = _summarize_ingredients(ingredients)
+    else:
+        qty = float(payload.quantity_g if payload.quantity_g and payload.quantity_g > 0 else 100.0)
+        cals = payload.calories
+        proteins = payload.proteins
+        carbs = payload.carbs
+        fats = payload.fats
 
-    # Automatically calculate calories and macros if not explicitly provided
-    if cals is None or cals <= 0:
-        cals, calc_p, calc_c, calc_f = calculate_meal_nutrition(payload.name, qty)
-        if proteins is None or proteins == 0.0:
-            proteins = calc_p
-        if carbs is None or carbs == 0.0:
-            carbs = calc_c
-        if fats is None or fats == 0.0:
-            fats = calc_f
+        # Automatically calculate calories and macros if not explicitly provided
+        if cals is None or cals <= 0:
+            cals, calc_p, calc_c, calc_f = calculate_meal_nutrition(payload.name, qty)
+            if proteins is None or proteins == 0.0:
+                proteins = calc_p
+            if carbs is None or carbs == 0.0:
+                carbs = calc_c
+            if fats is None or fats == 0.0:
+                fats = calc_f
 
     meal_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -380,6 +387,9 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
         "carbs": carbs or 0.0,
         "fats": fats or 0.0,
         "consumed_at": now_iso,
+        "quantity_g": qty,
+        "meal_type": payload.meal_type or infer_meal_type(now_iso),
+        "ingredients": [ingredient.model_dump() for ingredient in ingredients],
     }
 
     supabase.table("meals").insert(record).execute()
@@ -390,12 +400,79 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
         meal_name=payload.name,
         meal_type=payload.meal_type or infer_meal_type(now_iso),
         portion_amount="1",
-        weight_g=str(int(qty)),
+        weight_g=str(round(qty)),
         item_calories=cals,
         consumed_at=now_iso,
         proteins_g=round(proteins or 0.0, 1),
         carbs_g=round(carbs or 0.0, 1),
         fats_g=round(fats or 0.0, 1),
+        ingredients=ingredients,
+    )
+
+
+def _summarize_ingredients(
+    ingredients: list[MealIngredient],
+) -> tuple[float, int, float, float, float]:
+    quantity = sum(ingredient.quantity_g for ingredient in ingredients)
+    calories = 0.0
+    proteins = 0.0
+    carbs = 0.0
+    fats = 0.0
+    for ingredient in ingredients:
+        ratio = ingredient.quantity_g / 100
+        calories += ingredient.calories_per_100g * ratio
+        proteins += ingredient.proteins_per_100g * ratio
+        carbs += ingredient.carbs_per_100g * ratio
+        fats += ingredient.fats_per_100g * ratio
+    return (
+        quantity,
+        round(calories),
+        round(proteins, 1),
+        round(carbs, 1),
+        round(fats, 1),
+    )
+
+
+def update_user_meal(user_id: str, meal_id: str, payload: MealUpdateRequest) -> MealItem:
+    supabase = get_supabase(admin=True)
+    if not supabase:
+        raise RuntimeError("Database connection unavailable")
+
+    quantity, calories, proteins, carbs, fats = _summarize_ingredients(payload.ingredients)
+    record = {
+        "name": payload.name,
+        "meal_type": payload.meal_type,
+        "quantity_g": quantity,
+        "calories": calories,
+        "proteins": proteins,
+        "carbs": carbs,
+        "fats": fats,
+        "ingredients": [ingredient.model_dump() for ingredient in payload.ingredients],
+    }
+    response = (
+        supabase.table("meals")
+        .update(record)
+        .eq("id", meal_id)
+        .eq("user_id", user_id)
+        .select("id,user_id,name,calories,proteins,carbs,fats,consumed_at,ingredients,quantity_g,meal_type")
+        .execute()
+    )
+    if not response.data:
+        raise LookupError("Meal not found")
+    row = response.data[0]
+    return MealItem(
+        id=str(row["id"]),
+        user_id=str(row["user_id"]),
+        meal_name=row["name"],
+        meal_type=row.get("meal_type") or payload.meal_type,
+        portion_amount="1",
+        weight_g=str(round(float(row.get("quantity_g") or 0))),
+        item_calories=int(row.get("calories") or 0),
+        consumed_at=row.get("consumed_at"),
+        proteins_g=round(float(row.get("proteins") or 0), 1),
+        carbs_g=round(float(row.get("carbs") or 0), 1),
+        fats_g=round(float(row.get("fats") or 0), 1),
+        ingredients=row.get("ingredients") or [],
     )
 
 

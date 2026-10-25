@@ -1,10 +1,10 @@
-import { ArrowRight, Dumbbell, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, CalendarDays, Clock3, Dumbbell, History, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { deleteRoutine, fetchRoutines } from '../services/api'
+import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
-import type { ActiveExercise, Routine } from '../types/workout'
+import type { ActiveExercise, Routine, WorkoutHistoryEntry } from '../types/workout'
 
 function createActiveExercises(routine: Routine): ActiveExercise[] {
   return routine.exercises.map((exercise) => ({
@@ -23,9 +23,21 @@ function createActiveExercises(routine: Routine): ActiveExercise[] {
   }))
 }
 
+function formatWorkoutDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 1) return 'Under 1 min'
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes} min`
+}
+
 function Workouts() {
   const navigate = useNavigate()
+  const currentUserId = getCurrentUser()?.id
   const [routines, setRoutines] = useState<Routine[]>([])
+  const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistoryEntry[]>([])
+  const [isHistoryLoading, setIsHistoryLoading] = useState(Boolean(currentUserId))
+  const [historyError, setHistoryError] = useState<string | null>(currentUserId ? null : 'Sign in to see your workout history.')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showDiscardActiveWorkout, setShowDiscardActiveWorkout] = useState(false)
@@ -33,6 +45,9 @@ function Workouts() {
   const [routineToDelete, setRoutineToDelete] = useState<Routine | null>(null)
   const [isDeletingRoutine, setIsDeletingRoutine] = useState(false)
   const [routineDeleteError, setRoutineDeleteError] = useState<string | null>(null)
+  const [workoutToDelete, setWorkoutToDelete] = useState<WorkoutHistoryEntry | null>(null)
+  const [isDeletingWorkout, setIsDeletingWorkout] = useState(false)
+  const [workoutDeleteError, setWorkoutDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRoutines()
@@ -41,6 +56,15 @@ function Workouts() {
       .finally(() => setIsLoading(false))
   }, [])
 
+  useEffect(() => {
+    if (!currentUserId) return
+
+    fetchWorkoutHistory(currentUserId)
+      .then(setWorkoutHistory)
+      .catch((requestError: Error) => setHistoryError(describeError(requestError, "We couldn't load your workout history. Please try again.")))
+      .finally(() => setIsHistoryLoading(false))
+  }, [currentUserId])
+
   function startWorkout(routine?: Routine) {
     navigate('/workouts/active', {
       state: {
@@ -48,6 +72,38 @@ function Workouts() {
         name: routine?.name ?? 'Empty workout',
         startedAt: new Date().toISOString(),
         exercises: routine ? createActiveExercises(routine) : [],
+      },
+    })
+  }
+
+  function repeatWorkout(workout: WorkoutHistoryEntry) {
+    const exercises: ActiveExercise[] = workout.exercises.map((exercise) => {
+      const previousSets = [...exercise.sets].sort((first, second) => first.set_number - second.set_number)
+      const lastSet = previousSets[previousSets.length - 1]
+
+      return {
+        exercise_id: exercise.exercise_id,
+        name: exercise.name,
+        previous_weight_kg: lastSet?.weight_kg ?? null,
+        previous_reps: lastSet?.reps ?? null,
+        target_sets: previousSets.length || 1,
+        target_reps: lastSet?.reps ?? null,
+        sets: previousSets.length > 0
+          ? previousSets.map((set, index) => ({
+            set_number: index + 1,
+            weight_kg: set.weight_kg,
+            reps: set.reps,
+            is_completed: false,
+          }))
+          : [{ set_number: 1, weight_kg: 0, reps: 0, is_completed: false }],
+      }
+    })
+
+    navigate('/workouts/active', {
+      state: {
+        name: workout.name,
+        startedAt: new Date().toISOString(),
+        exercises,
       },
     })
   }
@@ -91,6 +147,21 @@ function Workouts() {
     }
   }
 
+  async function confirmDeleteWorkout() {
+    if (!workoutToDelete || !currentUserId) return
+    setIsDeletingWorkout(true)
+    setWorkoutDeleteError(null)
+    try {
+      await deleteWorkoutHistoryEntry(currentUserId, workoutToDelete.id)
+      setWorkoutHistory((current) => current.filter((workout) => workout.id !== workoutToDelete.id))
+      setWorkoutToDelete(null)
+    } catch (requestError) {
+      setWorkoutDeleteError(requestError instanceof Error ? requestError.message : "We couldn't remove this workout.")
+    } finally {
+      setIsDeletingWorkout(false)
+    }
+  }
+
   return (
     <div className="screen workouts-screen">
       <header className="workouts-page-header">
@@ -106,6 +177,58 @@ function Workouts() {
       {error && <div className="card state-card" role="alert">{error}</div>}
       {routineDeleteError && <div className="card routine-delete-error" role="alert">{routineDeleteError}</div>}
 
+      <section className="workout-history-section" aria-labelledby="workout-history-title">
+        <h2 className="section-title" id="workout-history-title"><History size={16} aria-hidden="true" /> Workout history</h2>
+        {isHistoryLoading && <div className="card state-card" role="status">Loading your workouts...</div>}
+        {historyError && <div className="card state-card" role="alert">{historyError}</div>}
+        {!isHistoryLoading && !historyError && workoutHistory.length === 0 && (
+          <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>Your completed workouts will appear here.</p></div>
+        )}
+        {!historyError && workoutHistory.length > 0 && (
+          <div className="routine-list workout-history-list">
+            {workoutHistory.map((workout) => (
+              <article className="card workout-history-card" key={workout.id}>
+                <div className="routine-card-heading workout-history-heading">
+                  <div><p className="eyebrow">Completed workout</p><h2>{workout.name}</h2></div>
+                  <div className="workout-history-actions">
+                    <button
+                      className="history-delete-button"
+                      type="button"
+                      aria-label={`Delete ${workout.name} workout`}
+                      onClick={() => { setWorkoutDeleteError(null); setWorkoutToDelete(workout) }}
+                    >
+                      <Trash2 size={17} aria-hidden="true" />
+                    </button>
+                    <Dumbbell size={21} aria-hidden="true" />
+                  </div>
+                </div>
+                <div className="routine-meta">
+                  <span><CalendarDays size={14} aria-hidden="true" />{new Date(workout.started_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span><Clock3 size={14} aria-hidden="true" />{formatWorkoutDuration(workout.duration_seconds)}</span>
+                  <span>{workout.exercises.length} exercises</span>
+                </div>
+                {workout.exercises.length > 0 && (
+                  <ul className="routine-preview">
+                    {workout.exercises.slice(0, 3).map((exercise) => (
+                      <li key={exercise.exercise_id}>
+                        {exercise.name} — {exercise.sets.length} sets
+                        {exercise.sets.length > 0 && ` · ${exercise.sets.map((set) => `${set.weight_kg} kg × ${set.reps}`).join(' / ')}`}
+                      </li>
+                    ))}
+                    {workout.exercises.length > 3 && <li>+{workout.exercises.length - 3} more</li>}
+                  </ul>
+                )}
+                <button className="primary-button" type="button" onClick={() => repeatWorkout(workout)}>
+                  REPEAT WORKOUT <Repeat2 size={16} aria-hidden="true" />
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="saved-routines-title">
+        <h2 className="section-title" id="saved-routines-title"><Dumbbell size={16} aria-hidden="true" /> Saved routines</h2>
       {!isLoading && !error && routines.length === 0 && <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No saved routines yet.</p></div>}
 
       <div className="routine-list">
@@ -132,6 +255,22 @@ function Workouts() {
           </article>
         ))}
       </div>
+      </section>
+
+      {workoutToDelete && <div className="modal-backdrop">
+        <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-workout-title">
+          <p className="eyebrow">Remove workout history</p>
+          <h2 id="delete-workout-title">Delete {workoutToDelete.name}?</h2>
+          <p>This completed workout and its recorded sets will be permanently deleted. Saved routines will not be affected.</p>
+          {workoutDeleteError && <p className="form-error" role="alert">{workoutDeleteError}</p>}
+          <div className="modal-actions">
+            <button className="secondary-action" type="button" onClick={() => setWorkoutToDelete(null)} disabled={isDeletingWorkout}>Cancel</button>
+            <button className="danger-action" type="button" onClick={confirmDeleteWorkout} disabled={isDeletingWorkout}>
+              {isDeletingWorkout ? 'Deleting...' : 'Delete workout'}
+            </button>
+          </div>
+        </div>
+      </div>}
 
       {routineToDelete && <div className="modal-backdrop">
         <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-routine-title">

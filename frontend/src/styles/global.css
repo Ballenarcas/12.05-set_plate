@@ -305,6 +305,7 @@
 .routine-exercise-config.is-dragging { border-color: var(--green); opacity: 0.55; }
 .routine-remove-exercise { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border: 1px solid rgba(255, 105, 105, 0.25); border-radius: 0.6rem; color: #ff9c9c; background: rgba(255, 105, 105, 0.07); cursor: pointer; }
 .routine-target-table { display: grid; gap: 0.4rem; }
+.routine-target-heading { grid-template-columns: minmax(2.3rem, 0.65fr) minmax(0, 1fr) 2.4rem; gap: 0.25rem; text-align: center; }
 .routine-target-row { grid-template-columns: minmax(2.3rem, 0.65fr) minmax(0, 1fr) 2.4rem; gap: 0.25rem; }
 .routine-target-number { display: grid; min-height: 2.65rem; place-items: center; border-radius: 0.65rem; color: #fff; background: #252527; font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .routine-target-remove { display: grid; min-width: 0; min-height: 2.65rem; place-items: center; border: 1px solid transparent; border-radius: 0.65rem; color: var(--text-muted); background: transparent; cursor: pointer; }

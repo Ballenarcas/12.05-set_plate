@@ -272,7 +272,7 @@ function CreateRoutine() {
               </div>
             </div>
             <div className="routine-target-table">
-              <div className="set-row set-heading routine-target-heading" aria-hidden="true"><span>SET</span><span>REPS</span><span /></div>
+              <div className="set-row set-heading routine-target-heading" aria-hidden="true"><span>SETS</span><span>REPS</span><span /></div>
               {Array.from({ length: exercise.target_sets }, (_, setIndex) => (
                 <div className="set-row routine-target-row" key={setIndex}>
                   <span className="routine-target-number">{setIndex + 1}</span>

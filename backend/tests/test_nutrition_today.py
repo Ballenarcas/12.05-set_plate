@@ -32,8 +32,16 @@ def _supabase_with(user: dict, meals: list[dict]) -> MagicMock:
     meals_chain = meals_mock.select.return_value.eq.return_value.gte.return_value.lt.return_value.order.return_value
     meals_chain.execute.return_value = MagicMock(data=meals)
 
+    ingredients_mock = MagicMock()
+    ingredients_chain = ingredients_mock.select.return_value.eq.return_value.in_.return_value.order.return_value
+    ingredients_chain.execute.return_value = MagicMock(data=[])
+
     supabase = MagicMock()
-    supabase.table.side_effect = lambda name: {"users": users_mock, "meals": meals_mock}[name]
+    supabase.table.side_effect = lambda name: {
+        "users": users_mock,
+        "meals": meals_mock,
+        "meal_ingredients": ingredients_mock,
+    }[name]
     supabase._meals_mock = meals_mock
     return supabase
 

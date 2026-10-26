@@ -8,6 +8,15 @@ class MacroSummary(BaseModel):
     calories_remaining: int = Field(ge=0)
 
 
+class MealIngredient(BaseModel):
+    name: str = Field(..., min_length=1)
+    quantity_g: float = Field(..., gt=0)
+    calories_per_100g: float = Field(..., ge=0)
+    proteins_per_100g: float = Field(default=0.0, ge=0)
+    carbs_per_100g: float = Field(default=0.0, ge=0)
+    fats_per_100g: float = Field(default=0.0, ge=0)
+
+
 class MealItem(BaseModel):
     id: str
     user_id: str
@@ -20,6 +29,8 @@ class MealItem(BaseModel):
     proteins_g: float = 0.0
     carbs_g: float = 0.0
     fats_g: float = 0.0
+    ingredients: list[MealIngredient] = Field(default_factory=list)
+    ingredient_details_saved: bool = True
 
 
 class FoodSearchItem(BaseModel):
@@ -41,6 +52,13 @@ class MealCreateRequest(BaseModel):
     proteins: float | None = Field(default=0.0, ge=0)
     carbs: float | None = Field(default=0.0, ge=0)
     fats: float | None = Field(default=0.0, ge=0)
+    ingredients: list[MealIngredient] = Field(default_factory=list)
+
+
+class MealUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    meal_type: str = Field(..., min_length=1)
+    ingredients: list[MealIngredient] = Field(..., min_length=1)
 
 
 class DailyNutritionResponse(BaseModel):

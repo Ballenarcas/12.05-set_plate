@@ -1,0 +1,66 @@
+{
+  "ok": true,
+  "scenario": "proof",
+  "base_url": "http://localhost:5173",
+  "mode": "attached",
+  "started_at": "2026-10-20T07:58:25.081Z",
+  "finished_at": "2026-10-20T07:58:53.719Z",
+  "account": {
+    "email": "t***@uno.com",
+    "user_id_prefix": "3dbd9024"
+  },
+  "login_status": 200,
+  "login_latency_ms": 6000,
+  "initial": {
+    "count": 30,
+    "names": [
+      "2 Handed Kettlebell Swing",
+      "Seated Hip Adduction",
+      "Arnold Shoulder Press",
+      "Axe Hold",
+      "Barbell Ab Rollout"
+    ],
+    "state": null
+  },
+  "searched": {
+    "count": 30,
+    "names": [
+      "Barbell Reverse Wrist Curl",
+      "Barbell Wrist Curl",
+      "Bench Press",
+      "Benchpress Dumbbells",
+      "Bench Press Narrow Grip",
+      "Bent-over Lateral Raises",
+      "Cross-Bench Dumbbell Pullovers",
+      "Incline Crunches"
+    ],
+    "pagination": "Page 1 of 4",
+    "state": null
+  },
+  "network": {
+    "url": "http://localhost:5173/api/v1/workouts/exercises?q=bench&page=1&limit=30&compact=true",
+    "status": 200,
+    "total": 100,
+    "items": 30
+  },
+  "assertions": {
+    "catalog_rendered": true,
+    "search_request_succeeded": true,
+    "search_returned_results": true,
+    "dom_count_matches_api": true,
+    "dom_names_match_api": true,
+    "search_name_contains_bench": true,
+    "api_total_at_least_visible": true,
+    "no_api_request_failures": true,
+    "no_console_errors": true
+  },
+  "console_errors": [],
+  "failed_api_requests": [],
+  "artifacts": [
+    "01-before-search.png",
+    "02-search-bench.png",
+    "console.log",
+    "network.json",
+    "result.json"
+  ]
+}

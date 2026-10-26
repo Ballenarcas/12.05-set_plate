@@ -192,7 +192,7 @@ class WgerImporter:
                         "id": supabase_uuid_for(e),
                         "name": e.name,
                         "name_es": e.name_es,
-                        "muscle_group": e.category or (e.muscles[0] if e.muscles else "General"),
+                        "muscle_group": muscle_group_for(e),
                         "description": e.description,
                         "muscles": e.muscles,
                         "equipment": e.equipment[0] if e.equipment else "Bodyweight",
@@ -207,7 +207,7 @@ class WgerImporter:
                     {
                         "id": supabase_uuid_for(e),
                         "name": e.name,
-                        "muscle_group": e.category or (e.muscles[0] if e.muscles else "General"),
+                        "muscle_group": muscle_group_for(e),
                         "equipment": e.equipment[0] if e.equipment else "Bodyweight",
                     }
                     for e in exercises
@@ -285,6 +285,11 @@ def get_cached_exercise(exercise_id: str) -> Exercise | None:
 def supabase_uuid_for(exercise: Exercise) -> str:
     """Deterministic Supabase UUID for a catalog exercise (matches sync_to_supabase)."""
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"wger:{exercise.wger_id or exercise.id}"))
+
+
+def muscle_group_for(exercise: Exercise) -> str:
+    """Return the muscle group value stored by the Supabase exercise sync."""
+    return exercise.category or (exercise.muscles[0] if exercise.muscles else "General")
 
 
 def resolve_exercise_log_id(exercise_id: str) -> str:
@@ -373,4 +378,3 @@ if __name__ == "__main__":
     print("Fetching exercises from wger API...")
     result = run_import()
     print(f"Done! {result['message']}")
-

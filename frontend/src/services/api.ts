@@ -2,6 +2,7 @@
 // computer hosting the frontend instead of their own localhost.
 const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
+const PURCHASE_TIMEOUT_MS = 10_000
 const WRITE_TIMEOUT_MS = 15000
 const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
@@ -18,9 +19,11 @@ import type {
   LiveWorkoutAdjustmentRequest,
   LiveWorkoutAdjustmentResponse,
   Routine,
+  RoutineCreatePayload,
   WorkoutHistoryEntry,
 } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
+import type { PremiumPlan, UserProfile } from '../types'
 
 export interface PlanExercise {
   exercise_id: string
@@ -138,6 +141,10 @@ export async function planTodaysWorkout(userId: string): Promise<void> {
 
 let routinesRequest: Promise<Routine[]> | null = null
 
+export function clearRoutinesCache(): void {
+  routinesRequest = null
+}
+
 export async function fetchRoutines(): Promise<Routine[]> {
   if (routinesRequest) return routinesRequest
   const user = getCurrentUser()
@@ -154,6 +161,99 @@ export async function fetchRoutines(): Promise<Routine[]> {
       throw error
     })
   return routinesRequest
+}
+
+export async function createRoutine(payload: RoutineCreatePayload): Promise<Routine> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before creating a routine')
+
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch (error) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      throw new Error('The request timed out while saving the routine. Please try again.', { cause: error })
+    }
+    if (error instanceof TypeError) {
+      throw new Error(`Could not reach the server while saving the routine: ${error.message}`, { cause: error })
+    }
+    throw error
+  }
+
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    let detail: string | undefined
+    if (error && typeof error === 'object' && 'detail' in error) {
+      const responseDetail = error.detail
+      if (typeof responseDetail === 'string') {
+        detail = responseDetail
+      } else if (Array.isArray(responseDetail)) {
+        detail = responseDetail
+          .map((item: unknown) => {
+            if (!item || typeof item !== 'object' || !('msg' in item)) return null
+            const message = typeof item.msg === 'string' ? item.msg : null
+            const location = 'loc' in item && Array.isArray(item.loc)
+              ? item.loc.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number').join(' > ')
+              : ''
+            return message ? `${location ? `${location}: ` : ''}${message}` : null
+          })
+          .filter((message): message is string => message !== null)
+          .join('; ')
+      }
+    }
+    throw new Error(detail || `Unable to create routine (server error ${response.status})`)
+  }
+  const routine = await response.json() as Routine
+  clearRoutinesCache()
+  return routine
+}
+
+export async function updateRoutine(routineId: string, payload: RoutineCreatePayload): Promise<Routine> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before updating a routine')
+
+  const response = await fetch(
+    `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+  )
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
+      ? error.detail
+      : `Unable to update routine (server error ${response.status})`
+    throw new Error(detail)
+  }
+  const routine = await response.json() as Routine
+  clearRoutinesCache()
+  return routine
+}
+
+export async function deleteRoutine(routineId: string): Promise<void> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Complete onboarding before deleting a routine')
+
+  const response = await fetch(
+    `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
+    { method: 'DELETE', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+  )
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
+      ? error.detail
+      : `Unable to delete routine (server error ${response.status})`
+    throw new Error(detail)
+  }
+  clearRoutinesCache()
 }
 
 export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate): Promise<{ id: string; status: string }> {
@@ -218,6 +318,25 @@ export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistor
   }
   const result = await response.json() as { items: WorkoutHistoryEntry[] }
   return result.items
+}
+
+export async function updateWorkoutHistoryEntry(
+  userId: string,
+  workoutId: string,
+  payload: Pick<WorkoutLogCreate, 'name' | 'exercises'>,
+): Promise<{ id: string; status: string }> {
+  const query = new URLSearchParams({ user_id: userId })
+  const response = await fetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this workout. Please try again.")
+  }
+  return response.json()
 }
 
 export async function deleteWorkoutHistoryEntry(userId: string, workoutId: string): Promise<void> {
@@ -362,6 +481,7 @@ export async function conversationalSetup(
 export interface FetchExercisesParams {
   q?: string
   category?: string
+  muscle_group?: string
   muscle?: string
   equipment?: string
   page?: number
@@ -377,6 +497,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   const query = new URLSearchParams()
   if (params.q) query.set('q', params.q)
   if (params.category) query.set('category', params.category)
+  if (params.muscle_group) query.set('muscle_group', params.muscle_group)
   if (params.muscle) query.set('muscle', params.muscle)
   if (params.equipment) query.set('equipment', params.equipment)
   if (params.page) query.set('page', String(params.page))
@@ -411,6 +532,13 @@ export async function fetchExerciseCategories(): Promise<string[]> {
   if (!response.ok) throw new Error("We couldn't load exercise categories. Please try again.")
   const data = await response.json()
   return data.categories ?? []
+}
+
+export async function fetchExerciseMuscleGroups(): Promise<string[]> {
+  const response = await fetch(`${API_URL}/api/v1/workouts/exercises/muscle-groups`)
+  if (!response.ok) throw new Error('Failed to fetch exercise muscle groups')
+  const data = await response.json() as { muscle_groups: string[] }
+  return data.muscle_groups
 }
 
 export async function fetchExerciseById(exerciseId: string) {
@@ -510,6 +638,64 @@ export function getCurrentUser(): import('../types').UserProfile | null {
   } catch {
     return null
   }
+}
+
+export interface PremiumStatus {
+  status: string
+  is_premium: boolean
+  plan: PremiumPlan
+  started_at: string
+  expires_at: string
+}
+
+export const PREMIUM_UPDATED_EVENT = 'set_plate:premium-updated'
+
+export function isPremiumActive(profile: UserProfile | null = getCurrentUser()): boolean {
+  if (!profile?.is_premium) return false
+  if (!profile.premium_expires_at) return true
+  const expiresAt = Date.parse(profile.premium_expires_at)
+  return Number.isFinite(expiresAt) ? expiresAt > Date.now() : false
+}
+
+export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus> {
+  const user = getCurrentUser()
+  if (!user?.id) throw new Error('Sign in before upgrading to premium')
+
+  const response = await fetch(
+    `${API_URL}/api/v1/premium/subscribe?user_id=${encodeURIComponent(user.id)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan }),
+      signal: AbortSignal.timeout(PURCHASE_TIMEOUT_MS),
+    },
+  )
+
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null)
+    const detail = error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string'
+      ? error.detail
+      : `Unable to activate premium (server error ${response.status})`
+    throw new Error(detail)
+  }
+
+  const status = await response.json() as PremiumStatus
+  const updatedProfile: UserProfile = {
+    ...user,
+    is_premium: true,
+    premium_plan: status.plan,
+    premium_started_at: status.started_at,
+    premium_expires_at: status.expires_at,
+  }
+
+  try {
+    localStorage.setItem('set_plate_user', JSON.stringify(updatedProfile))
+  } catch {
+    // The server response is still authoritative when browser storage is unavailable.
+  }
+  clearDashboardCache()
+  window.dispatchEvent(new Event(PREMIUM_UPDATED_EVENT))
+  return status
 }
 
 export async function updateUserSettings(

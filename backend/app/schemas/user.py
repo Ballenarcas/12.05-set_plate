@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -41,6 +43,9 @@ class UserLoginResponse(BaseModel):
     name: str
     surname: str
     is_premium: bool | None = None
+    premium_plan: str | None = None
+    premium_started_at: datetime | None = None
+    premium_expires_at: datetime | None = None
     age: int | None = None
     gender: str | None = None
     weight: float | None = None

@@ -27,6 +27,11 @@ class WorkoutLogCreate(BaseModel):
     exercises: list[ExerciseLogItem] = Field(default_factory=list)
 
 
+class WorkoutLogUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    exercises: list[ExerciseLogItem] = Field(default_factory=list)
+
+
 class WorkoutLogResponse(BaseModel):
     id: UUID | None = None
     status: str

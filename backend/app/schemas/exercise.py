@@ -5,6 +5,7 @@ class Exercise(BaseModel):
     id: str
     wger_id: int | None = None
     name: str
+    muscle_group: str = "General"
     name_es: str | None = None
     category: str = "General"
     description: str | None = None

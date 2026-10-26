@@ -3,6 +3,7 @@ export interface RoutineExercise {
   name: string
   target_sets: number | null
   target_reps: number | null
+  reps_by_set?: number[] | null
 }
 
 export interface Routine {
@@ -10,6 +11,16 @@ export interface Routine {
   name: string
   exercises: RoutineExercise[]
   estimated_duration_minutes: number | null
+}
+
+export interface RoutineCreatePayload {
+  name: string
+  exercises: Array<{
+    exercise_id: string
+    target_sets: number
+    target_reps: number
+    reps_by_set: number[]
+  }>
 }
 
 export type SetKind = 'normal' | 'warmup' | 'drop' | 'failure'
@@ -39,6 +50,7 @@ export interface ActiveExercise {
 export interface ActiveSession {
   planId?: string
   routineId?: string
+  editWorkoutId?: string
   name: string
   startedAt: string
   exercises: ActiveExercise[]

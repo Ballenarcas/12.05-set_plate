@@ -17,8 +17,8 @@ import type {
 } from '../types/workout'
 import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 
-// IMPORT AJOUTÉ ICI POUR LA MODALE :
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
+import SwipeToDeleteRow from '../components/workout/SwipeToDeleteRow'
 
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
@@ -202,8 +202,6 @@ function ActiveWorkout() {
   const [rpeValues, setRpeValues] = useState<Record<string, number>>({})
   const [restRemaining, setRestRemaining] = useState<Record<number, number>>({})
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
-  const [removingSetKey, setRemovingSetKey] = useState<string | null>(null)
-  const [revealedSetKey, setRevealedSetKey] = useState<string | null>(null)
   const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
   const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
   const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
@@ -212,9 +210,7 @@ function ActiveWorkout() {
   const [isSelectModalOpen, setIsSelectModalOpen] = useState(false)
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null)
 
-  const swipeStart = useRef<{ x: number; y: number } | null>(null)
   const removeSetTimer = useRef<number | null>(null)
-  const removeSetAnimationTimer = useRef<number | null>(null)
   const undoAdjustmentTimer = useRef<number | null>(null)
   const lastAdjustmentSetCount = useRef<number | null>(null)
   const imageLookups = useRef(new Set<string>())
@@ -227,7 +223,6 @@ function ActiveWorkout() {
 
   useEffect(() => () => {
     if (removeSetTimer.current !== null) window.clearTimeout(removeSetTimer.current)
-    if (removeSetAnimationTimer.current !== null) window.clearTimeout(removeSetAnimationTimer.current)
     if (undoAdjustmentTimer.current !== null) window.clearTimeout(undoAdjustmentTimer.current)
   }, [])
 
@@ -381,15 +376,8 @@ function ActiveWorkout() {
 
   function scheduleSetRemoval(removal: PendingSetRemoval) {
     if (removeSetTimer.current !== null) return
-    setPendingSetRemoval(removal)
-    setRemovingSetKey(removal.key)
-    setRevealedSetKey(null)
-    removeSetAnimationTimer.current = window.setTimeout(() => {
-      removeSet(removal.exerciseIndex, removal.setIndex)
-      setPendingSetRemoval((current) => current ? { ...current, removed: true } : current)
-      setRemovingSetKey(null)
-      removeSetAnimationTimer.current = null
-    }, 240)
+    setPendingSetRemoval({ ...removal, removed: true })
+    removeSet(removal.exerciseIndex, removal.setIndex)
     removeSetTimer.current = window.setTimeout(() => {
       setPendingSetRemoval(null)
       removeSetTimer.current = null
@@ -398,9 +386,7 @@ function ActiveWorkout() {
 
   function undoSetRemoval() {
     if (removeSetTimer.current !== null) window.clearTimeout(removeSetTimer.current)
-    if (removeSetAnimationTimer.current !== null) window.clearTimeout(removeSetAnimationTimer.current)
     removeSetTimer.current = null
-    removeSetAnimationTimer.current = null
     if (pendingSetRemoval?.removed) {
       const { exerciseIndex, setIndex, set, kind, rpe } = pendingSetRemoval
       setSession((current) => current ? ({
@@ -414,7 +400,6 @@ function ActiveWorkout() {
       }) : current)
       setRpeValues((current) => insertSetIntoKeyedMap(current, exerciseIndex, set.set_number, rpe))
     }
-    setRemovingSetKey(null)
     setPendingSetRemoval(null)
   }
 
@@ -727,30 +712,15 @@ function ActiveWorkout() {
               {exercise.sets.map((set, setIndex) => {
                 const setKey = `${exerciseIndex}:${set.set_number}`
                 const kind = session.setKinds[setKey] ?? 'normal'
-                const isRemoving = removingSetKey === setKey
                 const hasHighWeightWarning = set.weight_kg > EXTREME_WEIGHT_WARNING_KG
                 return <div className="set-row-entry" key={set.set_number}>
-                  <div className={`set-row-group${isRemoving ? ' is-removing' : ''}`}>
-                  <div
-                    className={`set-row-shell${revealedSetKey === setKey ? ' is-revealed' : ''}`}
-                    onTouchStart={(event) => {
-                      const touch = event.touches[0]
-                      swipeStart.current = touch && !pendingSetRemoval ? { x: touch.clientX, y: touch.clientY } : null
-                    }}
-                    onTouchEnd={(event) => {
-                      const touch = event.changedTouches[0]
-                      if (swipeStart.current && touch) {
-                        const deltaX = touch.clientX - swipeStart.current.x
-                        const deltaY = touch.clientY - swipeStart.current.y
-                        if (deltaX < -55 && Math.abs(deltaY) < 60) setRevealedSetKey(setKey)
-                        else if (deltaX > 45) setRevealedSetKey(null)
-                      }
-                      swipeStart.current = null
-                    }}
+                  <SwipeToDeleteRow
+                    className="swipe-row--set"
+                    actionWidth={64}
+                    label={`set ${set.set_number} of ${exercise.name}`}
+                    disabled={pendingSetRemoval !== null}
+                    onDelete={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })}
                   >
-                    <button className="set-delete-action" type="button" onClick={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })} aria-label={`Delete set ${set.set_number}`} disabled={pendingSetRemoval !== null}>
-                      <Trash2 size={19} aria-hidden="true" />
-                    </button>
                     <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}`}>
                       <select className={`set-kind-select set-kind-${kind}`} value={kind} onChange={(event) => {
                         updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
@@ -774,8 +744,7 @@ function ActiveWorkout() {
                       </select>
                       <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} /></button>
                     </div>
-                  </div>
-                  </div>
+                  </SwipeToDeleteRow>
                   {hasHighWeightWarning && <p className="high-weight-warning" role="status">⚠ This weight is extremely high. Check that you entered it correctly.</p>}
                 </div>
               })}

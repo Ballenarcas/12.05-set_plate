@@ -659,7 +659,9 @@ function ActiveWorkout() {
       <header className={`active-workout-header${isEditingWorkout ? ' is-editing' : ''}`}>
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
         <h1>{isEditingWorkout ? 'Edit Workout' : 'Log Workout'}</h1>
-        <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} aria-hidden="true" /><span className="header-clock-label">{formatClock(durationSeconds)}</span></span>
+        {!isEditingWorkout && (
+          <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} aria-hidden="true" /><span className="header-clock-label">{formatClock(durationSeconds)}</span></span>
+        )}
         {!isEditingWorkout && (
           <button
             className="ai-adjust-trigger"

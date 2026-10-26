@@ -1,0 +1,24 @@
+{
+  "ok": false,
+  "scenario": "proof",
+  "base_url": "http://localhost:5173",
+  "mode": "attached",
+  "started_at": "2026-10-20T07:36:30.798Z",
+  "finished_at": "2026-10-20T07:36:51.317Z",
+  "account": {
+    "email": "t***@uno.com",
+    "user_id_prefix": null
+  },
+  "error": "Timed out waiting for the Chrome DevTools port",
+  "url": null,
+  "body_text": null,
+  "login_status": null,
+  "console_errors": [],
+  "failed_api_requests": [],
+  "artifacts": [
+    "failure.png",
+    "console.log",
+    "network.json",
+    "result.json"
+  ]
+}

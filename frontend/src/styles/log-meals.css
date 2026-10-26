@@ -46,6 +46,12 @@
   margin-bottom: 0.25rem;
 }
 
+.log-meals-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .btn-header-circle {
   width: 2.6rem;
   height: 2.6rem;

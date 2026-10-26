@@ -1,7 +1,7 @@
 from uuid import UUID
 
-from app.schemas.workout import RoutineSummary
-from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse
+from app.schemas.workout import RoutineCreate, RoutineSummary
+from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 from app.db.supabase_client import get_supabase
 from app.services import workout_service, workout_statistics_service, wger_importer
@@ -9,7 +9,6 @@ from app.services.workout_adjustment_service import plan_daily_workout, suggest_
 from app.schemas.workout import (
     LiveWorkoutAdjustmentRequest,
     LiveWorkoutAdjustmentSuggestion,
-    RoutineSummary,
 )
 from fastapi import HTTPException
 
@@ -40,11 +39,28 @@ class WorkoutFacade:
             user_id, range_key, timezone_offset_minutes
         )
 
+    def update_history_entry(
+        self,
+        user_id: UUID,
+        workout_id: UUID,
+        payload: WorkoutLogUpdate,
+    ) -> WorkoutLogResponse:
+        return workout_service.update_workout_history_entry(user_id, workout_id, payload)
+
     def delete_history_entry(self, user_id: UUID, workout_id: UUID) -> None:
         workout_service.delete_workout_history_entry(user_id, workout_id)
 
     def list_routines(self, user_id: UUID) -> list[RoutineSummary]:
         return workout_service.list_user_routines(user_id)
+
+    def create_routine(self, user_id: UUID, payload: RoutineCreate) -> RoutineSummary:
+        return workout_service.create_user_routine(user_id, payload)
+
+    def update_routine(self, user_id: UUID, routine_id: UUID, payload: RoutineCreate) -> RoutineSummary:
+        return workout_service.update_user_routine(user_id, routine_id, payload)
+
+    def delete_routine(self, user_id: UUID, routine_id: UUID) -> None:
+        workout_service.delete_user_routine(user_id, routine_id)
 
     def programmed_workout(self):
         return workout_service.get_programmed_workout()
@@ -54,6 +70,9 @@ class WorkoutFacade:
 
     def get_exercise_categories(self):
         return workout_service.get_exercise_categories()
+
+    def get_exercise_muscle_groups(self):
+        return workout_service.get_exercise_muscle_groups()
 
     def get_exercise_by_id(self, exercise_id: str):
         return workout_service.get_exercise_by_id(exercise_id)

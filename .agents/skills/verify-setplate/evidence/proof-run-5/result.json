@@ -1,0 +1,24 @@
+{
+  "ok": false,
+  "scenario": "proof",
+  "base_url": "http://localhost:5173",
+  "mode": "attached",
+  "started_at": "2026-10-20T07:43:09.133Z",
+  "finished_at": "2026-10-20T07:44:02.958Z",
+  "account": {
+    "email": "t***@uno.com",
+    "user_id_prefix": null
+  },
+  "error": "Timed out waiting for search API response",
+  "url": "http://localhost:5173/workouts/active/exercises",
+  "body_text": "Active workout\n\nAdd exercise\n+\nBarbell Reverse Wrist Curl\nArms\nBarbell Wrist Curl\nArms\nBench Press\nChest\nBenchpress Dumbbells\nChest\nBench Press Narrow Grip\nTriceps\n+\nBent-over Lateral Raises\nShoulders\nCross-Bench Dumbbell Pullovers\nLats · Chest\nIncline Crunches\nAbs\nDecline Bench Press Barbell\nChest\n+\nDecline Bench Press Dumbbell\nChest\n+\nDiagonal Shoulder Press\nShoulders\nDips\nChest · Triceps\nDips Between Two Benches\nTriceps\n+\nDumbbell Concentration Curl\nBrachialis\n+\nDumbbell Incline Curl\nBiceps\nFly With Dumbbells\nChest\n+\nFly With Dumbbells, Decline Bench\nChest\n+\nSkullcrusher Dumbbells\nTriceps\nSkullcrusher SZ-bar\nTriceps\nGlute Bridge\nGlutes\n+\nIncline Dumbbell Fly\nChest\n+\nIncline Dumbbell Row\nBack\nLeg Curls (laying)\nHamstrings\nLeg Raises, Lying\nAbs\nNegative Crunches\nAbs\n+\nPause Bench\nChest\nPr",
+  "login_status": 200,
+  "console_errors": [],
+  "failed_api_requests": [],
+  "artifacts": [
+    "failure.png",
+    "console.log",
+    "network.json",
+    "result.json"
+  ]
+}

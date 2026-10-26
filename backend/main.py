@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, dashboard, nutrition, routines, stats, users, workouts
+from app.api import ai, dashboard, nutrition, premium, routines, stats, users, workouts
 from app.core.config import get_settings
 from app.api.settings import router as settings_router
 from app.db.supabase_client import warm_supabase
@@ -50,4 +50,5 @@ api_router.include_router(stats.router)
 api_router.include_router(ai.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(settings_router)
+api_router.include_router(premium.router)
 app.include_router(api_router)

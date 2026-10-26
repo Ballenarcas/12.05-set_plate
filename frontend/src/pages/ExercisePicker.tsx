@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchExercises } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
@@ -75,6 +76,7 @@ function ExercisePicker() {
           <p className="eyebrow">Active workout</p>
           <h1>{replaceExerciseIndex === undefined ? 'Add exercise' : 'Replace exercise'}</h1>
         </div>
+        <PremiumUpsellButton compact />
       </header>
 
       <label className="picker-search">

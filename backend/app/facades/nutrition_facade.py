@@ -1,6 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
-from app.schemas.nutrition import DailyNutritionResponse, FoodSearchItem, MealCreateRequest, MealItem
+from app.schemas.nutrition import (
+    DailyNutritionResponse,
+    FoodSearchItem,
+    MealCreateRequest,
+    MealItem,
+    MealUpdateRequest,
+)
 from app.services import nutrition_service
 
 
@@ -26,8 +32,11 @@ class NutritionFacade:
     def create_meal(self, payload: MealCreateRequest) -> MealItem:
         return nutrition_service.create_user_meal(payload)
 
-    def delete_meal(self, meal_id: str) -> bool:
-        return nutrition_service.delete_user_meal(meal_id)
+    def update_meal(self, user_id: str, meal_id: str, payload: MealUpdateRequest) -> MealItem:
+        return nutrition_service.update_user_meal(user_id, meal_id, payload)
+
+    def delete_meal(self, user_id: str, meal_id: str) -> bool:
+        return nutrition_service.delete_user_meal(user_id, meal_id)
 
 
 nutrition_facade = NutritionFacade()

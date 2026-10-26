@@ -699,7 +699,6 @@ function ActiveWorkout() {
             </div>}
             <div className="exercise-card-header">
               <div className="exercise-heading-main"><ExerciseArtwork name={exercise.name} images={exercise.images} /><h2>{exercise.name}</h2></div>
-              <span>{exercise.sets.length} sets</span>
             </div>
             <div className="rest-controls">
               <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} onClick={() => toggleRest(exerciseIndex)}>

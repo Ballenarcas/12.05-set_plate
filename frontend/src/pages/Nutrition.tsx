@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { AlertTriangle, ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog } from '../services/api';
 import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
@@ -11,6 +11,24 @@ const DEFAULT_FOOD_DENSITY = {
   carbs_per_100g: 15,
   fats_per_100g: 3.5,
 };
+
+const MAX_REASONABLE_QUANTITY_G = 1000;
+const FALLBACK_QUANTITY_G = 100;
+
+type HighQuantityWarning =
+  | {
+    target: 'ingredient';
+    index: number;
+    name: string;
+    previous: number;
+    next: number;
+  }
+  | {
+    target: 'new';
+    name: string;
+    previous: number;
+    next: number;
+  };
 
 export default function Nutrition() {
   const navigate = useNavigate();
@@ -34,6 +52,9 @@ export default function Nutrition() {
   const [deletingMeal, setDeletingMeal] = useState<MealLogItem | null>(null);
   const [isDeletingMeal, setIsDeletingMeal] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [highQuantityWarning, setHighQuantityWarning] = useState<HighQuantityWarning | null>(null);
+  const ingredientQuantityStartRef = useRef<Record<number, number>>({});
+  const newQuantityStartRef = useRef<number>(FALLBACK_QUANTITY_G);
 
   // SE DÉCLENCHE À CHAQUE CHANGEMENT DE DATE DANS LE CALENDRIER
   useEffect(() => {
@@ -141,6 +162,9 @@ export default function Nutrition() {
     setEditQuantity('100');
     setEditDensity(DEFAULT_FOOD_DENSITY);
     setEditError(null);
+    setHighQuantityWarning(null);
+    ingredientQuantityStartRef.current = {};
+    newQuantityStartRef.current = FALLBACK_QUANTITY_G;
   };
 
   const selectFoodSuggestion = (food: FoodSearchItem) => {
@@ -169,6 +193,71 @@ export default function Nutrition() {
     setFoodSuggestions([]);
   };
 
+  const rememberIngredientQuantityStart = (index: number, quantity: number) => {
+    ingredientQuantityStartRef.current[index] = quantity;
+  };
+
+  const updateIngredientQuantity = (index: number, rawValue: string) => {
+    const ingredient = editIngredients[index];
+    if (!ingredient) return;
+    const nextQuantity = Number(rawValue);
+    setEditIngredients((current) => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, quantity_g: nextQuantity } : item));
+
+    if (!Number.isFinite(nextQuantity)) return;
+    if (nextQuantity > MAX_REASONABLE_QUANTITY_G && nextQuantity !== ingredient.quantity_g) {
+      const previous = ingredientQuantityStartRef.current[index] ?? ingredient.quantity_g;
+      setHighQuantityWarning({
+        target: 'ingredient',
+        index,
+        name: ingredient.name,
+        previous: previous > 0 ? previous : FALLBACK_QUANTITY_G,
+        next: nextQuantity,
+      });
+    }
+  };
+
+  const rememberNewQuantityStart = () => {
+    const quantity = Number(editQuantity);
+    newQuantityStartRef.current = Number.isFinite(quantity) && quantity > 0 ? quantity : FALLBACK_QUANTITY_G;
+  };
+
+  const updateNewQuantity = (rawValue: string) => {
+    const previousQuantity = Number(editQuantity);
+    const nextQuantity = Number(rawValue);
+    setEditQuantity(rawValue);
+
+    if (!Number.isFinite(nextQuantity)) return;
+    if (nextQuantity > MAX_REASONABLE_QUANTITY_G && nextQuantity !== previousQuantity) {
+      setHighQuantityWarning({
+        target: 'new',
+        name: editFoodName.trim() || 'This ingredient',
+        previous: newQuantityStartRef.current,
+        next: nextQuantity,
+      });
+    }
+  };
+
+  const acceptHighQuantity = () => {
+    setHighQuantityWarning(null);
+  };
+
+  const rollbackHighQuantity = () => {
+    const warning = highQuantityWarning;
+    if (!warning) return;
+    const previous = Number.isFinite(warning.previous) && warning.previous > 0
+      ? warning.previous
+      : FALLBACK_QUANTITY_G;
+
+    if (warning.target === 'ingredient') {
+      setEditIngredients((current) => current.map((item, itemIndex) =>
+        itemIndex === warning.index ? { ...item, quantity_g: previous } : item));
+    } else {
+      setEditQuantity(String(previous));
+    }
+    setHighQuantityWarning(null);
+  };
+
   const editNutrition = editIngredients.reduce((total, ingredient) => {
     const ratio = ingredient.quantity_g / 100;
     return {
@@ -182,7 +271,7 @@ export default function Nutrition() {
 
   const confirmEdit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editingMeal || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)) return;
+    if (!editingMeal || highQuantityWarning || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)) return;
     const user = getCurrentUser();
     if (!user?.id) {
       setEditError('Sign in again to update this meal.');
@@ -383,7 +472,15 @@ export default function Nutrition() {
                 <div className="form-group">
                   <label className="form-label" htmlFor="edit-food-quantity">Quantity</label>
                   <div className="input-with-suffix">
-                    <input id="edit-food-quantity" className="form-input" type="number" min="1" value={editQuantity} onChange={(event) => setEditQuantity(event.target.value)} />
+                    <input
+                      id="edit-food-quantity"
+                      className="form-input"
+                      type="number"
+                      min="1"
+                      value={editQuantity}
+                      onFocus={rememberNewQuantityStart}
+                      onChange={(event) => updateNewQuantity(event.target.value)}
+                    />
                     <span className="input-suffix"><Scale size={16} aria-hidden="true" /> grams</span>
                   </div>
                 </div>
@@ -410,11 +507,8 @@ export default function Nutrition() {
                             type="number"
                             min="1"
                             value={ingredient.quantity_g || ''}
-                            onChange={(event) => {
-                              const quantity = Number(event.target.value);
-                              setEditIngredients((current) => current.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, quantity_g: quantity } : item));
-                            }}
+                            onFocus={() => rememberIngredientQuantityStart(index, ingredient.quantity_g)}
+                            onChange={(event) => updateIngredientQuantity(index, event.target.value)}
                           />
                           <small>g</small>
                         </label>
@@ -444,6 +538,42 @@ export default function Nutrition() {
                 {isSavingEdit ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save changes'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {highQuantityWarning && (
+        <div className="quantity-warning-backdrop">
+          <div
+            className="quantity-warning-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="quantity-warning-title"
+            aria-describedby="quantity-warning-description"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                rollbackHighQuantity();
+              }
+            }}
+          >
+            <div className="quantity-warning-icon" aria-hidden="true">
+              <AlertTriangle size={24} />
+            </div>
+            <h3 id="quantity-warning-title">Is {highQuantityWarning.next.toLocaleString()}g correct?</h3>
+            <p id="quantity-warning-description">
+              <strong>{highQuantityWarning.name}</strong> at {highQuantityWarning.next.toLocaleString()}g is over
+              {MAX_REASONABLE_QUANTITY_G.toLocaleString()}g. That may be too much for one meal. Please confirm
+              the amount is right.
+            </p>
+            <div className="quantity-warning-actions">
+              <button type="button" className="quantity-warning-rollback" onClick={rollbackHighQuantity} autoFocus>
+                Rollback
+              </button>
+              <button type="button" className="quantity-warning-accept" onClick={acceptHighQuantity}>
+                Accept
+              </button>
+            </div>
           </div>
         </div>
       )}

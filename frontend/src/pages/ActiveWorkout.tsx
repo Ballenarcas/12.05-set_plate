@@ -594,6 +594,7 @@ function ActiveWorkout() {
   }
 
   function openAiAdjustment() {
+    if (!session || session.editWorkoutId) return
     setShowAiAdjustment(true)
     const isStale = lastAdjustmentSetCount.current !== completedSets
     if (aiAdjustment.status !== 'ready' || isStale) requestAiAdjustment()
@@ -651,25 +652,29 @@ function ActiveWorkout() {
     navigate('/workouts')
   }
 
+  const isEditingWorkout = Boolean(session?.editWorkoutId)
+
   return (
     <div className="screen active-workout-screen">
-      <header className="active-workout-header">
+      <header className={`active-workout-header${isEditingWorkout ? ' is-editing' : ''}`}>
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
-        <h1>{session?.editWorkoutId ? 'Edit Workout' : 'Log Workout'}</h1>
+        <h1>{isEditingWorkout ? 'Edit Workout' : 'Log Workout'}</h1>
         <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} aria-hidden="true" /><span className="header-clock-label">{formatClock(durationSeconds)}</span></span>
-        <button
-          className="ai-adjust-trigger"
-          type="button"
-          onClick={openAiAdjustment}
-          disabled={isSaving}
-          aria-label="Ask AI for adjustments"
-          title="Ask AI for adjustments"
-        >
-          <Sparkles size={16} aria-hidden="true" />
-          AI
-        </button>
+        {!isEditingWorkout && (
+          <button
+            className="ai-adjust-trigger"
+            type="button"
+            onClick={openAiAdjustment}
+            disabled={isSaving}
+            aria-label="Ask AI for adjustments"
+            title="Ask AI for adjustments"
+          >
+            <Sparkles size={16} aria-hidden="true" />
+            AI
+          </button>
+        )}
         <PremiumUpsellButton compact />
-        <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{session?.editWorkoutId ? 'Save' : 'Finish'}</button>
+        <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
       </header>
 
       <section className="session-stats" aria-label="Workout stats">

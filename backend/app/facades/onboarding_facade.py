@@ -97,9 +97,11 @@ class OnboardingFacade:
                 .replace("%", r"\%")
                 .replace("_", r"\_")
             )
+            # ``*`` keeps the login query independent from the subscription
+            # fields, which are read from the separate subscriptions table.
             result = (
                 supabase.table("users")
-                .select("id,email,password,Name,Surname,is_premium,age,gender,weight,height,objective")
+                .select("*")
                 .ilike("email", email_pattern)
                 .limit(1)
                 .execute()
@@ -113,12 +115,40 @@ class OnboardingFacade:
         user = result.data[0] if result.data else None
         if user is None or not verify_password(payload.password, user.get("password", "")):
             raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        is_premium = bool(user.get("is_premium"))
+        premium_plan = None
+        premium_started_at = None
+        premium_expires_at = None
+        if is_premium:
+            try:
+                subscription_result = (
+                    supabase.table("subscriptions")
+                    .select("plan,status,current_period_start,current_period_end")
+                    .eq("user_id", user["id"])
+                    .limit(1)
+                    .execute()
+                )
+            except Exception as err:
+                logger.warning("Could not load the user subscription: %s", err)
+            else:
+                subscription = subscription_result.data[0] if subscription_result.data else None
+                if subscription:
+                    premium_plan = subscription.get("plan")
+                    premium_started_at = subscription.get("current_period_start")
+                    premium_expires_at = subscription.get("current_period_end")
+                    if subscription.get("status") == "expired":
+                        is_premium = False
+
         return UserLoginResponse(
             id=str(user["id"]),
             email=user["email"],
             name=user.get("Name") or "",
             surname=user.get("Surname") or "",
-            is_premium=user.get("is_premium"),
+            is_premium=is_premium,
+            premium_plan=premium_plan,
+            premium_started_at=premium_started_at,
+            premium_expires_at=premium_expires_at,
             age=user.get("age"),
             gender=user.get("gender"),
             weight=user.get("weight"),

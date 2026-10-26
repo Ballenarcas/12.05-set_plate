@@ -5,7 +5,7 @@ import '../../styles/global.css'
 
 function MainLayout() {
   const { pathname } = useLocation()
-  const hideDock = pathname.startsWith('/workouts/active')
+  const hideDock = pathname.startsWith('/workouts/active') || pathname === '/premium'
   return (
     <div className={`app-shell${hideDock ? ' session-shell' : ''}`}>
       <main className={`app-main${hideDock ? ' session-main' : ''}`}><Outlet /></main>

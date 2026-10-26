@@ -1,0 +1,24 @@
+{
+  "ok": false,
+  "scenario": "proof",
+  "base_url": "http://localhost:5173",
+  "mode": "attached",
+  "started_at": "2026-10-20T07:41:16.991Z",
+  "finished_at": "2026-10-20T07:42:05.313Z",
+  "account": {
+    "email": "t***@uno.com",
+    "user_id_prefix": null
+  },
+  "error": "error:signal timed out",
+  "url": "http://localhost:5173/login",
+  "body_text": "SET&PLATE\nWelcome back\n\nSign in to continue your training and nutrition journey.\n\nEmail\nPassword\nSign in\nBack to welcome\n\nsignal timed out\n\nNew to SET&PLATE? Create your profile",
+  "login_status": null,
+  "console_errors": [],
+  "failed_api_requests": [],
+  "artifacts": [
+    "failure.png",
+    "console.log",
+    "network.json",
+    "result.json"
+  ]
+}

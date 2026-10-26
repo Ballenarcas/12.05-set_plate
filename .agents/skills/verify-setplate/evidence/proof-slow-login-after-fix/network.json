@@ -1,0 +1,323 @@
+{
+  "login_status": 200,
+  "exercise_responses": [
+    {
+      "url": "http://localhost:5173/api/v1/workouts/exercises?page=1&limit=30&compact=true",
+      "status": 200,
+      "body": {
+        "total": 918,
+        "items": [
+          {
+            "id": "wger_9",
+            "name": "2 Handed Kettlebell Swing",
+            "category": "Abs"
+          },
+          {
+            "id": "wger_12",
+            "name": "Seated Hip Adduction",
+            "category": "Legs"
+          },
+          {
+            "id": "wger_20",
+            "name": "Arnold Shoulder Press",
+            "category": "Shoulders"
+          },
+          {
+            "id": "wger_31",
+            "name": "Axe Hold",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_41",
+            "name": "Barbell Ab Rollout",
+            "category": "Abs"
+          },
+          {
+            "id": "wger_43",
+            "name": "Barbell Hack Squats",
+            "category": "Legs"
+          },
+          {
+            "id": "wger_46",
+            "name": "Barbell Lunges Standing",
+            "category": "Legs"
+          },
+          {
+            "id": "wger_48",
+            "name": "Barbell Reverse Wrist Curl",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_50",
+            "name": "Barbell Triceps Extension",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_51",
+            "name": "Barbell Wrist Curl",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_56",
+            "name": "Abdominal Stabilization",
+            "category": "Abs"
+          },
+          {
+            "id": "wger_57",
+            "name": "Bear Walk 2",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_71",
+            "name": "Single Leg Extension",
+            "category": "Legs"
+          },
+          {
+            "id": "wger_73",
+            "name": "Bench Press",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_75",
+            "name": "Benchpress Dumbbells",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_76",
+            "name": "Bench Press Narrow Grip",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_79",
+            "name": "Bent High Pulls",
+            "category": "Shoulders"
+          },
+          {
+            "id": "wger_81",
+            "name": "Bent Over Dumbbell Rows (Single Arm)",
+            "category": "Back"
+          },
+          {
+            "id": "wger_82",
+            "name": "Bent-over Lateral Raises",
+            "category": "Shoulders"
+          },
+          {
+            "id": "wger_83",
+            "name": "Bent Over Rowing",
+            "category": "Back"
+          },
+          {
+            "id": "wger_84",
+            "name": "Bent Over Rowing Reverse",
+            "category": "Back"
+          },
+          {
+            "id": "wger_91",
+            "name": "Biceps Curls With Barbell",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_92",
+            "name": "Biceps Curls With Dumbbell",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_94",
+            "name": "Biceps Curls With SZ-bar",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_95",
+            "name": "Biceps Curl With Cable",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_112",
+            "name": "Body-Ups",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_124",
+            "name": "Braced Squat",
+            "category": "Legs"
+          },
+          {
+            "id": "wger_129",
+            "name": "Chest Press",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_132",
+            "name": "Burpees",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_135",
+            "name": "Butterfly",
+            "category": "Chest"
+          }
+        ]
+      }
+    },
+    {
+      "url": "http://localhost:5173/api/v1/workouts/exercises?q=bench&page=1&limit=30&compact=true",
+      "status": 200,
+      "body": {
+        "total": 100,
+        "items": [
+          {
+            "id": "wger_48",
+            "name": "Barbell Reverse Wrist Curl",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_51",
+            "name": "Barbell Wrist Curl",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_73",
+            "name": "Bench Press",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_75",
+            "name": "Benchpress Dumbbells",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_76",
+            "name": "Bench Press Narrow Grip",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_82",
+            "name": "Bent-over Lateral Raises",
+            "category": "Shoulders"
+          },
+          {
+            "id": "wger_161",
+            "name": "Cross-Bench Dumbbell Pullovers",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_171",
+            "name": "Incline Crunches",
+            "category": "Abs"
+          },
+          {
+            "id": "wger_185",
+            "name": "Decline Bench Press Barbell",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_186",
+            "name": "Decline Bench Press Dumbbell",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_193",
+            "name": "Diagonal Shoulder Press",
+            "category": "Shoulders"
+          },
+          {
+            "id": "wger_194",
+            "name": "Dips",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_197",
+            "name": "Dips Between Two Benches",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_202",
+            "name": "Dumbbell Concentration Curl",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_204",
+            "name": "Dumbbell Incline Curl",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_238",
+            "name": "Fly With Dumbbells",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_239",
+            "name": "Fly With Dumbbells, Decline Bench",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_245",
+            "name": "Skullcrusher Dumbbells",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_246",
+            "name": "Skullcrusher SZ-bar",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_265",
+            "name": "Glute Bridge",
+            "category": "Legs"
+          },
+          {
+            "id": "wger_308",
+            "name": "Incline Dumbbell Fly",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_310",
+            "name": "Incline Dumbbell Row",
+            "category": "Back"
+          },
+          {
+            "id": "wger_365",
+            "name": "Leg Curls (laying)",
+            "category": "Legs"
+          },
+          {
+            "id": "wger_377",
+            "name": "Leg Raises, Lying",
+            "category": "Abs"
+          },
+          {
+            "id": "wger_427",
+            "name": "Negative Crunches",
+            "category": "Abs"
+          },
+          {
+            "id": "wger_445",
+            "name": "Pause Bench",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_465",
+            "name": "Preacher Curls",
+            "category": "Arms"
+          },
+          {
+            "id": "wger_487",
+            "name": "Rear Delt Raises",
+            "category": "Shoulders"
+          },
+          {
+            "id": "wger_498",
+            "name": "Reverse Grip Bench Press",
+            "category": "Chest"
+          },
+          {
+            "id": "wger_510",
+            "name": "Rowing, Lying on Bench",
+            "category": "Back"
+          }
+        ]
+      }
+    }
+  ]
+}

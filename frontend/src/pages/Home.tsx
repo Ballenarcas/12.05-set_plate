@@ -1,6 +1,7 @@
 import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
 
@@ -21,7 +22,10 @@ function HomeSkeleton() {
             <span className="skeleton skeleton-line w-mid tall" aria-hidden="true" />
           </div>
         </div>
-        <span className="skeleton skeleton-badge" aria-hidden="true" />
+        <div className="home-header-actions">
+          <PremiumUpsellButton />
+          <span className="skeleton skeleton-badge" aria-hidden="true" />
+        </div>
       </header>
 
       <section className="skeleton-section" aria-hidden="true">
@@ -122,7 +126,10 @@ function Home() {
             <h1>Hello, {displayName}</h1>
           </div>
         </div>
-        <div className="date-badge"><CalendarDays size={16} aria-hidden="true" />{summary.current_date_formatted}</div>
+        <div className="home-header-actions">
+          <PremiumUpsellButton />
+          <div className="date-badge"><CalendarDays size={16} aria-hidden="true" />{summary.current_date_formatted}</div>
+        </div>
       </header>
 
       <section className="section" aria-labelledby="trainer-insight">
@@ -227,6 +234,7 @@ function Home() {
           <div className="card training-card empty-state">No workout scheduled for today.</div>
         )}
       </section>
+
     </div>
   )
 }

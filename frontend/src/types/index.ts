@@ -15,6 +15,7 @@ export interface Exercise {
   id: string
   wger_id?: number | null
   name: string
+  muscle_group: string
   name_es?: string | null
   category: string
   description?: string | null
@@ -34,6 +35,8 @@ export interface ExerciseListResponse {
 }
 
 export type FitnessGoal = 'Lose Weight' | 'Strength' | 'Hypertrophy'
+
+export type PremiumPlan = 'annual' | 'monthly'
 
 export interface UserOnboardingFormData {
   // Screen 1: Authentication
@@ -58,6 +61,9 @@ export interface UserProfile {
   name: string
   surname: string
   is_premium?: boolean
+  premium_plan?: PremiumPlan | string | null
+  premium_started_at?: string | null
+  premium_expires_at?: string | null
   birthDate?: string
   age?: number
   gender?: string
@@ -66,5 +72,4 @@ export interface UserProfile {
   objective?: FitnessGoal
   calorie_goal?: number
 }
-
 

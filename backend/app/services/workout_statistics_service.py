@@ -22,7 +22,7 @@ _RANGE_MONTHS = {"1M": 1, "3M": 3}
 _WORKOUT_SELECT = (
     "id,start_time,end_time,"
     "workout_sets(set_number,reps,weight,is_done,exercise_id,"
-    "exercises(name,muscles))"
+    "exercises(muscles))"
 )
 
 

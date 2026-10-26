@@ -14,10 +14,10 @@ export const STATISTICS_RANGES: StatisticsRangeOption[] = [
 
 export const DEFAULT_STATISTICS_RANGE: WorkoutStatisticsRange = '1M'
 
-const volumeFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
-const countFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const volumeFormatter = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 })
+const countFormatter = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 })
 
-/** Format kilograms using the app's established whole/decimal number style. */
+/** Format workout numbers with periods for grouping and commas for decimals. */
 export function formatVolumeKg(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0'
   return volumeFormatter.format(value)

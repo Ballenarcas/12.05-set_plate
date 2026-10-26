@@ -109,7 +109,6 @@ function WorkoutStatisticsPage() {
   function changeRange(nextRange: WorkoutStatisticsRange) {
     if (nextRange === range) return
     requestId.current += 1
-    setData(null)
     setError(null)
     setIsLoading(true)
     setRange(nextRange)
@@ -117,12 +116,15 @@ function WorkoutStatisticsPage() {
 
   function retry() {
     requestId.current += 1
-    setData(null)
     setError(null)
     setIsLoading(true)
     setRetryToken((value) => value + 1)
   }
 
+  const selectedRangeLabel = STATISTICS_RANGES.find((option) => option.value === range)?.label ?? range
+  const displayedRangeLabel = data
+    ? STATISTICS_RANGES.find((option) => option.value === data.range)?.label ?? data.range
+    : null
   const volumeEmpty = data?.volume_progression.length === 0
   const distributionEmpty = data?.muscle_group_distribution.length === 0
 
@@ -146,7 +148,9 @@ function WorkoutStatisticsPage() {
       <section className="stats-range-section" aria-labelledby="stats-range-title">
         <div className="stats-range-heading">
           <h2 className="section-title" id="stats-range-title">Date range</h2>
-          {data && <p className="stats-range-caption">{formatStatisticsDateRange(data.start_date, data.end_date)}</p>}
+          {data?.range === range && (
+            <p className="stats-range-caption">{formatStatisticsDateRange(data.start_date, data.end_date)}</p>
+          )}
         </div>
         <div className="stats-range" role="group" aria-label="Statistics date range">
           {STATISTICS_RANGES.map((option) => (
@@ -164,7 +168,14 @@ function WorkoutStatisticsPage() {
         </div>
       </section>
 
-      {isLoading && <StatisticsSkeleton />}
+      {isLoading && !data && <StatisticsSkeleton />}
+
+      {isLoading && data && (
+        <p className="stats-refresh-status" role="status">
+          <span className="stats-refresh-indicator" aria-hidden="true" />
+          Updating {selectedRangeLabel} statistics; showing {displayedRangeLabel} results until ready.
+        </p>
+      )}
 
       {!isLoading && error && (
         <div className="card state-card stats-error-card" role="alert">
@@ -175,7 +186,7 @@ function WorkoutStatisticsPage() {
         </div>
       )}
 
-      {!isLoading && !error && data && (
+      {data && (isLoading || !error) && (
         <div className="stats-content">
           <div className="stats-metrics" aria-live="polite">
             <MetricCard
@@ -224,6 +235,7 @@ function WorkoutStatisticsPage() {
               </div>
             ) : (
               <VolumeProgressionChart
+                key={data.range}
                 points={data.volume_progression}
                 granularity={data.progression_granularity}
                 rangeStart={data.start_date}

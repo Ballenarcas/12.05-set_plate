@@ -83,7 +83,7 @@ export default function VolumeProgressionChart({ points, granularity, rangeStart
           })}
 
           {areaPath && <path className="stats-line-area" d={areaPath} />}
-          {coordinates.length > 1 && <path className="stats-line-path" d={linePath} />}
+          {coordinates.length > 1 && <path className="stats-line-path" d={linePath} pathLength={1} />}
 
           {coordinates.map((point) => (
             <g key={point.date}>

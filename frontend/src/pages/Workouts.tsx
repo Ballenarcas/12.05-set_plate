@@ -1,10 +1,21 @@
-import { ArrowRight, CalendarDays, Clock3, Dumbbell, History, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
+import { ArrowRight, BarChart3, CalendarDays, Clock3, Dumbbell, History, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { ActiveExercise, Routine, WorkoutHistoryEntry } from '../types/workout'
+
+function formatWorkoutDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return 'Unavailable'
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes} min`
+}
+
+function formatWorkoutDate(value: string): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
 
 function createActiveExercises(routine: Routine): ActiveExercise[] {
   return routine.exercises.map((exercise) => ({
@@ -23,23 +34,17 @@ function createActiveExercises(routine: Routine): ActiveExercise[] {
   }))
 }
 
-function formatWorkoutDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 1) return 'Under 1 min'
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes} min`
-}
-
 function Workouts() {
   const navigate = useNavigate()
   const currentUserId = getCurrentUser()?.id
   const [routines, setRoutines] = useState<Routine[]>([])
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistoryEntry[]>([])
-  const [isHistoryLoading, setIsHistoryLoading] = useState(Boolean(currentUserId))
-  const [historyError, setHistoryError] = useState<string | null>(currentUserId ? null : 'Sign in to see your workout history.')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(() => Boolean(getCurrentUser()?.id))
+  const [historyError, setHistoryError] = useState<string | null>(() => (
+    getCurrentUser()?.id ? null : 'Sign in to view your workout history.'
+  ))
   const [showDiscardActiveWorkout, setShowDiscardActiveWorkout] = useState(false)
   const [ongoingWorkoutName, setOngoingWorkoutName] = useState('your workout')
   const [routineToDelete, setRoutineToDelete] = useState<Routine | null>(null)
@@ -57,12 +62,27 @@ function Workouts() {
   }, [])
 
   useEffect(() => {
-    if (!currentUserId) return
+    if (!currentUserId) {
+      setIsHistoryLoading(false)
+      setHistoryError('Sign in to view your workout history.')
+      return
+    }
 
+    let isMounted = true
+    setIsHistoryLoading(true)
+    setHistoryError(null)
     fetchWorkoutHistory(currentUserId)
-      .then(setWorkoutHistory)
-      .catch((requestError: Error) => setHistoryError(describeError(requestError, "We couldn't load your workout history. Please try again.")))
-      .finally(() => setIsHistoryLoading(false))
+      .then((items) => { if (isMounted) setWorkoutHistory(items) })
+      .catch((requestError: Error) => {
+        if (isMounted) setHistoryError(describeError(requestError, "We couldn't load your workout history. Please try again."))
+      })
+      .finally(() => {
+        if (isMounted) setIsHistoryLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
   }, [currentUserId])
 
   function startWorkout(routine?: Routine) {
@@ -198,11 +218,13 @@ function Workouts() {
   return (
     <div className="screen workouts-screen">
       <header className="workouts-page-header">
-        <div><p className="eyebrow">Train with purpose</p><h1>Workouts</h1></div>
+        <div className="workouts-heading">
+          <div><p className="eyebrow">Train with purpose</p><h1>Workouts</h1></div>
+          <PremiumUpsellButton className="workouts-premium-button" />
+        </div>
         <div className="workouts-header-actions">
           <button className="secondary-action create-routine-action" type="button" onClick={() => navigate('/workouts/create')}><Plus size={16} /> Create Routine</button>
           <button className="secondary-action" type="button" onClick={requestEmptyWorkout}><Plus size={16} /> Start empty workout</button>
-          <PremiumUpsellButton />
         </div>
       </header>
 
@@ -211,11 +233,16 @@ function Workouts() {
       {routineDeleteError && <div className="card routine-delete-error" role="alert">{routineDeleteError}</div>}
 
       <section className="workout-history-section" aria-labelledby="workout-history-title">
-        <h2 className="section-title" id="workout-history-title"><History size={16} aria-hidden="true" /> Workout history</h2>
+        <div className="workout-history-heading">
+          <h2 className="section-title" id="workout-history-title"><History size={16} aria-hidden="true" /> Workout history</h2>
+          <button className="secondary-action" type="button" onClick={() => navigate('/workouts/statistics')}>
+            <BarChart3 size={16} aria-hidden="true" /> Statistics
+          </button>
+        </div>
         {isHistoryLoading && <div className="card state-card" role="status">Loading your workouts...</div>}
         {historyError && <div className="card state-card" role="alert">{historyError}</div>}
         {!isHistoryLoading && !historyError && workoutHistory.length === 0 && (
-          <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>Your completed workouts will appear here.</p></div>
+          <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No completed workouts yet. Finish a workout to start building your history.</p></div>
         )}
         {!historyError && workoutHistory.length > 0 && (
           <div className="routine-list workout-history-list">
@@ -244,9 +271,10 @@ function Workouts() {
                   </div>
                 </div>
                 <div className="routine-meta">
-                  <span><CalendarDays size={14} aria-hidden="true" />{new Date(workout.started_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span><CalendarDays size={14} aria-hidden="true" />{formatWorkoutDate(workout.started_at)}</span>
                   <span><Clock3 size={14} aria-hidden="true" />{formatWorkoutDuration(workout.duration_seconds)}</span>
                   <span>{workout.exercises.length} exercises</span>
+                  <span>{workout.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => set.is_completed).length, 0)} sets completed</span>
                 </div>
                 {workout.exercises.length > 0 && (
                   <ul className="routine-preview">

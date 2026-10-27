@@ -11,6 +11,7 @@ from app.schemas.workout import (
     LiveWorkoutAdjustmentSuggestion,
 )
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
+from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
@@ -57,6 +58,20 @@ def get_workout_history(
     limit: int = Query(30, ge=1, le=100),
 ) -> WorkoutHistoryResponse:
     return workout_facade.list_history(user_id, limit)
+
+
+@router.get("/statistics", response_model=WorkoutStatisticsResponse)
+def get_workout_statistics(
+    user_id: UUID = Query(..., description="Supabase users.id"),
+    range_key: WorkoutStatisticsRange = Query("1M", alias="range"),
+    timezone_offset_minutes: int = Query(
+        0,
+        ge=-840,
+        le=840,
+        description="Client getTimezoneOffset() value used for local date buckets",
+    ),
+) -> WorkoutStatisticsResponse:
+    return workout_facade.get_statistics(user_id, range_key, timezone_offset_minutes)
 
 
 @router.put("/history/{workout_id}", response_model=WorkoutLogResponse)

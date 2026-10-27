@@ -15,6 +15,7 @@ const Premium = lazy(() => import('./pages/Premium'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Welcome = lazy(() => import('./pages/Welcome'))
 const Workouts = lazy(() => import('./pages/Workouts'))
+const WorkoutStatistics = lazy(() => import('./pages/WorkoutStatistics'))
 
 function ProtectedLayout() {
   return getCurrentUser()?.id ? <MainLayout /> : <Navigate to="/welcome" replace />
@@ -32,6 +33,7 @@ function App() {
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/workouts" element={<Workouts />} />
+            <Route path="/workouts/statistics" element={<WorkoutStatistics />} />
             <Route path="/workouts/create" element={<CreateRoutine />} />
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />

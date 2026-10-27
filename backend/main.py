@@ -36,6 +36,7 @@ def root() -> dict[str, str]:
 api_router = APIRouter(prefix="/api/v1")
 
 
+@app.get("/health", include_in_schema=False)
 @api_router.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}

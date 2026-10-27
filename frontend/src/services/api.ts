@@ -13,6 +13,8 @@ const DASHBOARD_CACHE_TTL_MS = 30_000
 const insightRequests = new Map<string, Promise<TrainerInsightResponse>>()
 const nutritionRequests = new Map<string, Promise<TodayNutritionData>>()
 const adjustmentRequests = new Map<string, Promise<CalorieAdjustmentData>>()
+const workoutStatisticsCache = new Map<string, { data: WorkoutStatistics; expiresAt: number }>()
+const WORKOUT_STATISTICS_CACHE_TTL_MS = 30_000
 const NUTRITION_CACHE_PREFIX = 'set_plate_nutrition:'
 const NUTRITION_CACHE_TTL_MS = 60_000
 import type {
@@ -21,6 +23,8 @@ import type {
   Routine,
   RoutineCreatePayload,
   WorkoutHistoryEntry,
+  WorkoutStatistics,
+  WorkoutStatisticsRange,
 } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 import type { PremiumPlan, UserProfile } from '../types'
@@ -266,6 +270,7 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
   if (!response.ok) {
     throw new Error("We couldn't save your workout. Please try again.")
   }
+  invalidateWorkoutStatisticsCache(userId)
   return response.json() as Promise<{ id: string; status: string }>
 }
 
@@ -348,6 +353,43 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
   if (!response.ok) {
     throw new Error("We couldn't remove that workout. Please try again.")
   }
+  invalidateWorkoutStatisticsCache(userId)
+}
+
+function invalidateWorkoutStatisticsCache(userId: string): void {
+  const prefix = `${userId}:`
+  for (const key of workoutStatisticsCache.keys()) {
+    if (key.startsWith(prefix)) workoutStatisticsCache.delete(key)
+  }
+}
+
+export async function fetchWorkoutStatistics(
+  userId: string,
+  range: WorkoutStatisticsRange,
+  signal?: AbortSignal,
+): Promise<WorkoutStatistics> {
+  const timezoneOffsetMinutes = new Date().getTimezoneOffset()
+  const cacheKey = `${userId}:${range}:${timezoneOffsetMinutes}`
+  const cached = workoutStatisticsCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.data
+  if (cached) workoutStatisticsCache.delete(cacheKey)
+
+  const query = new URLSearchParams({
+    user_id: userId,
+    range,
+    timezone_offset_minutes: String(timezoneOffsetMinutes),
+  })
+  const timeout = AbortSignal.timeout(DASHBOARD_TIMEOUT_MS)
+  const response = await fetch(`${API_URL}/api/v1/workouts/statistics?${query}`, {
+    cache: 'no-store',
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your workout statistics. Please try again.")
+  }
+  const data = await response.json() as WorkoutStatistics
+  workoutStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
+  return data
 }
 
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {

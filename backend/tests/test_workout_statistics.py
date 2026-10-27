@@ -404,7 +404,10 @@ def test_service_filters_by_user_and_range_without_the_history_limit(monkeypatch
     assert not any(call[0] == "limit" for call in query.calls)
 
     select_columns = next(call[1] for call in query.calls if call[0] == "select")
-    assert "exercises(name,muscles)" in select_columns
+    # Only the ordered primary-muscle metadata is needed; the exercise name is
+    # not part of the response, so it must stay out of the projection.
+    assert "exercises(muscles)" in select_columns
+    assert "exercises(name" not in select_columns
     assert "muscles_secondary" not in select_columns
 
 

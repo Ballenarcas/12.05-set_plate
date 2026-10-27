@@ -44,6 +44,9 @@ The SET&PLATE dashboard includes:
 ```text
 .
 ├── .env.example
+├── docker-compose.yml
+├── deploy/
+│   └── HOMELAB.md
 ├── backend/
 │   ├── app/
 │   │   ├── api/
@@ -108,6 +111,7 @@ The SET&PLATE dashboard includes:
 - Node.js 20 or newer
 - npm
 - A Supabase project for database-backed features
+- Docker Engine with Compose v2 (optional, for the homelab demo)
 
 ## Configuration
 
@@ -124,8 +128,8 @@ Set the real values for `SUPABASE_URL` and `SUPABASE_KEY` in `.env`.
 | `SUPABASE_URL` | Supabase project URL | Empty |
 | `SUPABASE_KEY` | Supabase anon key | Empty |
 | `SUPABASE_SERVICE_ROLE_KEY` | Backend-only key for protected Supabase reads | Empty |
-| `VITE_API_URL` | FastAPI base URL used by the frontend | `http://localhost:8000` |
-| `CORS_ORIGINS` | Comma-separated allowed frontend origins | `http://localhost:5173` |
+| `VITE_API_URL` | FastAPI base URL used by the frontend | Empty (same origin) |
+| `CORS_ORIGINS` | Comma-separated allowed frontend origins | `http://localhost:5173,http://localhost:8080` |
 | `GROQ_API_KEY` | GroqCloud API key used by the AI trainer | Empty |
 | `GROQ_MODEL` | GroqCloud model used for trainer insights | `llama-3.3-70b-versatile` |
 
@@ -176,6 +180,12 @@ npm run build    # Run TypeScript and create a production build
 npm run lint     # Run ESLint
 npm run preview  # Preview the production build
 ```
+
+## Deploy a Homelab Demo
+
+A Docker Compose stack for ZimaOS and Portainer is included. It builds the React app into nginx, proxies `/api` to FastAPI, and keeps the backend private inside the Compose network.
+
+See [deploy/HOMELAB.md](deploy/HOMELAB.md) for the deployment steps, environment variables, security notes, and remote access options.
 
 ## Application Routes
 

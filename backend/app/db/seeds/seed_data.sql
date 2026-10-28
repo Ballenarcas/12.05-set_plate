@@ -3,30 +3,11 @@
 -- Populates: RLS Policies, Users, Meals, Routines, Routine Exercises, Workouts & Sets
 -- =============================================================================
 
--- 0. RLS POLICIES FOR DEVELOPMENT
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public all users" ON public.users;
-CREATE POLICY "Allow public all users" ON public.users FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.meals ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public all meals" ON public.meals;
-CREATE POLICY "Allow public all meals" ON public.meals FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.routines ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public all routines" ON public.routines;
-CREATE POLICY "Allow public all routines" ON public.routines FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.routine_exercises ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public all routine_exercises" ON public.routine_exercises;
-CREATE POLICY "Allow public all routine_exercises" ON public.routine_exercises FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.workouts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public all workouts" ON public.workouts;
-CREATE POLICY "Allow public all workouts" ON public.workouts FOR ALL USING (true) WITH CHECK (true);
-
-ALTER TABLE public.workout_sets ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public all workout_sets" ON public.workout_sets;
-CREATE POLICY "Allow public all workout_sets" ON public.workout_sets FOR ALL USING (true) WITH CHECK (true);
+-- 0. RLS POLICIES
+-- The permissive "Allow public all <table>" policies that used to live here
+-- exposed every row (including password hashes) to the public anon key.
+-- Access is now restricted to service_role; see
+-- backend/app/db/migrations/harden_rls.sql.
 
 
 -- 1. DEMO USER

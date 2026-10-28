@@ -75,8 +75,43 @@ export interface DashboardSummary {
   completed_workout_today: CompletedWorkoutToday | null
 }
 
-function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
+const SESSION_KEY = 'set_plate_session'
+
+export function getAccessToken(): string | null {
   try {
+    return localStorage.getItem(SESSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function clearSession(): void {
+  try {
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem('set_plate_user')
+  } catch {
+    // Storage can be unavailable in restricted browsing contexts.
+  }
+}
+
+/**
+ * Single entry point for every authenticated request. Adds the bearer token
+ * and drops the local session as soon as the server rejects it.
+ */
+async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const token = getAccessToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const response = await fetch(input, { ...init, headers })
+  if (response.status === 401) {
+    clearSession()
+    if (window.location.pathname !== '/login') window.location.assign('/login')
+    throw new Error('Your session expired. Please sign in again.')
+  }
+  return response
+}
+
+function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {  try {
     const saved = sessionStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
     if (!saved) return null
     const cached = JSON.parse(saved) as { data: DashboardSummary; at: number }
@@ -111,7 +146,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
   const inflight = dashboardRequests.get(userId)
   if (inflight) return inflight
 
-  const request = fetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}`, {
+  const request = apiFetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}`, {
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
     .then(async (response) => {
@@ -133,7 +168,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
 }
 
 export async function planTodaysWorkout(userId: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/v1/workouts/plan-today?user_id=${encodeURIComponent(userId)}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/plan-today?user_id=${encodeURIComponent(userId)}`, {
     method: 'POST',
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
@@ -153,7 +188,7 @@ export async function fetchRoutines(): Promise<Routine[]> {
   if (routinesRequest) return routinesRequest
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Finish setting up your profile to see your routines')
-  routinesRequest = fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+  routinesRequest = apiFetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
@@ -173,7 +208,7 @@ export async function createRoutine(payload: RoutineCreatePayload): Promise<Rout
 
   let response: Response
   try {
-    response = await fetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
+    response = await apiFetch(`${API_URL}/api/v1/routines?user_id=${encodeURIComponent(user.id)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -221,7 +256,7 @@ export async function updateRoutine(routineId: string, payload: RoutineCreatePay
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Complete onboarding before updating a routine')
 
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
     {
       method: 'PUT',
@@ -246,7 +281,7 @@ export async function deleteRoutine(routineId: string): Promise<void> {
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Complete onboarding before deleting a routine')
 
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/v1/routines/${encodeURIComponent(routineId)}?user_id=${encodeURIComponent(user.id)}`,
     { method: 'DELETE', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
   )
@@ -261,7 +296,7 @@ export async function deleteRoutine(routineId: string): Promise<void> {
 }
 
 export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate): Promise<{ id: string; status: string }> {
-  const response = await fetch(`${API_URL}/api/v1/workouts/logs?user_id=${encodeURIComponent(userId)}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/logs?user_id=${encodeURIComponent(userId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -292,7 +327,7 @@ export async function requestWorkoutAdjustment(
   const query = new URLSearchParams({ user_id: userId })
   let response: Response
   try {
-    response = await fetch(`${API_URL}/api/v1/workouts/adjust?${query}`, {
+    response = await apiFetch(`${API_URL}/api/v1/workouts/adjust?${query}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -315,7 +350,7 @@ export async function requestWorkoutAdjustment(
 
 export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
   const query = new URLSearchParams({ user_id: userId, limit: '30' })
-  const response = await fetch(`${API_URL}/api/v1/workouts/history?${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/history?${query}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (!response.ok) {
@@ -331,7 +366,7 @@ export async function updateWorkoutHistoryEntry(
   payload: Pick<WorkoutLogCreate, 'name' | 'exercises'>,
 ): Promise<{ id: string; status: string }> {
   const query = new URLSearchParams({ user_id: userId })
-  const response = await fetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -346,7 +381,7 @@ export async function updateWorkoutHistoryEntry(
 
 export async function deleteWorkoutHistoryEntry(userId: string, workoutId: string): Promise<void> {
   const query = new URLSearchParams({ user_id: userId })
-  const response = await fetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/history/${encodeURIComponent(workoutId)}?${query}`, {
     method: 'DELETE',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
@@ -380,7 +415,7 @@ export async function fetchWorkoutStatistics(
     timezone_offset_minutes: String(timezoneOffsetMinutes),
   })
   const timeout = AbortSignal.timeout(DASHBOARD_TIMEOUT_MS)
-  const response = await fetch(`${API_URL}/api/v1/workouts/statistics?${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/statistics?${query}`, {
     cache: 'no-store',
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   })
@@ -412,11 +447,15 @@ export async function loginUser(email: string, password: string): Promise<import
     if (response.status === 401 || response.status === 404) {
       throw new Error('That email and password do not match. Please try again.')
     }
+    if (response.status === 429) {
+      throw new Error('Too many attempts. Wait a minute and try again.')
+    }
     throw new Error("We couldn't sign you in right now. Please try again.")
   }
 
-  const profile = await response.json() as import('../types').UserProfile
+  const profile = await response.json() as import('../types').UserProfile & { access_token: string }
   try {
+    localStorage.setItem(SESSION_KEY, profile.access_token)
     localStorage.setItem('set_plate_user', JSON.stringify(profile))
   } catch {
     throw new Error("We couldn't keep you signed in on this device. Please try again.")
@@ -436,7 +475,7 @@ export interface TrainerInsightResponse {
 }
 
 export async function getHealth(): Promise<{ status: string }> {
-  const response = await fetch(`${API_URL}/api/v1/health`)
+  const response = await apiFetch(`${API_URL}/api/v1/health`)
   if (!response.ok) throw new Error("We couldn't reach SET&PLATE. Check your connection and try again.")
   return response.json() as Promise<{ status: string }>
 }
@@ -448,7 +487,7 @@ export async function generateTrainerInsight(
   const existingRequest = insightRequests.get(requestKey)
   if (existingRequest) return existingRequest
 
-  const insightRequest = fetch(`${API_URL}/api/v1/ai/trainer-insight`, {
+  const insightRequest = apiFetch(`${API_URL}/api/v1/ai/trainer-insight`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: requestKey,
@@ -499,7 +538,7 @@ export async function parseNaturalLanguage(
   text: string,
   threshold = 0.65,
 ): Promise<ParseNaturalLanguageResponse> {
-  const response = await fetch(`${API_URL}/api/v1/ai/parse-intent`, {
+  const response = await apiFetch(`${API_URL}/api/v1/ai/parse-intent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, threshold }),
@@ -511,7 +550,7 @@ export async function parseNaturalLanguage(
 export async function conversationalSetup(
   request: ConversationalSetupRequest,
 ): Promise<ConversationalSetupResponse> {
-  const response = await fetch(`${API_URL}/api/v1/ai/conversational-setup`, {
+  const response = await apiFetch(`${API_URL}/api/v1/ai/conversational-setup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
@@ -552,7 +591,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   const inflight = exerciseListInflight.get(queryString)
   if (inflight) return inflight
 
-  const request = fetch(`${API_URL}/api/v1/workouts/exercises${queryString ? `?${queryString}` : ''}`, {
+  const request = apiFetch(`${API_URL}/api/v1/workouts/exercises${queryString ? `?${queryString}` : ''}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
@@ -570,21 +609,21 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
 }
 
 export async function fetchExerciseCategories(): Promise<string[]> {
-  const response = await fetch(`${API_URL}/api/v1/workouts/exercises/categories`)
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/categories`)
   if (!response.ok) throw new Error("We couldn't load exercise categories. Please try again.")
   const data = await response.json()
   return data.categories ?? []
 }
 
 export async function fetchExerciseMuscleGroups(): Promise<string[]> {
-  const response = await fetch(`${API_URL}/api/v1/workouts/exercises/muscle-groups`)
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/muscle-groups`)
   if (!response.ok) throw new Error('Failed to fetch exercise muscle groups')
   const data = await response.json() as { muscle_groups: string[] }
   return data.muscle_groups
 }
 
 export async function fetchExerciseById(exerciseId: string) {
-  const response = await fetch(`${API_URL}/api/v1/workouts/exercises/${exerciseId}`)
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${exerciseId}`)
   if (!response.ok) throw new Error("We couldn't load that exercise. Please try again.")
   return response.json()
 }
@@ -593,7 +632,7 @@ export async function triggerWgerImport(maxItems?: number) {
   const url = maxItems
     ? `${API_URL}/api/v1/workouts/exercises/import-wger?max_items=${maxItems}`
     : `${API_URL}/api/v1/workouts/exercises/import-wger`
-  const response = await fetch(url, { method: 'POST' })
+  const response = await apiFetch(url, { method: 'POST' })
   if (!response.ok) throw new Error("We couldn't import exercises right now. Please try again.")
   return response.json()
 }
@@ -639,19 +678,16 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
     objective: payload.objective,
   }
 
-  try {
-    localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
-  } catch {
-    // Ignore storage errors in restricted contexts
-  }
-
-  const response = await fetch(`${API_URL}/api/v1/users/onboarding`, {
+  const response = await apiFetch(`${API_URL}/api/v1/users/onboarding`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
+    if (response.status === 409) {
+      throw new Error('That email is already registered. Try signing in instead.')
+    }
     throw new Error("We couldn't save your profile. Please try again.")
   }
 
@@ -665,6 +701,7 @@ export async function submitUserOnboarding(formData: import('../types').UserOnbo
     localProfile.calorie_goal = data.calorie_goal
   }
   try {
+    if (data.access_token) localStorage.setItem(SESSION_KEY, data.access_token)
     localStorage.setItem('set_plate_user', JSON.stringify(localProfile))
   } catch {
     // Ignore
@@ -703,7 +740,7 @@ export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus>
   const user = getCurrentUser()
   if (!user?.id) throw new Error('Sign in before upgrading to premium')
 
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/api/v1/premium/subscribe?user_id=${encodeURIComponent(user.id)}`,
     {
       method: 'POST',
@@ -745,7 +782,7 @@ export async function updateUserSettings(
   settings: { age: number; weight: number; height: number; gender: string; objective: string },
 ): Promise<void> {
   const query = new URLSearchParams({ user_id: userId })
-  const response = await fetch(`${API_URL}/api/v1/settings/update?${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/settings/update?${query}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -850,7 +887,7 @@ export async function fetchTodayNutrition(userId: string, dateString?: string): 
   const existing = nutritionRequests.get(requestKey)
   if (existing) return existing
 
-  const request = fetch(
+  const request = apiFetch(
     `${API_URL}/api/v1/nutrition/today?user_id=${encodeURIComponent(userId)}&today_start=${encodeURIComponent(window.today_start)}&today_end=${encodeURIComponent(window.today_end)}`,
     { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
   )
@@ -892,7 +929,7 @@ export async function fetchCalorieAdjustment(userId: string): Promise<CalorieAdj
   const existing = adjustmentRequests.get(userId)
   if (existing) return existing
 
-  const request = fetch(
+  const request = apiFetch(
     `${API_URL}/api/v1/ai/calorie-adjustment?user_id=${encodeURIComponent(userId)}`,
     { signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS) },
   )
@@ -911,7 +948,7 @@ export async function decideCalorieAdjustment(
   adjustmentId: string,
   status: 'accepted' | 'rejected',
 ): Promise<{ calorie_goal: number }> {
-  const response = await fetch(`${API_URL}/api/v1/ai/calorie-adjustment/decision`, {
+  const response = await apiFetch(`${API_URL}/api/v1/ai/calorie-adjustment/decision`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, adjustment_id: adjustmentId, status }),
@@ -933,7 +970,7 @@ export interface FoodSearchItem {
 }
 
 export async function searchFoodItems(query = ''): Promise<FoodSearchItem[]> {
-  const response = await fetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/search-foods?q=${encodeURIComponent(query)}`)
   if (!response.ok) {
     throw new Error('Food search is not available right now. Please try again.')
   }
@@ -953,7 +990,7 @@ export interface MealCreateRequest {
 }
 
 export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
-  const response = await fetch(`${API_URL}/api/v1/nutrition/meals`, {
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/meals`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -972,7 +1009,7 @@ export async function updateMealLog(
   payload: { name: string; meal_type: string; ingredients: MealIngredient[] },
 ): Promise<MealLogItem> {
   const query = new URLSearchParams({ user_id: userId })
-  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${encodeURIComponent(mealId)}?${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/meals/${encodeURIComponent(mealId)}?${query}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -995,7 +1032,7 @@ export async function updateMealLog(
 
 export async function deleteMealLog(userId: string, mealId: string): Promise<void> {
   const query = new URLSearchParams({ user_id: userId })
-  const response = await fetch(`${API_URL}/api/v1/nutrition/meals/${encodeURIComponent(mealId)}?${query}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/meals/${encodeURIComponent(mealId)}?${query}`, {
     method: 'DELETE',
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })

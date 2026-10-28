@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from main import app
 
+from tests.auth_helpers import auth_headers
+
 client = TestClient(app)
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
@@ -48,7 +50,11 @@ def _supabase_with(user: dict, meals: list[dict]) -> MagicMock:
 
 def _get_today(supabase: MagicMock) -> dict:
     with patch("app.services.nutrition_service.get_supabase", return_value=supabase):
-        response = client.get(f"/api/v1/nutrition/today", params={"user_id": USER_ID, **WINDOW})
+        response = client.get(
+            "/api/v1/nutrition/today",
+            params={"user_id": USER_ID, **WINDOW},
+            headers=auth_headers(USER_ID),
+        )
     assert response.status_code == 200
     return response.json()
 

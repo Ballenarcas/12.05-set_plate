@@ -1,8 +1,10 @@
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 from app.schemas.ai import EntityType
 from app.services.fuzzy_matcher import FuzzyEntityMatcher, calculate_similarity, normalize_text
 from main import app
+from tests.auth_helpers import auth_headers
 
 client = TestClient(app)
 
@@ -78,6 +80,7 @@ def test_conversational_setup_api_endpoint():
     response = client.post(
         "/api/v1/ai/conversational-setup",
         json={"message": "Can you set up my upper body routine with bench and pullups?"},
+        headers=auth_headers(uuid4()),
     )
     assert response.status_code == 200
     data = response.json()

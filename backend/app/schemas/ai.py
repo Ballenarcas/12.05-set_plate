@@ -28,7 +28,9 @@ class CalorieAdjustmentResponse(BaseModel):
 
 
 class CalorieAdjustmentDecisionRequest(BaseModel):
-    user_id: str
+    # Ignored: the owner is taken from the bearer session. Kept optional so
+    # older clients that still send it keep working.
+    user_id: str | None = None
     adjustment_id: str
     status: Literal["accepted", "rejected"]
 

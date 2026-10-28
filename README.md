@@ -22,6 +22,7 @@ The project is built as a React single-page application backed by a FastAPI serv
 - [Run the backend](#run-the-backend)
 - [Run the frontend](#run-the-frontend)
 - [Production build](#production-build)
+- [Deploy a homelab demo](#deploy-a-homelab-demo)
 - [API reference](#api-reference)
 - [How nutrition targets are calculated](#how-nutrition-targets-are-calculated)
 - [AI behaviour and guardrails](#ai-behaviour-and-guardrails)
@@ -130,7 +131,7 @@ This table separates what is wired end to end from what is still a placeholder.
 | Premium checkout | Mock | Activates a database status; no payment is processed. |
 | Workout statistics page | Not implemented | `/api/v1/stats/` is an empty placeholder and no statistics screen is routed. |
 | Password reset and email verification | Not implemented | No recovery flow yet. |
-| Production authentication and rate limiting | Not implemented | User identity is passed as a `user_id` query parameter. |
+| Production authentication and rate limiting | Implemented | Bearer sessions signed with `AUTH_SECRET_KEY`, per-endpoint identity from the token, and nginx rate limits on login and on `/api/`. |
 
 ---
 
@@ -224,9 +225,12 @@ The frontend keeps API access in `frontend/src/services/api.ts` and page-level s
 .
 ├── .env.example
 ├── .github/
-│   └── workflows/ci.yml
+│   └── workflows/               # ci.yml (checks) and deploy.yml (homelab)
 ├── AGENTS.md
 ├── README.md
+├── docker-compose.yml           # Homelab stack for ZimaOS / Portainer
+├── deploy/
+│   └── HOMELAB.md               # Deployment, tunnel, and CD notes
 ├── backend/
 │   ├── app/
 │   │   ├── api/                 # FastAPI routers
@@ -267,6 +271,7 @@ The frontend keeps API access in `frontend/src/services/api.ts` and page-level s
 - npm
 - A Supabase project
 - Optional: a GroqCloud API key for AI planning and live adjustments
+- Optional: Docker Engine with Compose v2, for the homelab demo
 
 ### 1. Clone the repository
 
@@ -322,12 +327,18 @@ Backend variables are read from the repository root `.env` (the backend also che
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Backend-only key for admin reads and writes | Empty |
 | `GROQ_API_KEY` | No | Enables AI planning, insights, and live adjustments | Empty |
 | `GROQ_MODEL` | No | Groq chat model | `llama-3.3-70b-versatile` |
-| `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call FastAPI | `http://localhost:5173` |
+| `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call FastAPI. `*` is rejected at startup | `http://localhost:5173` |
+| `AUTH_SECRET_KEY` | Yes in production | Signs the bearer sessions. Rotating it logs everyone out | Falls back to the service-role key |
+| `AUTH_TOKEN_TTL_HOURS` | No | Session lifetime in hours | `12` |
+| `ENVIRONMENT` | No | `production` disables `/docs` and `/openapi.json` | `development` |
+| `ALLOWED_HOSTS` | Yes in production | Comma-separated `Host` allow-list; loopback is always accepted | Empty (no validation) |
+| `ADMIN_USER_IDS` | No | Comma-separated user UUIDs allowed to run the wger import | Empty (nobody) |
 | `VITE_API_URL` | No | API base URL baked into a production frontend build | Empty |
 
 ### Notes on configuration
 
 - The backend reads the service-role key from the server environment only. It must never reach the browser.
+- Every `/api/v1` endpoint requires an `Authorization: Bearer <token>` header. The token is issued by login and registration and lives in `localStorage` under `set_plate_session`; `user_id` is never accepted from the client.
 - In development, the frontend intentionally calls `/api/...` on its own origin and Vite proxies `/api` to `http://127.0.0.1:8000`. `VITE_API_URL` is ignored by the development build.
 - In a production build, `VITE_API_URL` is read at build time. Leave it empty when the frontend and API share an origin behind a reverse proxy, or set it to the public API origin and add that origin to `CORS_ORIGINS`. Provide it through the build environment or `frontend/.env.production`.
 - Changing `VITE_API_URL` requires rebuilding the frontend. Restarting the frontend is not enough.
@@ -459,11 +470,19 @@ Because Vite embeds `VITE_API_URL` at build time, changing the API URL always re
 
 ---
 
+## Deploy a homelab demo
+
+`docker-compose.yml` runs the app on ZimaOS or any Docker host: nginx serves the built SPA, proxies `/api` to FastAPI, and publishes only `127.0.0.1:<APP_PORT>`, so a Tailscale Funnel or Cloudflare Tunnel on the same host is the only way in.
+
+See [deploy/HOMELAB.md](deploy/HOMELAB.md) for the deployment steps, the required environment variables, the tunnel setup, and the automatic deployment on push to `master`.
+
+---
+
 ## API reference
 
-All application endpoints are under `/api/v1`. User-scoped endpoints receive the Supabase user ID as a `user_id` query parameter. Interactive documentation is available at `/docs`, and the raw OpenAPI schema is available at `/openapi.json`.
+All application endpoints are under `/api/v1`. Every endpoint except `/api/v1/health`, login, and registration requires an `Authorization: Bearer <token>` header; the token identifies the user, and a `user_id` in the path or query is never trusted. Interactive documentation is available at `/docs` unless `ENVIRONMENT=production`.
 
-> There is no JWT or session middleware yet. The backend trusts the supplied `user_id`. This is suitable for local development and controlled demos, not for an untrusted public deployment.
+> Sessions are stateless HMAC tokens signed with `AUTH_SECRET_KEY`, valid for `AUTH_TOKEN_TTL_HOURS`. There are no refresh tokens: when one expires the client is sent back to `/login`.
 
 ### System
 
@@ -483,27 +502,27 @@ All application endpoints are under `/api/v1`. User-scoped endpoints receive the
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/dashboard/summary?user_id={uuid}` | Build the home dashboard summary |
+| `GET` | `/api/v1/dashboard/summary` | Build the home dashboard summary |
 
 ### Routines
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/routines?user_id={uuid}` | List saved routines |
-| `POST` | `/api/v1/routines?user_id={uuid}` | Create a routine |
-| `PUT` | `/api/v1/routines/{routine_id}?user_id={uuid}` | Replace a routine's name and exercises |
-| `DELETE` | `/api/v1/routines/{routine_id}?user_id={uuid}` | Delete a routine |
+| `GET` | `/api/v1/routines` | List saved routines |
+| `POST` | `/api/v1/routines` | Create a routine |
+| `PUT` | `/api/v1/routines/{routine_id}` | Replace a routine's name and exercises |
+| `DELETE` | `/api/v1/routines/{routine_id}` | Delete a routine |
 
 ### Workouts
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/workouts/plan-today?user_id={uuid}` | Generate or select today's plan with Groq |
-| `POST` | `/api/v1/workouts/adjust?user_id={uuid}` | Request live AI adjustments for the active session |
-| `POST` | `/api/v1/workouts/logs?user_id={uuid}` | Save a completed workout |
-| `GET` | `/api/v1/workouts/history?user_id={uuid}&limit=30` | List completed workouts |
-| `PUT` | `/api/v1/workouts/history/{workout_id}?user_id={uuid}` | Update a completed workout |
-| `DELETE` | `/api/v1/workouts/history/{workout_id}?user_id={uuid}` | Delete a completed workout |
+| `POST` | `/api/v1/workouts/plan-today` | Generate or select today's plan with Groq |
+| `POST` | `/api/v1/workouts/adjust` | Request live AI adjustments for the active session |
+| `POST` | `/api/v1/workouts/logs` | Save a completed workout |
+| `GET` | `/api/v1/workouts/history?limit=30` | List completed workouts |
+| `PUT` | `/api/v1/workouts/history/{workout_id}` | Update a completed workout |
+| `DELETE` | `/api/v1/workouts/history/{workout_id}` | Delete a completed workout |
 
 ### Exercise catalog
 
@@ -521,11 +540,11 @@ Supported exercise query parameters: `q`, `category`, `muscle_group`, `muscle`, 
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/nutrition/today?user_id={uuid}` | Daily nutrition summary and logged meals |
+| `GET` | `/api/v1/nutrition/today` | Daily nutrition summary and logged meals |
 | `GET` | `/api/v1/nutrition/search-foods?q={text}` | Search the local food catalog and Open Food Facts |
 | `POST` | `/api/v1/nutrition/meals` | Create a meal with ingredients |
-| `PUT` | `/api/v1/nutrition/meals/{meal_id}?user_id={uuid}` | Update a meal |
-| `DELETE` | `/api/v1/nutrition/meals/{meal_id}?user_id={uuid}` | Delete a meal |
+| `PUT` | `/api/v1/nutrition/meals/{meal_id}` | Update a meal |
+| `DELETE` | `/api/v1/nutrition/meals/{meal_id}` | Delete a meal |
 
 `/nutrition/today` accepts optional `today_start` and `today_end` ISO 8601 timestamps so the frontend can request the user's local day instead of the server's day.
 
@@ -536,7 +555,7 @@ Supported exercise query parameters: `q`, `category`, `muscle_group`, `muscle`, 
 | `POST` | `/api/v1/ai/trainer-insight` | Generate a short trainer insight with Groq |
 | `POST` | `/api/v1/ai/parse-intent` | Fuzzy-match natural language against foods, exercises, routines, and meals |
 | `POST` | `/api/v1/ai/conversational-setup` | Grounded conversational helper for routines and meals |
-| `GET` | `/api/v1/ai/calorie-adjustment?user_id={uuid}` | Build a rule-based calorie goal proposal |
+| `GET` | `/api/v1/ai/calorie-adjustment` | Build a rule-based calorie goal proposal |
 | `POST` | `/api/v1/ai/calorie-adjustment/decision` | Accept or reject a calorie goal proposal |
 
 The conversational and intent endpoints are available in the backend and in the frontend API client, but they are not currently connected to a screen.
@@ -545,13 +564,13 @@ The conversational and intent endpoints are available in the backend and in the 
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `PUT` | `/api/v1/settings/update?user_id={uuid}` | Update age, weight, height, gender, and objective |
+| `PUT` | `/api/v1/settings/update` | Update age, weight, height, gender, and objective |
 
 ### Premium
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/premium/subscribe?user_id={uuid}` | Activate a mock monthly or annual subscription |
+| `POST` | `/api/v1/premium/subscribe` | Reserved: returns 501 until a payment provider is wired up |
 
 ### Placeholder endpoints
 
@@ -713,14 +732,14 @@ Then open `http://localhost:5173`, create a profile, sign in, open the dashboard
 
 ## Known limitations
 
-- **User identity is not authenticated per request.** Endpoints trust the `user_id` query parameter. Add real authentication and authorization before exposing the API to untrusted users.
-- **No rate limiting.** Public deployment needs a gateway or middleware layer.
+- **Sessions are stateless and cannot be revoked.** A token stays valid until `AUTH_TOKEN_TTL_HOURS` expires; rotating `AUTH_SECRET_KEY` invalidates every session at once.
+- **Rate limiting lives in nginx.** It is per IP and only active in the Compose deployment; a bare `uvicorn` process has none.
 - **Session state is client-side.** The signed-in profile is stored in `localStorage`; clearing it signs the user out.
 - **No password reset or email verification.** The onboarding flow validates email format but does not prove email ownership.
-- **Repeated onboarding uses an email upsert.** Existing passwords are preserved, but the flow is not a complete account-recovery process.
+- **Registration rejects a known email.** A second signup with the same address returns 409 instead of recovering the account.
 - **Home AI insight is a placeholder.** The backend endpoint exists, but the dashboard does not call it.
 - **Plate scanning is not implemented.** The control is disabled and marked PRO.
-- **Premium is a mock.** No payment provider, receipt validation, cancellation, or feature gating is connected.
+- **Premium is a mock.** `POST /api/v1/premium/subscribe` returns 501 until a verified payment webhook exists.
 - **Workout statistics are not exposed.** `/api/v1/stats/` returns an empty list and there is no routed statistics screen.
 - **AI features require a Groq key.** Without one, planning and live adjustments return configuration errors.
 - **Food search depends on a network fallback.** Local matches work offline; Open Food Facts results need outbound network access.

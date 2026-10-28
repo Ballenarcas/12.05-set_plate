@@ -1,8 +1,10 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
+from app.core.auth import issue_access_token
 from app.core.security import hash_password, verify_password
 from app.db.supabase_client import get_supabase
 from app.services.user_profile_service import calculate_calorie_goal
@@ -15,6 +17,15 @@ from app.schemas.user import (
 
 logger = logging.getLogger(__name__)
 
+# Bcrypt comparison against a throwaway hash keeps the failed-login path as
+# slow as the successful one, so the response time does not reveal whether an
+# email is registered.
+_DUMMY_HASH = hash_password("set-and-plate-timing-equalizer")
+
+
+def _expires_at(expires_at_unix: int) -> datetime:
+    return datetime.fromtimestamp(expires_at_unix, tz=timezone.utc)
+
 
 class OnboardingFacade:
     def __init__(self, supabase_provider=None):
@@ -23,6 +34,7 @@ class OnboardingFacade:
     def register(self, payload: UserOnboardingRequest) -> UserOnboardingResponse:
         provider = self.supabase_provider or get_supabase
         user_id = str(uuid.uuid4())
+        email = payload.email.strip().lower()
         calorie_goal = calculate_calorie_goal(
             weight=payload.weight,
             height=payload.height,
@@ -34,8 +46,22 @@ class OnboardingFacade:
             supabase = provider(admin=True)
             if supabase is None:
                 raise HTTPException(status_code=500, detail="Database client is not configured. Please ensure SUPABASE_URL and SUPABASE_KEY are set.")
+            existing = (
+                supabase.table("users")
+                .select("id")
+                .eq("email", email)
+                .limit(1)
+                .execute()
+            )
+            # Signing up an already-registered email must never overwrite the
+            # stored profile (or downgrade a paying account).
+            if existing.data:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This email is already registered. Sign in instead.",
+                )
             record = {
-                "id": user_id, "email": payload.email, "is_premium": False,
+                "id": user_id, "email": email, "is_premium": False,
                 "Name": payload.name, "Surname": payload.surname,
                 "weight": float(payload.weight) if payload.weight is not None else None,
                 "height": int(payload.height) if payload.height is not None else None,
@@ -43,22 +69,9 @@ class OnboardingFacade:
                 "gender": payload.gender, "objective": payload.objective,
                 "calorie_goal": calorie_goal,
             }
-            # Onboarding upserts on email, so a repeat signup would otherwise
-            # overwrite the password of an existing account without proving
-            # ownership of that email. Only set it when the email is new.
             if payload.password:
-                existing = (
-                    supabase.table("users")
-                    .select("id")
-                    .eq("email", payload.email)
-                    .limit(1)
-                    .execute()
-                )
-                if not existing.data:
-                    record["password"] = hash_password(payload.password)
-                else:
-                    logger.info("Email already registered; keeping the stored password untouched.")
-            result = supabase.table("users").upsert(record, on_conflict="email").execute()
+                record["password"] = hash_password(payload.password)
+            result = supabase.table("users").insert(record).execute()
             saved_id = result.data[0].get("id") if result.data else None
             if saved_id:
                 user_id = saved_id
@@ -66,7 +79,7 @@ class OnboardingFacade:
                 saved_user = (
                     supabase.table("users")
                     .select("id")
-                    .eq("email", payload.email)
+                    .eq("email", email)
                     .limit(1)
                     .execute()
                 )
@@ -77,13 +90,16 @@ class OnboardingFacade:
             raise
         except Exception as err:
             logger.error("Could not persist user to Supabase: %s", err, exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to save user in database: {err}") from err
+            raise HTTPException(status_code=500, detail="Could not create the account.") from err
+        token, expires_at = issue_access_token(str(user_id))
         return UserOnboardingResponse(status="success", user_id=user_id, name=payload.name,
-            surname=payload.surname, email=payload.email, calorie_goal=calorie_goal,
-            message=f"Welcome to SET&PLATE, {payload.name}!", saved_to_supabase=True)
+            surname=payload.surname, email=email, calorie_goal=calorie_goal,
+            message=f"Welcome to SET&PLATE, {payload.name}!", saved_to_supabase=True,
+            access_token=token, token_expires_at=_expires_at(expires_at))
 
     def login(self, payload: UserLoginRequest) -> UserLoginResponse:
         """Authenticate a user and return only public profile fields."""
+        email = payload.email.strip().lower()
         try:
             supabase = (self.supabase_provider or get_supabase)(admin=True)
             if supabase is None:
@@ -91,18 +107,12 @@ class OnboardingFacade:
                     status_code=500,
                     detail="Database client is not configured. Please ensure SUPABASE_URL and SUPABASE_KEY are set.",
                 )
-            email_pattern = (
-                payload.email.strip()
-                .replace("\\", "\\\\")
-                .replace("%", r"\%")
-                .replace("_", r"\_")
-            )
             # ``*`` keeps the login query independent from the subscription
             # fields, which are read from the separate subscriptions table.
             result = (
                 supabase.table("users")
                 .select("*")
-                .ilike("email", email_pattern)
+                .eq("email", email)
                 .limit(1)
                 .execute()
             )
@@ -113,7 +123,8 @@ class OnboardingFacade:
             raise HTTPException(status_code=500, detail="Could not sign in") from err
 
         user = result.data[0] if result.data else None
-        if user is None or not verify_password(payload.password, user.get("password", "")):
+        stored_hash = (user or {}).get("password") or _DUMMY_HASH
+        if not verify_password(payload.password, stored_hash) or user is None:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         is_premium = bool(user.get("is_premium"))
@@ -140,6 +151,7 @@ class OnboardingFacade:
                     if subscription.get("status") == "expired":
                         is_premium = False
 
+        token, expires_at = issue_access_token(str(user["id"]))
         return UserLoginResponse(
             id=str(user["id"]),
             email=user["email"],
@@ -154,6 +166,8 @@ class OnboardingFacade:
             weight=user.get("weight"),
             height=user.get("height"),
             objective=user.get("objective"),
+            access_token=token,
+            token_expires_at=_expires_at(expires_at),
         )
 
 

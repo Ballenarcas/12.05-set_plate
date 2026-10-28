@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, Query
+from uuid import UUID
 
-from app.facades.premium_facade import premium_facade
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.auth import current_user
 from app.schemas.premium import PremiumPurchaseRequest, PremiumPurchaseResponse
 
 router = APIRouter(prefix="/premium", tags=["premium"])
@@ -9,11 +11,9 @@ router = APIRouter(prefix="/premium", tags=["premium"])
 @router.post("/subscribe", response_model=PremiumPurchaseResponse)
 def subscribe_to_premium(
     payload: PremiumPurchaseRequest,
-    user_id: str = Query(..., min_length=1, description="ID of the user buying premium"),
+    user_id: UUID = Depends(current_user),
 ) -> PremiumPurchaseResponse:
-    try:
-        return premium_facade.purchase(user_id, payload.plan)
-    except LookupError as err:
-        raise HTTPException(status_code=404, detail=str(err)) from err
-    except Exception as err:
-        raise HTTPException(status_code=400, detail=str(err)) from err
+    # A subscription may only be granted by a verified payment-provider
+    # webhook. Until checkout exists, the client cannot upgrade itself.
+    _ = (payload, user_id)
+    raise HTTPException(status_code=501, detail="Checkout is not available yet.")

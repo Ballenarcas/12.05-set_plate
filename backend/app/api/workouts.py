@@ -1,8 +1,9 @@
 from time import monotonic
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
+from app.core.auth import current_admin, current_user
 from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
 from app.facades.workout_facade import workout_facade
 from app.schemas.workout import (
@@ -21,7 +22,7 @@ _last_adjustment_request: dict[str, float] = {}
 
 @router.post("/plan-today")
 async def plan_todays_workout(
-    user_id: UUID = Query(..., description="Supabase users.id"),
+    user_id: UUID = Depends(current_user),
 ) -> dict:
     return await workout_facade.plan_today(user_id)
 
@@ -30,7 +31,7 @@ async def plan_todays_workout(
 async def suggest_live_adjustment(
     payload: LiveWorkoutAdjustmentRequest,
     response: Response,
-    user_id: UUID = Query(..., description="Supabase users.id"),
+    user_id: UUID = Depends(current_user),
 ) -> LiveWorkoutAdjustmentResponse:
     """Ask the AI trainer for conservative adjustments to the workout in progress."""
     response.headers["Cache-Control"] = "no-store"
@@ -47,14 +48,14 @@ async def suggest_live_adjustment(
 @router.post("/logs", response_model=WorkoutLogResponse)
 def create_workout_log(
     payload: WorkoutLogCreate,
-    user_id: UUID = Query(..., description="Supabase users.id"),
+    user_id: UUID = Depends(current_user),
 ) -> WorkoutLogResponse:
     return workout_facade.save_log(user_id, payload)
 
 
 @router.get("/history", response_model=WorkoutHistoryResponse)
 def get_workout_history(
-    user_id: UUID = Query(..., description="Supabase users.id"),
+    user_id: UUID = Depends(current_user),
     limit: int = Query(30, ge=1, le=100),
 ) -> WorkoutHistoryResponse:
     return workout_facade.list_history(user_id, limit)
@@ -62,7 +63,7 @@ def get_workout_history(
 
 @router.get("/statistics", response_model=WorkoutStatisticsResponse)
 def get_workout_statistics(
-    user_id: UUID = Query(..., description="Supabase users.id"),
+    user_id: UUID = Depends(current_user),
     range_key: WorkoutStatisticsRange = Query("1M", alias="range"),
     timezone_offset_minutes: int = Query(
         0,
@@ -78,7 +79,7 @@ def get_workout_statistics(
 def update_workout_history(
     workout_id: UUID,
     payload: WorkoutLogUpdate,
-    user_id: UUID = Query(..., description="Supabase users.id"),
+    user_id: UUID = Depends(current_user),
 ) -> WorkoutLogResponse:
     return workout_facade.update_history_entry(user_id, workout_id, payload)
 
@@ -86,7 +87,7 @@ def update_workout_history(
 @router.delete("/history/{workout_id}")
 def delete_workout_history(
     workout_id: UUID,
-    user_id: UUID = Query(..., description="Supabase users.id"),
+    user_id: UUID = Depends(current_user),
 ) -> dict[str, str]:
     workout_facade.delete_history_entry(user_id, workout_id)
     return {"status": "deleted"}
@@ -163,9 +164,10 @@ def get_exercise(exercise_id: str) -> Exercise:
 
 @router.post("/exercises/import-wger", response_model=WgerImportResponse)
 def trigger_wger_import(
-    max_items: int | None = Query(None, ge=1, description="Optional cap on number of exercises to import"),
-    sync_supabase: bool = Query(True, description="Sync imported exercises to Supabase if configured"),
+    max_items: int | None = Query(None, ge=1, le=2000, description="Optional cap on number of exercises to import"),
+    sync_supabase: bool = Query(False, description="Sync imported exercises to Supabase if configured"),
+    _admin: UUID = Depends(current_admin),
 ) -> WgerImportResponse:
-    """Import or refresh exercises from the wger REST API."""
+    """Import or refresh exercises from the wger REST API (admin only)."""
     result = workout_facade.import_wger(max_items=max_items, sync_supabase=sync_supabase)
     return WgerImportResponse(**result)

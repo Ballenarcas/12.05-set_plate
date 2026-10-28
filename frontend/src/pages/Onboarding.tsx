@@ -68,8 +68,8 @@ function Onboarding() {
 
     if (!formData.password) {
       newErrors.password = 'Password is required'
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters'
+    } else if (formData.password.length < 12) {
+      newErrors.password = 'Password must be at least 12 characters'
     }
 
     if (!formData.confirmPassword) {
@@ -288,7 +288,7 @@ function Onboarding() {
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       className={`form-input${errors.password ? ' has-error' : ''}`}
-                      placeholder="At least 6 characters"
+                      placeholder="At least 12 characters"
                       value={formData.password}
                       onChange={(e) => handleInputChange('password', e.target.value)}
                       autoComplete="new-password"

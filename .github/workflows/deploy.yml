@@ -125,6 +125,18 @@ jobs:
           esac
           auth=(-H "X-API-Key: ${PORTAINER_API_TOKEN}")
 
+          # Never echo a response body blindly. Portainer answers a successful
+          # redeploy with the whole stack object, environment variables and
+          # their values included, and those are not GitHub secrets, so the
+          # runner would not mask them. Only the error fields are printed.
+          show_error() {
+            local file="$1"
+            [ -s "$file" ] || return 0
+            jq -r '(.message // empty), (.details // empty)' "$file" 2>/dev/null \
+              || head -c 400 "$file"
+            echo
+          }
+
           # Why read the stack first: Portainer CE 2.19-2.21 (and several
           # later releases) do `stack.Env = payload.Env` unconditionally in
           # stack_update_git_redeploy.go. A body without `Env` therefore
@@ -151,7 +163,7 @@ jobs:
               ;;
             *)
               echo "::error::Could not read stack ${PORTAINER_STACK_ID} (HTTP ${code})"
-              head -c 400 /tmp/stack.json || true
+              show_error /tmp/stack.json
               exit 1
               ;;
           esac
@@ -160,6 +172,17 @@ jobs:
           env_json=$(jq -c '.Env // []' /tmp/stack.json)
           reference=$(jq -r '.GitConfig.ReferenceName // ""' /tmp/stack.json)
           echo "Stack ${PORTAINER_STACK_ID} defines $(jq 'length' <<<"$env_json") environment variable(s)"
+
+          # Belt and braces: tell the runner to redact the values that are
+          # actually secret, so an accidental echo (curl -v, set -x, a stack
+          # trace) cannot publish the service-role key. Hosts and URLs are
+          # left readable on purpose, they are not credentials.
+          while IFS= read -r value; do
+            [ ${#value} -ge 8 ] || continue
+            case "$value" in *$'\n'*) continue ;; esac
+            echo "::add-mask::${value}"
+          done < <(jq -r '.[] | select(.name | test("KEY|SECRET|TOKEN|PASSWORD"; "i"))
+            | .value // empty' <<<"$env_json")
 
           # Fail before touching the stack when a `${VAR:?}` has no value.
           # Portainer only reports one of them, chosen at random, per attempt.
@@ -195,14 +218,12 @@ jobs:
               -H 'Content-Type: application/json' \
               --data-binary @/tmp/body.json "$url") || code=000
             echo "attempt ${attempt}: Portainer answered HTTP ${code}"
-            if [ -s /tmp/redeploy.out ]; then
-              cat /tmp/redeploy.out
-              echo
+            if [ "$code" = "200" ]; then
+              echo "Stack ${PORTAINER_STACK_ID} accepted the redeploy"
+              exit 0
             fi
+            show_error /tmp/redeploy.out
             case "$code" in
-              200)
-                exit 0
-                ;;
               000)
                 echo "::error::Could not reach ${PORTAINER_URL} over the tailnet."
                 echo "::error::Check the OAuth client, the ACL grant to tcp:9443, and that Portainer is running."

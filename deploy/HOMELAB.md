@@ -128,6 +128,8 @@ One-time setup:
 
 The webhook URL is a bearer token: anyone who has it can redeploy the stack. Keep it in secrets, and keep Portainer reachable only through the tailnet.
 
+After the webhook the workflow does not trust the `204`: it waits up to ten minutes for `/healthz`, then checks `/api/v1/health`, asserts that `Content-Security-Policy` and `X-Frame-Options: DENY` are present (a missing header means `nginx.conf` never reached the image), and compares the served bundle hash with the one recorded before the deploy. An unchanged hash raises a warning, because it is the first sign that Portainer redeployed the previous image.
+
 **Rebuild caveat.** Portainer does not rebuild images that a stack declares with `build:`; it redeploys the existing ones. After a run, verify the code actually changed:
 
 ```sh

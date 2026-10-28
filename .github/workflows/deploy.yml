@@ -23,8 +23,23 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
+      - name: Checkout the deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # master without the compose file is a branch that was never meant to be
+      # deployed; failing here beats letting Portainer pull it and take the
+      # stack down.
+      - name: Verify the commit is deployable
+        run: |
+          if [ ! -f docker-compose.yml ]; then
+            echo "::error::docker-compose.yml is missing on this commit; refusing to redeploy"
+            exit 1
+          fi
+
       # Portainer is not published to the internet, so the runner joins the
       # tailnet for the duration of the job instead of opening any port.
       - name: Connect to the tailnet
@@ -34,6 +49,19 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
           ping: ${{ vars.PORTAINER_HOST }}
+
+      # Recorded so the post-deploy check can tell whether the bundle was
+      # actually rebuilt or Portainer reused the previous image.
+      - name: Record the current bundle
+        id: before
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: |
+          set -euo pipefail
+          bundle=$(curl -fsS --max-time 10 "$PUBLIC_URL/" 2>/dev/null \
+            | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)
+          echo "bundle=${bundle:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "Serving: ${bundle:-unknown}"
 
       - name: Trigger the stack webhook
         env:
@@ -76,3 +104,32 @@ jobs:
           echo "::error::$PUBLIC_URL/healthz did not answer ok within 10 minutes"
           echo "Check the stack branch is master, that Portainer rebuilt the images, and the backend logs."
           exit 1
+
+      - name: Verify the API and the security headers
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+          BEFORE: ${{ steps.before.outputs.bundle }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PUBLIC_URL:-}" ]; then
+            echo "::warning::PUBLIC_URL is not set; skipping the post-deploy checks"
+            exit 0
+          fi
+
+          api=$(curl -fsS --max-time 10 "$PUBLIC_URL/api/v1/health")
+          echo "API: $api"
+          echo "$api" | grep -q '"status"' || { echo "::error::/api/v1/health did not return a status"; exit 1; }
+
+          headers=$(curl -fsSI --max-time 10 "$PUBLIC_URL/")
+          echo "$headers" | grep -qi '^content-security-policy:' \
+            || { echo "::error::Missing Content-Security-Policy: nginx.conf was not applied"; exit 1; }
+          echo "$headers" | grep -qi '^x-frame-options: DENY' \
+            || { echo "::error::Missing X-Frame-Options: DENY"; exit 1; }
+
+          after=$(curl -fsS --max-time 10 "$PUBLIC_URL/" \
+            | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)
+          echo "Bundle before: $BEFORE"
+          echo "Bundle after:  ${after:-unknown}"
+          if [ -n "$BEFORE" ] && [ "$BEFORE" = "$after" ]; then
+            echo "::warning::The bundle hash did not change. If this commit touched the frontend, Portainer served the cached image; see the rebuild note in deploy/HOMELAB.md."
+          fi

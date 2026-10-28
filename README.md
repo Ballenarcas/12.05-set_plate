@@ -709,8 +709,11 @@ npm test
 
 `.github/workflows/ci.yml` runs on pushes and pull requests to `main` and `master`:
 
-- Frontend type-check and production build.
-- Backend pytest suite with empty Supabase and Groq credentials.
+- Frontend: `npm ci`, unit tests, and the type-check plus production build. Lint runs too but is non-blocking while the pre-existing React hook findings are fixed.
+- Backend: `pip check` plus the pytest suite, with empty Supabase and Groq credentials so nothing reaches a real project.
+- Containers: `docker compose config` with dummy values (this is what enforces the required-variable guards), both image builds, `nginx -t`, and a real container serving `/healthz` on port 8080.
+
+`.github/workflows/deploy.yml` runs after a green CI on `master`, calls the Portainer stack webhook over the tailnet, and then verifies the app, the API, the security headers, and whether the bundle hash changed. See [deploy/HOMELAB.md](deploy/HOMELAB.md).
 
 ### Manual smoke check
 

@@ -14,8 +14,10 @@ export const STATISTICS_RANGES: StatisticsRangeOption[] = [
 
 export const DEFAULT_STATISTICS_RANGE: WorkoutStatisticsRange = '1M'
 
-const volumeFormatter = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 })
-const countFormatter = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 })
+// en-US matches the copy in the UI (periods for grouping, commas for decimals);
+// fr-FR here would render "1 234" and break the expectations in the tests.
+const volumeFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
+const countFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
 /** Format workout numbers with periods for grouping and commas for decimals. */
 export function formatVolumeKg(value: number): string {

@@ -24,7 +24,6 @@ services:
     mem_limit: 512m
     networks:
       - edge
-      - egress
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
       SUPABASE_KEY: ${SUPABASE_KEY:?SUPABASE_KEY is required}
@@ -74,12 +73,12 @@ services:
 networks:
   edge:
     driver: bridge
-    internal: true
+    # Deliberately NOT `internal: true`. Docker does not allocate published
+    # ports for a container whose networks are internal, so the frontend came
+    # up healthy with no host port at all and the tunnel answered 502
+    # (`NetworkSettings.Ports` was `{}`). Isolation comes from elsewhere:
+    # only the frontend publishes anything, and only on 127.0.0.1, while the
+    # backend has no published port.
     ipam:
       config:
         - subnet: 172.28.0.0/24
-  egress:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.29.0.0/24

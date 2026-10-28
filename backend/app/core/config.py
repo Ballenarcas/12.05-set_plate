@@ -33,7 +33,18 @@ class Settings(BaseSettings):
 
     @property
     def allowed_hosts_list(self) -> list[str]:
-        return [host.strip() for host in self.allowed_hosts.split(",") if host.strip()]
+        hosts = [host.strip() for host in self.allowed_hosts.split(",") if host.strip()]
+        if not hosts:
+            return hosts
+        # The container HEALTHCHECK calls /health on 127.0.0.1, and the Host
+        # header it sends is validated by the same middleware. If loopback is
+        # missing the check gets 400, the backend stays unhealthy and
+        # ``depends_on: service_healthy`` keeps the frontend from starting,
+        # which the tunnel surfaces as a bare 502.
+        for loopback in ("127.0.0.1", "localhost"):
+            if loopback not in hosts:
+                hosts.append(loopback)
+        return hosts
 
     @property
     def admin_user_id_list(self) -> set[str]:

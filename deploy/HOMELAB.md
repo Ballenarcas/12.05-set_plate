@@ -105,6 +105,37 @@ docker compose --env-file .env.homelab up -d --build
 
 `VITE_API_URL` is baked into the frontend at build time. Changing it requires rebuilding the `frontend` image.
 
+## Automatic deployment on push to master
+
+`.github/workflows/deploy.yml` runs after the **CI** workflow succeeds on `master`. The runner joins the tailnet for the duration of the job and calls the Portainer stack webhook; Portainer pulls the repository and redeploys the stack. Nothing is published to the internet and no long-lived NAS credentials live in the repository.
+
+One-time setup:
+
+1. The stack must track `master`: **Stacks -> the stack -> Editor/Repository reference** set to `refs/heads/master`. A webhook deploy uses the branch configured in the stack, not the branch that triggered CI.
+2. Enable the stack webhook: **Stacks -> the stack -> Webhooks -> Create webhook**. Copy the URL (`http://<nas>:9000/api/stacks/webhooks/<token>`).
+3. Create a Tailscale OAuth client (admin console -> **Settings -> OAuth clients**) with the `tag:ci` tag, and allow that tag to reach the NAS node on the Portainer port in **Access controls**:
+
+   ```json
+   { "src": ["tag:ci"], "dst": ["zimaos.<your-tailnet>.ts.net"], "ip": ["tcp:9000"] }
+   ```
+
+   If your tailnet does not allow tagged OAuth clients, swap the `oauth-client-id`/`oauth-secret` inputs in the workflow for a single `authkey` input and store it as `TS_AUTHKEY`.
+
+4. Repository secrets: `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_CLIENT_SECRET`, `PORTAINER_WEBHOOK_URL`.
+   Repository variables: `PORTAINER_HOST` (MagicDNS name, used for the connectivity ping) and `PUBLIC_URL` (`https://<machine>.<tailnet>.ts.net`).
+5. Rewrite the webhook URL so it goes over the tailnet instead of the LAN address Portainer shows: `http://<nas>.<tailnet>.ts.net:9000/api/stacks/webhooks/<token>`. Portainer is not reachable from a GitHub runner by its LAN IP.
+6. Push to `master` and confirm the run turns green.
+
+The webhook URL is a bearer token: anyone who has it can redeploy the stack. Keep it in secrets, and keep Portainer reachable only through the tailnet.
+
+**Rebuild caveat.** Portainer does not rebuild images that a stack declares with `build:`; it redeploys the existing ones. After a run, verify the code actually changed:
+
+```sh
+docker inspect --format '{{.Created}}' set_plate-frontend-1
+```
+
+If that timestamp does not move, Portainer is serving the old image and the deploy is only half-working. The fix is either a manual **Update the stack** with a rebuild on the NAS, or moving to registry images (CI builds and pushes to GHCR, the stack only pulls).
+
 ## Remote access for testers
 
 ### Tailscale (recommended)

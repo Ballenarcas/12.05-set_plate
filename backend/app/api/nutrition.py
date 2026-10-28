@@ -1,8 +1,11 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.core.auth import current_user
 from app.schemas.nutrition import (
     DailyNutritionResponse,
     FoodSearchItem,
@@ -35,20 +38,25 @@ def search_food_items(
 
 @router.get("/today", response_model=DailyNutritionResponse)
 def get_today_nutrition(
-    user_id: str = Query(..., description="User ID"),
+    user_id: UUID = Depends(current_user),
     today_start: datetime | None = Query(None, description="Local day start instant (inclusive ISO 8601)"),
     today_end: datetime | None = Query(None, description="Local day end instant (exclusive ISO 8601)"),
 ) -> DailyNutritionResponse:
     try:
-        return nutrition_facade.get_today(user_id, today_start, today_end)
+        return nutrition_facade.get_today(str(user_id), today_start, today_end)
     except Exception as err:
         logger.exception("Failed to load today's nutrition")
         raise HTTPException(status_code=500, detail="Could not load today's nutrition.") from err
 
 
 @router.post("/meals", response_model=MealItem)
-def add_meal(payload: MealCreateRequest) -> MealItem:
+def add_meal(
+    payload: MealCreateRequest,
+    user_id: UUID = Depends(current_user),
+) -> MealItem:
     try:
+        # The owner always comes from the signed session, never from the body.
+        payload = payload.model_copy(update={"user_id": str(user_id)})
         return nutrition_facade.create_meal(payload)
     except MealIngredientStorageUnavailable as err:
         raise HTTPException(status_code=503, detail=str(err)) from err
@@ -61,10 +69,10 @@ def add_meal(payload: MealCreateRequest) -> MealItem:
 def update_meal(
     meal_id: str,
     payload: MealUpdateRequest,
-    user_id: str = Query(..., description="Meal owner user ID"),
+    user_id: UUID = Depends(current_user),
 ) -> MealItem:
     try:
-        return nutrition_facade.update_meal(user_id, meal_id, payload)
+        return nutrition_facade.update_meal(str(user_id), meal_id, payload)
     except MealIngredientStorageUnavailable as err:
         raise HTTPException(status_code=503, detail=str(err)) from err
     except LookupError as err:
@@ -77,10 +85,10 @@ def update_meal(
 @router.delete("/meals/{meal_id}")
 def remove_meal(
     meal_id: str,
-    user_id: str = Query(..., description="Meal owner user ID"),
+    user_id: UUID = Depends(current_user),
 ) -> dict[str, str]:
     try:
-        nutrition_facade.delete_meal(user_id, meal_id)
+        nutrition_facade.delete_meal(str(user_id), meal_id)
         return {"status": "success", "deleted_id": meal_id}
     except LookupError as err:
         raise HTTPException(status_code=404, detail="Meal not found.") from err

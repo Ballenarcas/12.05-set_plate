@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from main import app
 
 from app.services.calorie_adjustment_service import classify_objective, propose_adjustment
+from tests.auth_helpers import auth_headers
 
 client = TestClient(app)
 
@@ -145,7 +146,7 @@ def _supabase(pending: list[dict], metrics_overrides: dict | None = None) -> Mag
 def test_endpoint_returns_the_pending_proposal():
     supabase = _supabase([PENDING_ROW])
     with patch("app.services.calorie_adjustment_service.get_supabase", return_value=supabase):
-        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID})
+        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID}, headers=auth_headers(USER_ID))
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -158,7 +159,7 @@ def test_endpoint_returns_the_pending_proposal():
 def test_endpoint_stores_the_proposal_once_when_none_is_pending():
     supabase = _supabase([])
     with patch("app.services.calorie_adjustment_service.get_supabase", return_value=supabase):
-        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID})
+        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID}, headers=auth_headers(USER_ID))
         inserted = supabase._adjustments.insert.call_args[0][0]
 
     assert response.status_code == 200, response.text
@@ -176,7 +177,7 @@ def test_endpoint_returns_advice_without_storing_when_compliance_is_low():
         "ai_calorie_adjustments": supabase._adjustments,
     }[name]
     with patch("app.services.calorie_adjustment_service.get_supabase", return_value=supabase):
-        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID})
+        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID}, headers=auth_headers(USER_ID))
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -189,7 +190,7 @@ def test_endpoint_returns_advice_without_storing_when_compliance_is_low():
 def test_rejected_proposal_is_not_recomputed_inside_the_cooldown():
     supabase = _supabase([REJECTED_ROW])
     with patch("app.services.calorie_adjustment_service.get_supabase", return_value=supabase):
-        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID})
+        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID}, headers=auth_headers(USER_ID))
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -205,6 +206,7 @@ def test_accepting_the_proposal_updates_the_saved_goal():
         response = client.post(
             "/api/v1/ai/calorie-adjustment/decision",
             json={"user_id": USER_ID, "adjustment_id": ADJUSTMENT_ID, "status": "accepted"},
+            headers=auth_headers(USER_ID),
         )
 
     assert response.status_code == 200, response.text
@@ -222,6 +224,7 @@ def test_rejecting_leaves_the_saved_goal_alone():
         response = client.post(
             "/api/v1/ai/calorie-adjustment/decision",
             json={"user_id": USER_ID, "adjustment_id": ADJUSTMENT_ID, "status": "rejected"},
+            headers=auth_headers(USER_ID),
         )
 
     assert response.status_code == 200
@@ -238,6 +241,7 @@ def test_deciding_an_already_decided_proposal_changes_nothing():
         response = client.post(
             "/api/v1/ai/calorie-adjustment/decision",
             json={"user_id": USER_ID, "adjustment_id": ADJUSTMENT_ID, "status": "rejected"},
+            headers=auth_headers(USER_ID),
         )
 
     assert response.status_code == 200, response.text
@@ -257,7 +261,7 @@ def test_lost_race_on_insert_returns_the_existing_pending_proposal():
         data=[PENDING_ROW]
     )
     with patch("app.services.calorie_adjustment_service.get_supabase", return_value=supabase):
-        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID})
+        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID}, headers=auth_headers(USER_ID))
 
     assert response.status_code == 200, response.text
     body = response.json()
@@ -271,7 +275,7 @@ def test_unexpected_read_errors_are_not_reported_as_a_missing_table():
         "connection reset by peer"
     )
     with patch("app.services.calorie_adjustment_service.get_supabase", return_value=supabase):
-        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID})
+        response = client.get("/api/v1/ai/calorie-adjustment", params={"user_id": USER_ID}, headers=auth_headers(USER_ID))
 
     assert response.status_code == 502
     assert "table is missing" not in response.json()["detail"]

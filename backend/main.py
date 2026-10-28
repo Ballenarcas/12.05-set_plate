@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api import ai, dashboard, nutrition, premium, routines, stats, users, workouts
 from app.core.config import get_settings
@@ -11,6 +12,9 @@ from app.db.supabase_client import warm_supabase
 
 settings = get_settings()
 
+if "*" in settings.cors_origin_list:
+    raise RuntimeError("CORS_ORIGINS must list explicit origins; '*' is not allowed.")
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -18,15 +22,27 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app = FastAPI(
+    title=settings.app_name,
+    lifespan=lifespan,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None,
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
+
+if settings.allowed_hosts_list:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["WWW-Authenticate"],
+    max_age=600,
 )
+
 
 @app.get("/")
 def root() -> dict[str, str]:

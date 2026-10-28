@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Loader2, LogOut, Save, User } from 'lucide-react'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { clearDashboardCache, getCurrentUser, updateUserSettings } from '../services/api'
+import { clearDashboardCache, clearSession, getCurrentUser, updateUserSettings } from '../services/api'
 import { describeError } from '../utils/errors.js'
 
 type Notice = { kind: 'success' | 'error'; text: string }
@@ -74,7 +74,7 @@ function Settings() {
 
   const confirmLogout = () => {
     try {
-      localStorage.removeItem('set_plate_user')
+      clearSession()
       sessionStorage.removeItem('set_plate_active_workout')
       sessionStorage.removeItem('set_plate_pending_exercise')
     } catch {

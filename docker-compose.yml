@@ -1,3 +1,11 @@
+name: set-and-plate
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
     build:
@@ -5,36 +13,73 @@ services:
     image: set-and-plate-backend:local
     restart: unless-stopped
     init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    networks:
+      - edge
+      - egress
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
       SUPABASE_KEY: ${SUPABASE_KEY:?SUPABASE_KEY is required}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:?AUTH_SECRET_KEY is required}
+      AUTH_TOKEN_TTL_HOURS: ${AUTH_TOKEN_TTL_HOURS:-12}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     expose:
       - "8000"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *default-logging
 
   frontend:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: ${VITE_API_URL:-}
+        # Same-origin requests: the SPA talks to nginx, nginx talks to the API.
+        VITE_API_URL: ""
     image: set-and-plate-frontend:local
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,nosuid
+      - /var/cache/nginx:size=32m,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 128m
+    networks:
+      - edge
+    # Loopback only: reachable by cloudflared or `tailscale serve` running on
+    # the host, invisible from the LAN and from the internet.
     ports:
-      - "${APP_PORT:-8080}:80"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    logging: *default-logging
+
+networks:
+  edge:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+  egress:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24

@@ -10,6 +10,7 @@ from app.api import workouts as workouts_api
 from app.schemas.workout_statistics import WorkoutStatisticsResponse
 from app.services import workout_statistics_service as statistics_service
 from main import app
+from tests.auth_helpers import auth_headers
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
 
@@ -404,7 +405,10 @@ def test_service_filters_by_user_and_range_without_the_history_limit(monkeypatch
     assert not any(call[0] == "limit" for call in query.calls)
 
     select_columns = next(call[1] for call in query.calls if call[0] == "select")
-    assert "exercises(name,muscles)" in select_columns
+    # Only the ordered primary-muscle metadata is needed; the exercise name is
+    # not part of the response, so it must stay out of the projection.
+    assert "exercises(muscles)" in select_columns
+    assert "exercises(name" not in select_columns
     assert "muscles_secondary" not in select_columns
 
 
@@ -476,7 +480,8 @@ def test_statistics_route_defaults_to_one_month_and_forwards_the_client_offset(m
     monkeypatch.setattr(workouts_api.workout_facade, "get_statistics", fake_statistics)
 
     response = client.get(
-        f"/api/v1/workouts/statistics?user_id={uuid4()}&timezone_offset_minutes=-120"
+        "/api/v1/workouts/statistics?timezone_offset_minutes=-120",
+        headers=auth_headers(uuid4()),
     )
 
     assert response.status_code == 200
@@ -494,8 +499,8 @@ def test_statistics_route_accepts_supported_ranges_and_rejects_unknown_ranges(mo
 
     monkeypatch.setattr(workouts_api.workout_facade, "get_statistics", fake_statistics)
 
-    response = client.get(f"/api/v1/workouts/statistics?user_id={uuid4()}&range=3M")
-    invalid = client.get(f"/api/v1/workouts/statistics?user_id={uuid4()}&range=1Y")
+    response = client.get("/api/v1/workouts/statistics?range=3M", headers=auth_headers(uuid4()))
+    invalid = client.get("/api/v1/workouts/statistics?range=1Y", headers=auth_headers(uuid4()))
 
     assert response.status_code == 200
     assert captured["range_key"] == "3M"

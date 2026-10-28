@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.api import workouts as workouts_api
 from main import app
+from tests.auth_helpers import auth_headers
 
 client = TestClient(app)
 
@@ -27,19 +28,21 @@ def patch_suggestions(monkeypatch, suggestions):
     monkeypatch.setattr(workouts_api.workout_facade, "suggest_adjustment", suggest)
 
 
-def test_adjustment_requires_a_user_id():
+def test_adjustment_requires_a_session():
     response = client.post("/api/v1/workouts/adjust", json=WORKOUT_PAYLOAD)
-    assert response.status_code == 422
+    assert response.status_code == 401
 
 
 def test_adjustment_returns_the_model_suggestions(monkeypatch):
     patch_suggestions(monkeypatch, [
         {"action": "drop_set", "exercise_id": "bench", "reason": "Fatigue on set one."},
     ])
+    user_id = uuid4()
 
     response = client.post(
-        f"/api/v1/workouts/adjust?user_id={uuid4()}",
+        "/api/v1/workouts/adjust",
         json=WORKOUT_PAYLOAD,
+        headers=auth_headers(user_id),
     )
 
     assert response.status_code == 200
@@ -56,8 +59,9 @@ def test_adjustment_reports_an_empty_result(monkeypatch):
     patch_suggestions(monkeypatch, [])
 
     response = client.post(
-        f"/api/v1/workouts/adjust?user_id={uuid4()}",
+        "/api/v1/workouts/adjust",
         json=WORKOUT_PAYLOAD,
+        headers=auth_headers(uuid4()),
     )
 
     assert response.status_code == 200
@@ -67,9 +71,10 @@ def test_adjustment_reports_an_empty_result(monkeypatch):
 def test_adjustment_throttles_repeated_requests(monkeypatch):
     patch_suggestions(monkeypatch, [])
     user_id = uuid4()
+    headers = auth_headers(user_id)
 
-    first = client.post(f"/api/v1/workouts/adjust?user_id={user_id}", json=WORKOUT_PAYLOAD)
-    second = client.post(f"/api/v1/workouts/adjust?user_id={user_id}", json=WORKOUT_PAYLOAD)
+    first = client.post("/api/v1/workouts/adjust", json=WORKOUT_PAYLOAD, headers=headers)
+    second = client.post("/api/v1/workouts/adjust", json=WORKOUT_PAYLOAD, headers=headers)
 
     assert first.status_code == 200
     assert second.status_code == 429
@@ -80,8 +85,9 @@ def test_adjustment_rejects_a_workout_without_exercises(monkeypatch):
     patch_suggestions(monkeypatch, [])
 
     response = client.post(
-        f"/api/v1/workouts/adjust?user_id={uuid4()}",
+        "/api/v1/workouts/adjust",
         json={**WORKOUT_PAYLOAD, "exercises": []},
+        headers=auth_headers(uuid4()),
     )
 
     assert response.status_code == 422

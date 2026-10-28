@@ -164,7 +164,11 @@ One-time setup:
 
 The API token is a bearer credential: anyone who has it can redeploy the stack and read the Portainer API. Keep it in secrets, scope it with an expiry, and keep Portainer reachable only through the tailnet. The workflow uses `-k` for the self-signed certificate, which is acceptable over Tailscale and would not be over the internet.
 
-The workflow calls `PUT /api/stacks/<id>/git/redeploy?endpointId=<id>` with `RepullImageAndRedeploy`, so Portainer pulls the new `:latest` digest instead of reusing the local one. It retries on `409` while another deployment is running and fails with a readable message on `400` (stack was created in the web editor), `401`/`403` (bad token) and `404` (wrong stack or environment id).
+Before redeploying, the workflow reads the stack (`GET /api/stacks/<id>`) and checks that every `${VAR:?}` in `docker-compose.yml` has a non-empty value in the stack's environment. That matters because Portainer CE 2.19-2.21 do `stack.Env = payload.Env` **unconditionally** in `stack_update_git_redeploy.go`: a request without `Env` deploys with no variables at all, even though the stack still has them in the UI. The workflow therefore echoes the stored `Env` array back in the request, along with the stored `RepositoryReferenceName`, and refuses to touch the stack when something is missing.
+
+It also verifies anonymously that both `ghcr.io` images can be pulled (`docker manifest inspect`), which is exactly what the NAS does, so a private package fails the job before the stack goes down.
+
+The redeploy itself is `PUT /api/stacks/<id>/git/redeploy?endpointId=<id>` with `RepullImageAndRedeploy`, so Portainer pulls the new `:latest` digest instead of reusing the local one. It retries on `409` while another deployment is running and fails with a readable message on `400` (stack was created in the web editor), `401`/`403` (bad token) and `404` (wrong stack or environment id).
 
 After the call it does not trust the `200`: it waits up to ten minutes for `/healthz`, then checks `/api/v1/health`, asserts that `Content-Security-Policy` and `X-Frame-Options: DENY` are present (a missing header means `nginx.conf` never reached the image), and compares the served bundle hash with the one recorded before the deploy. An unchanged hash raises a warning: it means the NAS is still running the previous image, usually because the GHCR package is private and the pull failed.
 
@@ -208,6 +212,7 @@ Avoid it for this demo. If you must use it, put a reverse proxy with authenticat
 | `400 Invalid host header` | The host you opened is missing from `ALLOWED_HOSTS` (no scheme, no port). Restart the backend after editing it. |
 | Frontend never starts, backend `unhealthy` | `ALLOWED_HOSTS` must include `127.0.0.1` and `localhost`: the healthcheck calls `/health` on loopback. |
 | `AUTH_SECRET_KEY is required` on deploy | The `:?` guards reject an empty value. Generate one with the command in `.env.homelab.example`. |
+| `required variable <X> is missing a value`, and `<X>` changes on every attempt | Compose reports a random missing variable because it walks a Go map. Either the stack really has none of them, or the API call sent an empty `Env` (Portainer CE 2.19-2.21 replace `stack.Env` with the payload's, even when it is absent). The workflow now reads the stack and sends its `Env` back, so this means the values are genuinely absent or empty: edit **Stacks -> set_plate -> Environment variables** and click **Update the stack**. |
 | Everyone is logged out after a redeploy | `AUTH_SECRET_KEY` changed. Keep it stable or accept the re-login. |
 | `429` on login | nginx allows 5 attempts per minute per IP by design. Wait a minute. |
 | Blank page or 404 after refresh | Rebuild the frontend and confirm `frontend/nginx.conf` was copied into the image. |

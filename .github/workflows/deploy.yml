@@ -68,6 +68,28 @@ jobs:
           echo "bundle=${bundle:-unknown}" >> "$GITHUB_OUTPUT"
           echo "Serving: ${bundle:-unknown}"
 
+      # A private GHCR package cannot be pulled by the NAS, and the stack goes
+      # down while it retries. Checking anonymously is exactly what the host
+      # does, so it fails here instead of in production.
+      - name: Verify the images are pullable without credentials
+        run: |
+          set -uo pipefail
+          mapfile -t images < <(grep -oE 'ghcr\.io/[A-Za-z0-9._/-]+' docker-compose.yml | sort -u)
+          if [ ${#images[@]} -eq 0 ]; then
+            echo "::error::No ghcr.io image found in docker-compose.yml"
+            exit 1
+          fi
+          for image in "${images[@]}"; do
+            ref="${image}:latest"
+            if error=$(docker manifest inspect "$ref" 2>&1 >/dev/null); then
+              echo "ok: ${ref} is public"
+            else
+              echo "::error::${ref} cannot be pulled anonymously: ${error%%$'\n'*}"
+              echo "::error::Open Packages -> ${image##*/} -> Package settings -> Change visibility -> Public."
+              exit 1
+            fi
+          done
+
       # Stack webhooks are a Business Edition feature, so the Community
       # Edition instance on the NAS is driven through the API instead. This
       # endpoint also forces a re-pull of the image, which is what makes the
@@ -88,28 +110,90 @@ jobs:
             fi
           done
 
-          url="${PORTAINER_URL%/}/api/stacks/${PORTAINER_STACK_ID}/git/redeploy"
+          stack_url="${PORTAINER_URL%/}/api/stacks/${PORTAINER_STACK_ID}"
+          query=""
           if [ -n "${PORTAINER_ENDPOINT_ID:-}" ]; then
-            url="${url}?endpointId=${PORTAINER_ENDPOINT_ID}"
+            query="?endpointId=${PORTAINER_ENDPOINT_ID}"
           fi
 
           # Portainer serves a self-signed certificate unless you configured
           # a real one. Over the tailnet that is acceptable; it would not be
           # over the public internet.
-          opts=(-sS --max-time 120 -o /tmp/redeploy.out -w '%{http_code}')
+          opts=(-sS --max-time 120)
           case "$PORTAINER_URL" in
             https://*) opts+=(-k) ;;
           esac
+          auth=(-H "X-API-Key: ${PORTAINER_API_TOKEN}")
 
-          # `PullImage` is the name used before 2.36; unknown fields are
-          # ignored, so sending both keeps older instances working.
-          body='{"RepullImageAndRedeploy":true,"PullImage":true,"Prune":false}'
+          # Why read the stack first: Portainer CE 2.19-2.21 (and several
+          # later releases) do `stack.Env = payload.Env` unconditionally in
+          # stack_update_git_redeploy.go. A body without `Env` therefore
+          # deploys with no variables at all, and every `${VAR:?}` in the
+          # compose file fails with "required variable ... is missing a
+          # value", picked at random because Compose walks a Go map.
+          # Echo the stored values back so the redeploy keeps them.
+          code=$(curl "${opts[@]}" "${auth[@]}" -o /tmp/stack.json -w '%{http_code}' \
+            "${stack_url}${query}") || code=000
+          case "$code" in
+            200) ;;
+            000)
+              echo "::error::Could not reach ${PORTAINER_URL} over the tailnet."
+              echo "::error::Check the OAuth client, the ACL grant to tcp:9443, and that Portainer is running."
+              exit 1
+              ;;
+            401|403)
+              echo "::error::Portainer rejected the API token. Check PORTAINER_API_TOKEN."
+              exit 1
+              ;;
+            404)
+              echo "::error::Stack ${PORTAINER_STACK_ID} not found. Check PORTAINER_STACK_ID and PORTAINER_ENDPOINT_ID."
+              exit 1
+              ;;
+            *)
+              echo "::error::Could not read stack ${PORTAINER_STACK_ID} (HTTP ${code})"
+              head -c 400 /tmp/stack.json || true
+              exit 1
+              ;;
+          esac
 
+          chmod 600 /tmp/stack.json
+          env_json=$(jq -c '.Env // []' /tmp/stack.json)
+          reference=$(jq -r '.GitConfig.ReferenceName // ""' /tmp/stack.json)
+          echo "Stack ${PORTAINER_STACK_ID} defines $(jq 'length' <<<"$env_json") environment variable(s)"
+
+          # Fail before touching the stack when a `${VAR:?}` has no value.
+          # Portainer only reports one of them, chosen at random, per attempt.
+          missing=""
+          while read -r required; do
+            [ -n "$required" ] || continue
+            if [ "$(jq --arg n "$required" \
+              '[.[] | select((.name | ascii_downcase) == ($n | ascii_downcase) and ((.value // "") | length) > 0)] | length' \
+              <<<"$env_json")" = "0" ]; then
+              missing="${missing} ${required}"
+            fi
+          done < <(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*:\?' docker-compose.yml \
+            | sed -E 's/^\$\{//; s/:\?$//' | sort -u)
+
+          if [ -n "$missing" ]; then
+            echo "::error::The stack is missing a value for:${missing}"
+            echo "::error::Add them under Stacks -> set_plate -> Environment variables, click Update the stack, then retry."
+            exit 1
+          fi
+
+          # `PullImage` is the old name of `RepullImageAndRedeploy`; unknown
+          # fields are ignored, so sending both keeps every CE release happy.
+          jq -n --argjson env "$env_json" --arg ref "$reference" \
+            '{"RepullImageAndRedeploy": true, "PullImage": true, "Prune": false, "Env": $env}
+             + (if $ref == "" then {} else {"RepositoryReferenceName": $ref} end)' \
+            > /tmp/body.json
+          chmod 600 /tmp/body.json
+
+          url="${stack_url}/git/redeploy${query}"
           for attempt in 1 2 3; do
-            code=$(curl "${opts[@]}" -X PUT \
-              -H "X-API-Key: ${PORTAINER_API_TOKEN}" \
+            code=$(curl "${opts[@]}" -o /tmp/redeploy.out -w '%{http_code}' -X PUT \
+              "${auth[@]}" \
               -H 'Content-Type: application/json' \
-              -d "$body" "$url") || code=000
+              --data-binary @/tmp/body.json "$url") || code=000
             echo "attempt ${attempt}: Portainer answered HTTP ${code}"
             if [ -s /tmp/redeploy.out ]; then
               cat /tmp/redeploy.out
@@ -143,6 +227,9 @@ jobs:
                 exit 1
                 ;;
               *)
+                if grep -q 'required variable' /tmp/redeploy.out 2>/dev/null; then
+                  echo "::error::Compose still sees a missing variable. Check the stack's Environment variables."
+                fi
                 echo "::error::Unexpected HTTP ${code} from the Portainer API"
                 exit 1
                 ;;

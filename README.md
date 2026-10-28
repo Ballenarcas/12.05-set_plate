@@ -714,7 +714,7 @@ npm test
 - Containers: `docker compose config` with dummy values (this is what enforces the required-variable guards), both image builds, `nginx -t`, and a real container serving `/healthz` on port 8080.
 - Images: on a push only, and only after every check above passes, both images are pushed to GHCR as `:latest` and `:sha-<short>`. Pull requests never overwrite `latest`.
 
-`.github/workflows/deploy.yml` runs after a green CI on `master`, redeploys the Portainer stack over the tailnet through its API, and then verifies the app, the API, the security headers, and whether the bundle hash changed. Stack webhooks are a Business Edition feature, so the Community Edition is driven through `PUT /api/stacks/<id>/git/redeploy` with an API token. See [deploy/HOMELAB.md](deploy/HOMELAB.md).
+`.github/workflows/deploy.yml` runs after a green CI on `master`, redeploys the Portainer stack over the tailnet through its API, and then verifies the app, the API, the security headers, and whether the bundle hash changed. Stack webhooks are a Business Edition feature, so the Community Edition is driven through `PUT /api/stacks/<id>/git/redeploy` with an API token. The job first reads the stack and sends its environment variables back in the payload, because Portainer CE replaces them with the request's `Env` even when it is absent; it also refuses to deploy when a `${VAR:?}` has no value or an image is not publicly pullable. See [deploy/HOMELAB.md](deploy/HOMELAB.md).
 
 ### Manual smoke check
 

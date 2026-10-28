@@ -128,12 +128,12 @@ jobs:
           # Never echo a response body blindly. Portainer answers a successful
           # redeploy with the whole stack object, environment variables and
           # their values included, and those are not GitHub secrets, so the
-          # runner would not mask them. Only the error fields are printed.
+          # runner would not mask them. Only the two error fields are printed,
+          # and never the raw bytes: a body that is not JSON is not shown.
           show_error() {
             local file="$1"
             [ -s "$file" ] || return 0
-            jq -r '(.message // empty), (.details // empty)' "$file" 2>/dev/null \
-              || head -c 400 "$file"
+            jq -e -r '(.message // empty), (.details // empty)' "$file" 2>/dev/null || true
             echo
           }
 
@@ -173,16 +173,16 @@ jobs:
           reference=$(jq -r '.GitConfig.ReferenceName // ""' /tmp/stack.json)
           echo "Stack ${PORTAINER_STACK_ID} defines $(jq 'length' <<<"$env_json") environment variable(s)"
 
-          # Belt and braces: tell the runner to redact the values that are
-          # actually secret, so an accidental echo (curl -v, set -x, a stack
-          # trace) cannot publish the service-role key. Hosts and URLs are
-          # left readable on purpose, they are not credentials.
+          # Belt and braces: register every stored value with the runner so it
+          # is redacted anywhere it could appear (an accidental `curl -v`,
+          # `set -x`, or an error thrown by a library). Nothing prints these
+          # values on purpose; this is only a safety net, and it is why the
+          # log may show `***` for a URL in the later steps.
           while IFS= read -r value; do
             [ ${#value} -ge 8 ] || continue
             case "$value" in *$'\n'*) continue ;; esac
             echo "::add-mask::${value}"
-          done < <(jq -r '.[] | select(.name | test("KEY|SECRET|TOKEN|PASSWORD"; "i"))
-            | .value // empty' <<<"$env_json")
+          done < <(jq -r '.[] | .value // empty' <<<"$env_json")
 
           # Fail before touching the stack when a `${VAR:?}` has no value.
           # Portainer only reports one of them, chosen at random, per attempt.

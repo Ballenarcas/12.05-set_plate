@@ -113,7 +113,7 @@ One-time setup:
 
 1. The stack must track `master`: **Stacks -> the stack -> Editor/Repository reference** set to `refs/heads/master`. A webhook deploy uses the branch configured in the stack, not the branch that triggered CI.
 2. Enable the stack webhook: **Stacks -> the stack -> Webhooks -> Create webhook**. Copy the URL (`http://<nas>:9000/api/stacks/webhooks/<token>`).
-3. Create a Tailscale OAuth client (admin console -> **Settings -> OAuth clients**) with the `tag:ci` tag, and allow that tag to reach the NAS node on the Portainer port in **Access controls**:
+3. Create a Tailscale OAuth client: admin console -> **Settings -> Trust credentials** (the page was called *OAuth clients* before the rename) -> generate one with the **`auth_keys` write scope** and the `tag:ci` tag. The tag also needs an owner in the policy file (`"tagOwners": { "tag:ci": ["autogroup:admin"] }`) and a grant to reach the NAS on the Portainer port:
 
    ```json
    { "src": ["tag:ci"], "dst": ["zimaos.<your-tailnet>.ts.net"], "ip": ["tcp:9000"] }

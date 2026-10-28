@@ -43,7 +43,7 @@ jobs:
       # Portainer is not published to the internet, so the runner joins the
       # tailnet for the duration of the job instead of opening any port.
       - name: Connect to the tailnet
-        uses: tailscale/github-action@v3
+        uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}

@@ -472,7 +472,7 @@ Because Vite embeds `VITE_API_URL` at build time, changing the API URL always re
 
 ## Deploy a homelab demo
 
-`docker-compose.yml` runs the app on ZimaOS or any Docker host: nginx serves the built SPA, proxies `/api` to FastAPI, and publishes only `127.0.0.1:<APP_PORT>`, so a Tailscale Funnel or Cloudflare Tunnel on the same host is the only way in.
+`docker-compose.yml` runs the app on ZimaOS or any Docker host: nginx serves the built SPA, proxies `/api` to FastAPI, and publishes only `127.0.0.1:<APP_PORT>`, so a Tailscale Funnel or Cloudflare Tunnel on the same host is the only way in. Both services run the images CI pushes to GHCR; nothing is built on the NAS.
 
 See [deploy/HOMELAB.md](deploy/HOMELAB.md) for the deployment steps, the required environment variables, the tunnel setup, and the automatic deployment on push to `master`.
 
@@ -712,8 +712,9 @@ npm test
 - Frontend: `npm ci`, unit tests, and the type-check plus production build. Lint runs too but is non-blocking while the pre-existing React hook findings are fixed.
 - Backend: `pip check` plus the pytest suite, with empty Supabase and Groq credentials so nothing reaches a real project.
 - Containers: `docker compose config` with dummy values (this is what enforces the required-variable guards), both image builds, `nginx -t`, and a real container serving `/healthz` on port 8080.
+- Images: on a push only, and only after every check above passes, both images are pushed to GHCR as `:latest` and `:sha-<short>`. Pull requests never overwrite `latest`.
 
-`.github/workflows/deploy.yml` runs after a green CI on `master`, calls the Portainer stack webhook over the tailnet, and then verifies the app, the API, the security headers, and whether the bundle hash changed. See [deploy/HOMELAB.md](deploy/HOMELAB.md).
+`.github/workflows/deploy.yml` runs after a green CI on `master`, redeploys the Portainer stack over the tailnet through its API, and then verifies the app, the API, the security headers, and whether the bundle hash changed. Stack webhooks are a Business Edition feature, so the Community Edition is driven through `PUT /api/stacks/<id>/git/redeploy` with an API token. See [deploy/HOMELAB.md](deploy/HOMELAB.md).
 
 ### Manual smoke check
 

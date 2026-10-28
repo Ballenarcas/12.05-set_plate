@@ -13,17 +13,19 @@ Supabase stays external. There is no database container and no persistent volume
 - **Do not port-forward this stack directly to the internet.** Every API endpoint requires a bearer token, logins are rate limited by nginx, and the compose port is bound to `127.0.0.1`, but TLS termination and the public edge still belong to Tailscale Funnel or Cloudflare Tunnel.
 - **Never put the service-role key in a `VITE_` variable.** It must only reach the backend container.
 - **AI:** leave `GROQ_API_KEY` empty for a zero-cost demo. The AI workout adjustment will return a readable "Groq is not configured" error; the rest of the app works. Set the key only if you accept the API cost.
-- The first image build on the NAS can take several minutes because it installs npm and pip dependencies.
+- **The images come from GHCR**, built by CI on every push to `master`. The NAS only pulls them; it never builds. Nothing is compiled on the NAS, so a deploy takes about a minute.
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
-| `docker-compose.yml` | Backend and frontend services |
-| `backend/Dockerfile` | FastAPI image |
-| `frontend/Dockerfile` | Vite build plus nginx runtime |
+| `docker-compose.yml` | Backend and frontend services, both from GHCR |
+| `backend/Dockerfile` | FastAPI image, built by CI |
+| `frontend/Dockerfile` | Vite build plus nginx runtime, built by CI |
 | `frontend/nginx.conf` | SPA fallback, static caching, `/api` proxy |
 | `.env.homelab.example` | Environment variable template |
+| `.github/workflows/ci.yml` | Tests, container checks, and the GHCR publish |
+| `.github/workflows/deploy.yml` | Redeploy on the NAS after a green CI |
 
 ## Option A: deploy from Portainer (recommended)
 
@@ -32,7 +34,7 @@ Supabase stays external. There is no database container and no persistent volume
 3. Name the stack `set-and-plate`.
 4. Choose **Repository** as the build method.
    - Repository URL: your clone URL.
-   - Reference: the branch you want to demo, for example `refs/heads/func/basic-workout-stats`.
+   - Reference: `refs/heads/master`.
    - Compose path: `docker-compose.yml`.
 5. Add these stack environment variables:
 
@@ -49,7 +51,6 @@ Supabase stays external. There is no database container and no persistent volume
    APP_PORT=8080
    GROQ_API_KEY=
    GROQ_MODEL=llama-3.3-70b-versatile
-   VITE_API_URL=
    WEB_CONCURRENCY=1
    ```
 
@@ -60,7 +61,9 @@ Supabase stays external. There is no database container and no persistent volume
 
 If port `8080` is already used, change `APP_PORT`. The backend port is intentionally not published, and the frontend is published on loopback only.
 
-Do not use the Portainer **Web editor** for the first deployment: the Compose file builds from `./backend` and `./frontend`, so Portainer needs the repository files, not just the YAML.
+Do not use the Portainer **Web editor** for the stack: the automatic redeploy calls the Git redeploy endpoint, which rejects a stack that was pasted into the editor (`400 Stack is not created from git`).
+
+`IMAGE_TAG` is optional and defaults to `latest`, which is what CI publishes. Set it to a `sha-<short>` tag from the CI run to pin a specific build.
 
 ## Option B: deploy from SSH
 
@@ -70,7 +73,8 @@ Copy the repository to the NAS, then:
 cp .env.homelab.example .env.homelab
 # edit .env.homelab with the real values
 docker compose --env-file .env.homelab config -q
-docker compose --env-file .env.homelab up -d --build
+docker compose --env-file .env.homelab pull
+docker compose --env-file .env.homelab up -d
 docker compose --env-file .env.homelab ps
 ```
 
@@ -96,47 +100,81 @@ The stack is stateless. If you add a volume later, put it under ZimaOS's `/DATA/
 
 ## Updating the demo
 
-With Portainer, open the stack and choose **Pull and redeploy** or **Update the stack**. With SSH:
+With Portainer, open the stack and choose **Pull and redeploy**. With SSH:
 
 ```sh
 git pull
-docker compose --env-file .env.homelab up -d --build
+docker compose --env-file .env.homelab pull
+docker compose --env-file .env.homelab up -d
 ```
 
-`VITE_API_URL` is baked into the frontend at build time. Changing it requires rebuilding the `frontend` image.
+Both pull the new images from GHCR. Building locally is only needed if you changed a Dockerfile and did not push to GitHub:
+
+```sh
+docker build -t ghcr.io/ballenarcas/set-plate-backend:latest ./backend
+docker build -t ghcr.io/ballenarcas/set-plate-frontend:latest ./frontend
+docker compose --env-file .env.homelab up -d
+```
+
+The frontend build takes `VITE_API_URL` as a build argument and defaults to empty, which is what same-origin nginx needs. Changing it means a new image, not another environment variable.
 
 ## Automatic deployment on push to master
 
-`.github/workflows/deploy.yml` runs after the **CI** workflow succeeds on `master`. The runner joins the tailnet for the duration of the job and calls the Portainer stack webhook; Portainer pulls the repository and redeploys the stack. Nothing is published to the internet and no long-lived NAS credentials live in the repository.
+Two workflows, no extra infrastructure:
+
+1. `.github/workflows/ci.yml` runs the tests, validates the compose file and the nginx config, and then builds both images and pushes them to GHCR as `:latest` and `:sha-<short>`. This only happens on a push, never on a pull request.
+2. `.github/workflows/deploy.yml` starts when CI succeeds on `master`. The runner joins the tailnet, asks Portainer to redeploy the stack, and then verifies the result.
+
+Stack webhooks are a Portainer **Business Edition** feature, so this drives the Community Edition through its API instead. That is also why the images come from a registry: Portainer only rebuilds a stack image when the service sets `pull_policy: build`, and building on the NAS on every push is slow and needs the whole repository on the host. Building in CI keeps the deploy to a pull.
 
 One-time setup:
 
-1. The stack must track `master`: **Stacks -> the stack -> Editor/Repository reference** set to `refs/heads/master`. A webhook deploy uses the branch configured in the stack, not the branch that triggered CI.
-2. Enable the stack webhook: **Stacks -> the stack -> Webhooks -> Create webhook**. Copy the URL (`http://<nas>:9000/api/stacks/webhooks/<token>`).
-3. Create a Tailscale OAuth client: admin console -> **Settings -> Trust credentials** (the page was called *OAuth clients* before the rename) -> generate one with the **`auth_keys` write scope** and the `tag:ci` tag. The tag also needs an owner in the policy file (`"tagOwners": { "tag:ci": ["autogroup:admin"] }`) and a grant to reach the NAS on the Portainer port:
+1. **Make the packages pullable.** The NAS pulls anonymously, so both GHCR packages have to be public: **GitHub -> your avatar -> Your packages -> `set-plate-backend` -> Package settings -> Change visibility -> Public**, and the same for `set-plate-frontend`. They appear after the first green push. If you would rather keep them private, add the registry in Portainer (**Registries -> Add registry -> Custom**: `ghcr.io`, your GitHub username, and a PAT with `read:packages`) and select it when deploying the stack.
+2. **Track master**: **Stacks -> the stack -> Repository reference** set to `refs/heads/master`. The redeploy uses the branch configured in the stack, not the branch that triggered CI.
+3. **Create a Portainer API token**: **My account -> Access tokens -> Add access token**. It is shown once and expires when you say so; `PORTAINER_API_TOKEN` is that value.
+4. **Create a Tailscale OAuth client**: admin console -> **Settings -> Trust credentials** (the page was called *OAuth clients* before the rename) -> generate one with the **`auth_keys` write scope** and the `tag:ci` tag. The tag also needs an owner in the policy file (`"tagOwners": { "tag:ci": ["autogroup:admin"] }`) and a grant to reach the NAS on the Portainer port:
 
    ```json
-   { "src": ["tag:ci"], "dst": ["zimaos.<your-tailnet>.ts.net"], "ip": ["tcp:9000"] }
+   { "src": ["tag:ci"], "dst": ["zimaos.<your-tailnet>.ts.net"], "ip": ["tcp:9443"] }
    ```
+
+   Portainer listens on `9443` (HTTPS). Use `tcp:9000` instead if you enabled its plain-HTTP port and set `PORTAINER_URL` accordingly.
 
    If your tailnet does not allow tagged OAuth clients, swap the `oauth-client-id`/`oauth-secret` inputs in the workflow for a single `authkey` input and store it as `TS_AUTHKEY`.
 
-4. Repository secrets: `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_CLIENT_SECRET`, `PORTAINER_WEBHOOK_URL`.
-   Repository variables: `PORTAINER_HOST` (MagicDNS name, used for the connectivity ping) and `PUBLIC_URL` (`https://<machine>.<tailnet>.ts.net`).
-5. Rewrite the webhook URL so it goes over the tailnet instead of the LAN address Portainer shows: `http://<nas>.<tailnet>.ts.net:9000/api/stacks/webhooks/<token>`. Portainer is not reachable from a GitHub runner by its LAN IP.
+5. Repository secrets:
+
+   | Secret | Value |
+   | --- | --- |
+   | `TS_OAUTH_CLIENT_ID` | OAuth client ID |
+   | `TS_OAUTH_CLIENT_SECRET` | OAuth client secret |
+   | `PORTAINER_API_TOKEN` | the token from step 3 |
+
+   Repository variables:
+
+   | Variable | Value |
+   | --- | --- |
+   | `PORTAINER_HOST` | MagicDNS name, for the connectivity ping (`<nas>.<tailnet>.ts.net`) |
+   | `PORTAINER_URL` | `https://<nas>.<tailnet>.ts.net:9443` |
+   | `PORTAINER_STACK_ID` | the number at the end of the stack URL (`#!/docker/stacks/3` -> `3`) |
+   | `PORTAINER_ENDPOINT_ID` | the environment id; `GET /api/endpoints` lists it, and it is usually `1` |
+   | `PUBLIC_URL` | `https://<machine>.<tailnet>.ts.net`, for the post-deploy checks |
+
 6. Push to `master` and confirm the run turns green.
 
-The webhook URL is a bearer token: anyone who has it can redeploy the stack. Keep it in secrets, and keep Portainer reachable only through the tailnet.
+The API token is a bearer credential: anyone who has it can redeploy the stack and read the Portainer API. Keep it in secrets, scope it with an expiry, and keep Portainer reachable only through the tailnet. The workflow uses `-k` for the self-signed certificate, which is acceptable over Tailscale and would not be over the internet.
 
-After the webhook the workflow does not trust the `204`: it waits up to ten minutes for `/healthz`, then checks `/api/v1/health`, asserts that `Content-Security-Policy` and `X-Frame-Options: DENY` are present (a missing header means `nginx.conf` never reached the image), and compares the served bundle hash with the one recorded before the deploy. An unchanged hash raises a warning, because it is the first sign that Portainer redeployed the previous image.
+The workflow calls `PUT /api/stacks/<id>/git/redeploy?endpointId=<id>` with `RepullImageAndRedeploy`, so Portainer pulls the new `:latest` digest instead of reusing the local one. It retries on `409` while another deployment is running and fails with a readable message on `400` (stack was created in the web editor), `401`/`403` (bad token) and `404` (wrong stack or environment id).
 
-**Rebuild caveat.** Portainer does not rebuild images that a stack declares with `build:`; it redeploys the existing ones. After a run, verify the code actually changed:
+After the call it does not trust the `200`: it waits up to ten minutes for `/healthz`, then checks `/api/v1/health`, asserts that `Content-Security-Policy` and `X-Frame-Options: DENY` are present (a missing header means `nginx.conf` never reached the image), and compares the served bundle hash with the one recorded before the deploy. An unchanged hash raises a warning: it means the NAS is still running the previous image, usually because the GHCR package is private and the pull failed.
+
+To confirm by hand which image the frontend is running:
 
 ```sh
-docker inspect --format '{{.Created}}' set_plate-frontend-1
+docker inspect --format '{{.Config.Image}} {{.Created}}' set_plate-frontend-1
 ```
 
-If that timestamp does not move, Portainer is serving the old image and the deploy is only half-working. The fix is either a manual **Update the stack** with a rebuild on the NAS, or moving to registry images (CI builds and pushes to GHCR, the stack only pulls).
+The `Created` timestamp must be recent, and the image must be `ghcr.io/ballenarcas/set-plate-frontend:latest`.
 
 ## Remote access for testers
 
@@ -177,7 +215,12 @@ Avoid it for this demo. If you must use it, put a reverse proxy with authenticat
 | Login or registration returns 500 | Check `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and the backend logs. Onboarding needs the service-role key. |
 | `port is already allocated` | Change `APP_PORT` and recreate the stack; the container keeps its old port mapping until it is recreated. Then point Funnel at the same number. |
 | Tunnel answers `502` but `curl http://127.0.0.1:<APP_PORT>/healthz` is `ok` | `tailscale funnel` targets a different port. Run `tailscale funnel reset` and then `tailscale funnel --bg <APP_PORT>`. |
-| First load is slow | The first build and the first Supabase request are the slow parts. Later loads use nginx caching and the warmed Supabase client. |
+| Deploy fails with `denied` or `unauthorized` pulling `ghcr.io/...` | The GHCR package is private and the NAS has no registry credentials. Make both packages public, or add `ghcr.io` under **Registries** and select it in the stack. |
+| Deploy fails with `HTTP 400` from the Portainer API | The stack was created in the web editor, so it has no Git configuration. Recreate it from the repository; `git/redeploy` only works on Git stacks. |
+| Deploy fails with `HTTP 401`/`403` | `PORTAINER_API_TOKEN` is wrong, expired, or belongs to a user who cannot manage the stack. |
+| Deploy fails with `HTTP 404` | `PORTAINER_STACK_ID` or `PORTAINER_ENDPOINT_ID` is wrong. Both are in the stack URL and in `GET /api/stacks`. |
+| Deploy succeeds but the old page is still served | `docker inspect --format '{{.Config.Image}}' set_plate-frontend-1` must show the `ghcr.io` image. If it shows a local tag, the stack still has a `build:`/local `image:`; if the pull failed, the deploy log says so. |
+| First load is slow | The first image pull and the first Supabase request are the slow parts. Later loads use nginx caching and the warmed Supabase client. |
 | AI adjustment shows an error | `GROQ_API_KEY` is empty or invalid. This is expected for a no-cost demo. |
 
 ## Demo checklist

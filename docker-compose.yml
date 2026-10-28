@@ -8,9 +8,11 @@ x-logging: &default-logging
 
 services:
   backend:
-    build:
-      context: ./backend
-    image: set-and-plate-backend:local
+    # Built and pushed by CI on every green push to master. There is
+    # deliberately no `build:` section: Portainer only rebuilds when a service
+    # sets `pull_policy: build`, so a plain `build:` section leaves the stack
+    # running whatever image happened to be on the host (portainer#6288).
+    image: ghcr.io/ballenarcas/set-plate-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     init: true
     read_only: true
@@ -42,12 +44,9 @@ services:
     logging: *default-logging
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        # Same-origin requests: the SPA talks to nginx, nginx talks to the API.
-        VITE_API_URL: ""
-    image: set-and-plate-frontend:local
+    # Same-origin requests: the SPA talks to nginx, nginx talks to the API, so
+    # VITE_API_URL is baked in empty by the CI build.
+    image: ghcr.io/ballenarcas/set-plate-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       backend:

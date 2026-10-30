@@ -570,7 +570,7 @@ The conversational and intent endpoints are available in the backend and in the 
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/premium/subscribe` | Reserved: returns 501 until a payment provider is wired up |
+| `POST` | `/api/v1/premium/subscribe` | Mock checkout: activates premium for the signed-in user; no payment is processed |
 
 ### Placeholder endpoints
 
@@ -743,7 +743,7 @@ Then open `http://localhost:5173`, create a profile, sign in, open the dashboard
 - **Registration rejects a known email.** A second signup with the same address returns 409 instead of recovering the account.
 - **Home AI insight is a placeholder.** The backend endpoint exists, but the dashboard does not call it.
 - **Plate scanning is not implemented.** The control is disabled and marked PRO.
-- **Premium is a mock.** `POST /api/v1/premium/subscribe` returns 501 until a verified payment webhook exists.
+- **Premium is a mock.** `POST /api/v1/premium/subscribe` activates the subscription immediately for the signed-in user; no payment is taken. Anyone with an account can activate, so real checkout needs a provider webhook first.
 - **Workout statistics are not exposed.** `/api/v1/stats/` returns an empty list and there is no routed statistics screen.
 - **AI features require a Groq key.** Without one, planning and live adjustments return configuration errors.
 - **Food search depends on a network fallback.** Local matches work offline; Open Food Facts results need outbound network access.

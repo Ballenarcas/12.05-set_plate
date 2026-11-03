@@ -741,7 +741,7 @@ export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus>
   if (!user?.id) throw new Error('Sign in before upgrading to premium')
 
   const response = await apiFetch(
-    `${API_URL}/api/v1/premium/subscribe?user_id=${encodeURIComponent(user.id)}`,
+    `${API_URL}/api/v1/premium/subscribe`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

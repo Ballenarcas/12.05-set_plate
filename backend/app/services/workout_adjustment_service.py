@@ -9,6 +9,18 @@ from fastapi import HTTPException
 from groq import AsyncGroq, BadRequestError
 
 from app.core.config import get_settings
+from app.services.workout_program import (
+    MIN_EXERCISES,
+    TARGET_EXERCISES,
+    apply_prescription,
+    build_session,
+    clamp_targets,
+    fallback_exercises,
+    objective_guidance,
+    plan_errors,
+    recent_covers_whole_body,
+    session_pool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +198,55 @@ def _sample_exercise_pool(
     return pool
 
 
+def _plan_retry_is_usable(
+    plan: Any,
+    pool_by_id: dict[str, dict[str, Any]],
+    guidance: dict[str, Any],
+    min_exercises: int,
+) -> bool:
+    """A retried plan must be complete and pass every programming rule."""
+    if not isinstance(plan, dict) or plan.get("rest_day") is True:
+        return False
+    if plan.get("routine_id") is not None:
+        return False
+    if not isinstance(plan.get("reasoning"), str):
+        return False
+    if not isinstance(plan.get("workout_name"), str) or not plan["workout_name"].strip():
+        return False
+    exercises = plan.get("exercises")
+    if not isinstance(exercises, list) or any(not isinstance(item, dict) for item in exercises):
+        return False
+    return not plan_errors(exercises, pool_by_id, guidance, min_exercises)
+
+
+async def _quality_checked_exercises(
+    result: dict[str, Any],
+    prompt_data: dict[str, Any],
+    schema: dict[str, Any],
+    pool_by_id: dict[str, dict[str, Any]],
+    session: dict[str, Any],
+    guidance: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Enforce programming rules, retrying once and falling back to the template."""
+    min_exercises = min(MIN_EXERCISES, len(session["slots"]))
+    errors = plan_errors(result["exercises"], pool_by_id, guidance, min_exercises)
+    if errors:
+        logger.warning("Generated workout failed quality checks: %s", errors)
+        retried = await _request_json(json.dumps({**prompt_data, "correction": errors}), schema)
+        if _plan_retry_is_usable(retried, pool_by_id, guidance, min_exercises):
+            result.update(retried)
+        else:
+            result["exercises"] = fallback_exercises(session, guidance)
+            result["workout_name"] = session["label"]
+            result["reasoning"] = (
+                f"Balanced {session['label'].lower()} session built from the vetted exercise list."
+            )
+            result["adjusted"] = True
+    if session:
+        return apply_prescription(result["exercises"], pool_by_id, guidance)
+    return clamp_targets(result["exercises"], guidance)
+
+
 def _save_rest_day(
     db_session: Any, user_id: UUID, today: str, reasoning: str, adjusted: bool,
 ) -> dict[str, Any]:
@@ -294,12 +355,26 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         routine for routine in available_routines
         if not (set(routine["muscle_groups"]) & recent_muscle_groups)
     ]
+    objective = user.get("objective")
+    guidance = objective_guidance(objective)
+    session: dict[str, Any] | None = None
     available_exercises: list[dict[str, Any]] = []
     if not safe_routines:
         catalog = _load_exercise_catalog(db_session)
-        available_exercises = _sample_exercise_pool(
-            catalog, recent_muscle_groups, recent_exercise_ids, seed=f"{user_id}:{today}",
-        )
+        seed = f"{user_id}:{today}"
+        session = build_session(catalog, recent_muscle_groups, recent_exercise_ids, seed)
+        if session:
+            available_exercises = session_pool(session)
+        elif recent_covers_whole_body(recent_muscle_groups):
+            return _save_rest_day(
+                db_session, user_id, today,
+                "Every major muscle group was trained in the last 48 hours. Today is a rest day.",
+                adjusted=True,
+            )
+        else:
+            available_exercises = _sample_exercise_pool(
+                catalog, recent_muscle_groups, recent_exercise_ids, seed=seed,
+            )
         if not available_exercises:
             if not catalog:
                 return {"plan_id": None, "ai_adjusted": False, "reasoning": None, "rest_day": False,
@@ -336,27 +411,73 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
                 "required": ["exercise_id", "sets", "reps"]}},
         }, "required": ["routine_id", "workout_name", "rest_day", "adjusted", "reasoning", "exercises"],
     }
+    target_range = (
+        f"{guidance['min_sets']}-{guidance['max_sets']} sets of "
+        f"{guidance['min_reps']}-{guidance['max_reps']} reps "
+        f"({guidance['summary']}), resting about {guidance['rest_seconds']} seconds between sets."
+    )
     if safe_routines:
         plan_instruction = "Choose one supplied routine and return its id. Return every exercise in that routine, preserving exercise_id. Adjust set and rep counts based on the nutrition context."
         routine_context = safe_routines
+        program_context = None
+        exercise_context: list[dict[str, Any]] = []
     else:
-        plan_instruction = "Build a complete workout from the supplied exercise pool only. The pool already excludes every muscle group trained in the last 48 hours. Select a balanced group of exercises and choose practical sets and reps for each. Return routine_id as null and provide a concise workout_name. Do not invent exercise IDs or names."
         routine_context = []
+        exercise_context = [
+            {
+                "id": exercise.get("id"),
+                "exercise_id": exercise.get("exercise_id") or exercise.get("id"),
+                "name": exercise.get("name"),
+                "muscle_group": exercise.get("muscle_group"),
+                "equipment": exercise.get("equipment"),
+                "movement": exercise.get("movement"),
+                "compound": exercise.get("compound"),
+                "slot": exercise.get("slot"),
+            }
+            for exercise in available_exercises
+        ]
+        if session:
+            target_count = min(TARGET_EXERCISES, len(session["slots"]))
+            plan_instruction = (
+                "Build today's workout using only the supplied approved exercises, which are grouped by movement "
+                "pattern and already filtered for recovery. Each pattern lists its options best first, so pick the "
+                "first suitable option and choose exactly one exercise per movement pattern. Keep compound lifts "
+                f"before isolation work and never repeat a pattern. Choose {target_count} exercises. Use {target_range} "
+                "Sets and reps are calibrated afterwards, so approximate values are fine. Return routine_id as null "
+                "and a concise workout_name. Do not invent exercise IDs or names."
+            )
+            program_context = {
+                "template": session["label"],
+                "movements": [slot["movement"] for slot in session["slots"]],
+            }
+        else:
+            plan_instruction = (
+                "Build a complete workout from the supplied exercise pool only. The pool already excludes every muscle "
+                "group trained in the last 48 hours. Select a balanced group of exercises and choose practical sets and "
+                f"reps for each. Use {target_range} Return routine_id as null and provide a concise workout_name. "
+                "Do not invent exercise IDs or names."
+            )
+            program_context = None
 
-    result = await _request_json(json.dumps({
-        "user_targets": {key: user.get(key) for key in ("calorie_goal", "protein_goal", "carbs_goal", "fat_goal") if user.get(key) is not None},
-        "last_48_hours_intake": totals, "calorie_status": calorie_status,
+    prompt_data = {
+        "user_targets": {
+            key: user.get(key)
+            for key in ("calorie_goal", "protein_goal", "carbs_goal", "fat_goal")
+            if user.get(key) is not None
+        },
+        "user_goal": objective,
+        "training_guidance": guidance,
+        "last_48_hours_intake": totals,
+        "calorie_status": calorie_status,
         "recent_muscle_groups": sorted(recent_muscle_groups),
+        "program": program_context,
         "available_routines": routine_context,
-        "available_exercises": (
-            [{key: exercise.get(key) for key in ("id", "name", "muscle_group", "equipment")}
-             for exercise in available_exercises]
-            if not routine_context else []
-        ),
-        "instruction": plan_instruction + " For a new workout, choose 6 to 8 exercises."
+        "available_exercises": exercise_context if not routine_context else [],
+        "instruction": plan_instruction
             + " Set adjusted true if you changed a saved routine or created a new workout; otherwise use false."
             + " If recovery is the better choice today, set rest_day true, return routine_id null, workout_name \"Rest day\", an empty exercises array, and a short reasoning.",
-    }), schema)
+    }
+    result = await _request_json(json.dumps(prompt_data), schema)
     if (
         not isinstance(result, dict)
         or not isinstance(result.get("rest_day"), bool)
@@ -399,6 +520,10 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
             for item in generated_exercises
         ):
             raise HTTPException(status_code=502, detail="Groq returned invalid generated set targets")
+        if session:
+            generated_exercises = await _quality_checked_exercises(
+                result, prompt_data, schema, catalog_by_id, session, guidance,
+            )
         routine_exercises = [
             {**catalog_by_id[item["exercise_id"]], "target_sets": item["sets"], "target_reps": item["reps"]}
             for item in generated_exercises

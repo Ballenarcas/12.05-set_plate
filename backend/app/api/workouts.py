@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.core.auth import current_admin, current_user
+from app.core.local_day import LocalDay, local_day
 from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
 from app.facades.workout_facade import workout_facade
 from app.schemas.workout import (
@@ -23,8 +24,9 @@ _last_adjustment_request: dict[str, float] = {}
 @router.post("/plan-today")
 async def plan_todays_workout(
     user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
 ) -> dict:
-    return await workout_facade.plan_today(user_id)
+    return await workout_facade.plan_today(user_id, day)
 
 
 @router.post("/adjust", response_model=LiveWorkoutAdjustmentResponse)

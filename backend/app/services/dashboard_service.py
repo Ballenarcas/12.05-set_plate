@@ -1,12 +1,14 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from statistics import mean
 from uuid import UUID
 
 from fastapi import HTTPException
 
+from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
 from app.schemas.dashboard import CompletedWorkoutToday, DashboardSummary, NutritionDashboard, PlanExercise, WorkoutDashboard, WorkoutPlanSummary
+from app.services.ai_tips_service import kcal_bonus
 from app.services.user_profile_service import calculate_calorie_goal
 
 
@@ -44,15 +46,14 @@ def _calculate_target_calories(user: dict) -> int:
     )
 
 
-def _query_today_meals(user_id: UUID) -> dict[str, float]:
-    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+def _query_today_meals(user_id: UUID, day: LocalDay) -> dict[str, float]:
     response = (
         get_supabase(admin=True)
         .table("meals")
         .select("calories,proteins,carbs,fats")
         .eq("user_id", str(user_id))
-        .gte("consumed_at", start.isoformat())
-        .lt("consumed_at", (start + timedelta(days=1)).isoformat())
+        .gte("consumed_at", day.start.isoformat())
+        .lt("consumed_at", day.end.isoformat())
         .execute()
     )
     return {
@@ -97,14 +98,13 @@ def _query_workout(user_id: UUID) -> WorkoutDashboard | None:
     )
 
 
-def _query_todays_plan(user_id: UUID) -> WorkoutPlanSummary | None:
-    today = datetime.now(timezone.utc).date()
+def _query_todays_plan(user_id: UUID, day: LocalDay) -> WorkoutPlanSummary | None:
     rows = (
         get_supabase(admin=True)
         .table("workout_plans")
         .select("id,routine_id,title,plan_date,is_rest_day,ai_adjusted,ai_reasoning,exercises")
         .eq("user_id", str(user_id))
-        .eq("plan_date", today.isoformat())
+        .eq("plan_date", day.local_date.isoformat())
         .limit(1)
         .execute()
     ).data or []
@@ -123,15 +123,14 @@ def _query_todays_plan(user_id: UUID) -> WorkoutPlanSummary | None:
     )
 
 
-def _query_completed_workout_today(user_id: UUID) -> CompletedWorkoutToday | None:
-    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+def _query_completed_workout_today(user_id: UUID, day: LocalDay) -> CompletedWorkoutToday | None:
     rows = (
         get_supabase(admin=True)
         .table("workouts")
         .select("id,name")
         .eq("user_id", str(user_id))
-        .gte("start_time", start.isoformat())
-        .lt("start_time", (start + timedelta(days=1)).isoformat())
+        .gte("start_time", day.start.isoformat())
+        .lt("start_time", day.end.isoformat())
         .not_.is_("end_time", "null")
         .order("end_time", desc=True)
         .limit(1)
@@ -142,24 +141,27 @@ def _query_completed_workout_today(user_id: UUID) -> CompletedWorkoutToday | Non
     return CompletedWorkoutToday(id=str(rows[0]["id"]), name=rows[0].get("name") or "Workout")
 
 
-def get_dashboard_summary(user_id: UUID) -> DashboardSummary:
+def get_dashboard_summary(user_id: UUID, day: LocalDay | None = None) -> DashboardSummary:
+    day = day or utc_day()
     client = get_supabase(admin=True)
     if client is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        bonus_future = executor.submit(kcal_bonus, user_id, day)
         user_future = executor.submit(_query_user, user_id)
-        meals_future = executor.submit(_query_today_meals, user_id)
+        meals_future = executor.submit(_query_today_meals, user_id, day)
         workout_future = executor.submit(_query_workout, user_id)
-        plan_future = executor.submit(_query_todays_plan, user_id)
-        completed_future = executor.submit(_query_completed_workout_today, user_id)
+        plan_future = executor.submit(_query_todays_plan, user_id, day)
+        completed_future = executor.submit(_query_completed_workout_today, user_id, day)
         user = user_future.result()
         meals = meals_future.result()
         workout = workout_future.result()
         plan = plan_future.result()
         completed_workout = completed_future.result()
+        bonus_kcals = bonus_future.result()
 
-    target_kcals = _calculate_target_calories(user)
+    target_kcals = _calculate_target_calories(user) + bonus_kcals
     target_protein = round(float(user["weight"]) * 1.6, 1)
     target_fat = round(target_kcals * 0.25 / 9, 1)
     target_carbs = round((target_kcals - target_protein * 4 - target_fat * 9) / 4, 1)
@@ -176,7 +178,7 @@ def get_dashboard_summary(user_id: UUID) -> DashboardSummary:
     full_name = " ".join(part for part in (user.get("Name"), user.get("Surname")) if part)
     return DashboardSummary(
         user_name=full_name,
-        current_date_formatted=datetime.now().strftime("%a, %b %d"),
+        current_date_formatted=day.local_date.strftime("%a, %b %d"),
         ai_notification=None,
         nutrition=nutrition,
         workout=workout,

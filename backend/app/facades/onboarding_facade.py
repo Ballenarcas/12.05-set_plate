@@ -131,11 +131,12 @@ class OnboardingFacade:
         premium_plan = None
         premium_started_at = None
         premium_expires_at = None
+        premium_cancel_at_period_end = False
         if is_premium:
             try:
                 subscription_result = (
                     supabase.table("subscriptions")
-                    .select("plan,status,current_period_start,current_period_end")
+                    .select("plan,status,current_period_start,current_period_end,cancel_at_period_end")
                     .eq("user_id", user["id"])
                     .limit(1)
                     .execute()
@@ -148,6 +149,7 @@ class OnboardingFacade:
                     premium_plan = subscription.get("plan")
                     premium_started_at = subscription.get("current_period_start")
                     premium_expires_at = subscription.get("current_period_end")
+                    premium_cancel_at_period_end = bool(subscription.get("cancel_at_period_end"))
                     if subscription.get("status") == "expired":
                         is_premium = False
 
@@ -161,6 +163,7 @@ class OnboardingFacade:
             premium_plan=premium_plan,
             premium_started_at=premium_started_at,
             premium_expires_at=premium_expires_at,
+            premium_cancel_at_period_end=premium_cancel_at_period_end,
             age=user.get("age"),
             gender=user.get("gender"),
             weight=user.get("weight"),

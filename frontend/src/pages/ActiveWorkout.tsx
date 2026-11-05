@@ -15,6 +15,7 @@ import type {
   WorkoutLogCreate,
   WorkoutSet,
 } from '../types/workout'
+import { useDialogBehavior } from '../utils/useDialogBehavior'
 import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
@@ -154,28 +155,6 @@ function safeCount(value: unknown, min = 0): number {
 
 function safeSetKind(value: unknown): SetKind {
   return value === 'warmup' || value === 'drop' || value === 'failure' ? value : 'normal'
-}
-
-function useDialogBehavior(open: boolean, onClose: () => void) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const closeRef = useRef(onClose)
-  useEffect(() => {
-    closeRef.current = onClose
-  }, [onClose])
-  useEffect(() => {
-    if (!open) return
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    dialogRef.current?.focus()
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeRef.current()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      previouslyFocused?.focus()
-    }
-  }, [open])
-  return dialogRef
 }
 
 function getSession(state: unknown): ActiveSession | null {

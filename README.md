@@ -126,7 +126,7 @@ This table separates what is wired end to end from what is still a placeholder.
 | AI daily workout plan | Available with Groq | Requires `GROQ_API_KEY`. The dashboard still loads without it. |
 | Live AI workout adjustments | Available with Groq | Requires `GROQ_API_KEY`; 60-second cooldown. |
 | Rule-based calorie goal adjustment | Available | Deterministic rules over seven days of data; not an LLM call. |
-| Home "AI Trainer" insight | Placeholder | The dashboard shows a static message. |
+| Home AI tips | Available | Rule-based tips (no model call) from today's meals and training, with Accept, Dismiss and a reasoning popup. Needs `create_ai_tips_table.sql`. |
 | Plate scanning | Placeholder | The "Scan plate" control is disabled and marked PRO. |
 | Premium checkout | Mock | Activates a database status; no payment is processed. |
 | Workout statistics page | Not implemented | `/api/v1/stats/` is an empty placeholder and no statistics screen is routed. |
@@ -553,6 +553,9 @@ Supported exercise query parameters: `q`, `category`, `muscle_group`, `muscle`, 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/ai/trainer-insight` | Generate a short trainer insight with Groq |
+| `GET` | `/api/v1/ai/tips/current` | Current rule-based Home tip |
+| `POST` | `/api/v1/ai/tips/{id}/decision` | Accept or dismiss a tip; returns the next tip |
+| `POST` | `/api/v1/ai/tips/{id}/undo` | Reverse a tip accepted today and offer it again |
 | `POST` | `/api/v1/ai/parse-intent` | Fuzzy-match natural language against foods, exercises, routines, and meals |
 | `POST` | `/api/v1/ai/conversational-setup` | Grounded conversational helper for routines and meals |
 | `GET` | `/api/v1/ai/calorie-adjustment` | Build a rule-based calorie goal proposal |
@@ -570,6 +573,7 @@ The conversational and intent endpoints are available in the backend and in the 
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| `POST` | `/api/v1/premium/cancel` | Cancel at period end; Premium stays active until then |
 | `POST` | `/api/v1/premium/subscribe` | Mock checkout: activates premium for the signed-in user; no payment is processed |
 
 ### Placeholder endpoints
@@ -666,7 +670,7 @@ If no API key is configured, the endpoint returns a readable configuration error
 
 ### Trainer insight
 
-`POST /api/v1/ai/trainer-insight` calls Groq with a nutrition summary, training summary, and user goal. The Home screen currently displays a static placeholder instead of calling this endpoint.
+`POST /api/v1/ai/trainer-insight` calls Groq with a nutrition summary, training summary, and user goal. The Home screen does not call this endpoint; it uses `GET /api/v1/ai/tips/current` and `POST /api/v1/ai/tips/{id}/decision`, which are rule-based and use no tokens.
 
 ### Conversational helpers
 
@@ -741,7 +745,7 @@ Then open `http://localhost:5173`, create a profile, sign in, open the dashboard
 - **Session state is client-side.** The signed-in profile is stored in `localStorage`; clearing it signs the user out.
 - **No password reset or email verification.** The onboarding flow validates email format but does not prove email ownership.
 - **Registration rejects a known email.** A second signup with the same address returns 409 instead of recovering the account.
-- **Home AI insight is a placeholder.** The backend endpoint exists, but the dashboard does not call it.
+- **Home tips are rule-based.** Tips never call a model. Accepting a calorie tip raises only today's goal; it does not change the saved goal.
 - **Plate scanning is not implemented.** The control is disabled and marked PRO.
 - **Premium is a mock.** `POST /api/v1/premium/subscribe` activates the subscription immediately for the signed-in user; no payment is taken. Anyone with an account can activate, so real checkout needs a provider webhook first.
 - **Workout statistics are not exposed.** `/api/v1/stats/` returns an empty list and there is no routed statistics screen.

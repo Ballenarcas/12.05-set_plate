@@ -1,11 +1,10 @@
-import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
+import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AiTipCard from '../components/home/AiTipCard'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
-
-const TRAINER_INSIGHT = 'AI insight will be displayed here'
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
@@ -134,10 +133,7 @@ function Home() {
 
       <section className="section" aria-labelledby="trainer-insight">
         <h2 className="section-title" id="trainer-insight">AI Trainer</h2>
-        <div className="card ai-banner">
-          <Lightbulb size={21} aria-hidden="true" />
-          <p>{TRAINER_INSIGHT}</p>
-        </div>
+        <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
       </section>
 
       <section className="section" aria-labelledby="nutrition-summary">

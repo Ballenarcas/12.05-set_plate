@@ -42,9 +42,11 @@ Use this guide with the concise repository-level `AGENTS.md`. Prefer accurate, f
 
 ---
 
-## 3. Current product constraint
+## 3. AI Tips (Home)
 
-- AI model calls are temporarily disabled to conserve tokens. Keep the Home AI tip as a static placeholder; do not call or re-enable an AI provider unless the user explicitly asks.
+- AI Tips are an active feature, not a placeholder. Rules in `backend/app/services/ai_tips_service.py` choose each tip, its numbers and its Accept action; the UI is `frontend/src/components/home/AiTipCard.tsx`.
+- Tips must stay within the safety limits: never diagnose or treat conditions, never recommend a deficit above 500 kcal/day, and never raise workout load more than 10% per week.
+- Model-written wording is not enabled yet to conserve tokens; do not add model calls to tips until the user explicitly asks.
 
 ## 4. Skill & Rule Directory Reference
 

@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from app.core.local_day import LocalDay
 from app.schemas.workout import RoutineCreate, RoutineSummary
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
@@ -14,11 +15,11 @@ from fastapi import HTTPException
 
 
 class WorkoutFacade:
-    async def plan_today(self, user_id: UUID):
+    async def plan_today(self, user_id: UUID, day: LocalDay | None = None):
         supabase = get_supabase(admin=True)
         if supabase is None:
             raise HTTPException(status_code=503, detail="Supabase is not configured")
-        return await plan_daily_workout(user_id, supabase)
+        return await plan_daily_workout(user_id, supabase, day)
 
     async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
         return await suggest_live_adjustment(payload.model_dump(mode="json"))

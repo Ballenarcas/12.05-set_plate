@@ -13,7 +13,7 @@ from app.schemas.user import UserOnboardingRequest
 
 def test_dashboard_facade_delegates_summary(monkeypatch):
     expected = object()
-    monkeypatch.setattr("app.facades.dashboard_facade.get_dashboard_summary", lambda user_id: expected)
+    monkeypatch.setattr("app.facades.dashboard_facade.get_dashboard_summary", lambda user_id, day: expected)
     assert DashboardFacade().get_summary(uuid4()) is expected
 
 

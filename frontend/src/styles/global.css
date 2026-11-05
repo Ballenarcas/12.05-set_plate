@@ -48,6 +48,17 @@
 .ai-banner { display: flex; gap: 0.75rem; padding: 1rem; background: var(--olive); }
 .ai-banner svg { flex: 0 0 auto; color: #f6e86c; }
 .ai-banner p { color: #fffbd0; font-size: 0.84rem; line-height: 1.45; }
+.ai-tip-body { display: grid; gap: 0.6rem; flex: 1; min-width: 0; }
+.ai-tip-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; opacity: 0.9; }
+.ai-tip-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.ai-tip-btn { min-height: 2.2rem; padding: 0 0.85rem; display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 251, 208, 0.45); border-radius: 0.6rem; color: #fffbd0; background: transparent; cursor: pointer; font-size: 0.78rem; font-weight: 700; }
+.ai-tip-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.ai-tip-accept { border-color: transparent; color: #071c0e; background: var(--green); }
+.ai-tip-why { margin-left: auto; padding: 0; width: 2.2rem; }
+.ai-tip-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgba(0, 0, 0, 0.72); }
+.ai-tip-dialog { width: 100%; max-width: 24rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--surface); color: #fff; }
+.ai-tip-dialog h3 { margin: 0 0 0.6rem; font-size: 1.05rem; }
+.ai-tip-dialog p { margin: 0; font-size: 0.9rem; line-height: 1.5; }
 .progress-copy { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.55rem; }
 .progress-copy strong { font-size: 1.05rem; }
 .progress-copy span { color: var(--text-muted); font-size: 0.75rem; }

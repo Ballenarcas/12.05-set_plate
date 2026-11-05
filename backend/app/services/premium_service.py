@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app.db.supabase_client import get_supabase
-from app.schemas.premium import PremiumPlan, PremiumPurchaseResponse
+from app.schemas.premium import PremiumCancelResponse, PremiumPlan, PremiumPurchaseResponse
 
 logger = logging.getLogger(__name__)
 
@@ -136,3 +136,46 @@ def purchase_premium_db(user_id: str, plan: PremiumPlan) -> PremiumPurchaseRespo
         started_at=period_start,
         expires_at=expires_at,
     )
+
+
+def cancel_premium_db(user_id: str) -> PremiumCancelResponse:
+    """Stop the subscription at period end. Access stays until then; repeating changes nothing."""
+    client = get_supabase(admin=True)
+    if client is None:
+        raise RuntimeError("Database connection unavailable")
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    try:
+        result = (
+            client.table(SUBSCRIPTIONS_TABLE_NAME)
+            .select("status,current_period_end")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as err:
+        logger.exception("Could not read the subscription table")
+        raise RuntimeError("Could not read the subscription from the database") from err
+
+    existing = result.data[0] if result.data else None
+    period_end = _parse_timestamp(existing.get("current_period_end")) if existing else None
+    if (
+        not existing
+        or existing.get("status") not in ACTIVE_SUBSCRIPTION_STATUSES
+        or period_end is None
+        or period_end <= now
+    ):
+        raise LookupError("There is no active subscription to cancel")
+
+    try:
+        (
+            client.table(SUBSCRIPTIONS_TABLE_NAME)
+            .update({"cancel_at_period_end": True, "updated_at": now.isoformat()})
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception as err:
+        logger.exception("Could not cancel the premium subscription")
+        raise RuntimeError("Could not cancel the subscription. Please try again.") from err
+
+    return PremiumCancelResponse(status="success", cancel_at_period_end=True, expires_at=period_end)

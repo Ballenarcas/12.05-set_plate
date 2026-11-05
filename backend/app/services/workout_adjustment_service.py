@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from groq import AsyncGroq, BadRequestError
 
 from app.core.config import get_settings
+from app.core.local_day import LocalDay
 from app.services.workout_program import (
     MIN_EXERCISES,
     TARGET_EXERCISES,
@@ -267,10 +268,10 @@ def _save_rest_day(
             "reasoning": reasoning, "rest_day": True, "sets_created": True}
 
 
-async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
+async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | None = None) -> dict[str, Any]:
     """Build today's training plan and store it as a document, apart from completed workouts."""
-    start, end = _today_window()
-    today = start.date().isoformat()
+    start, end = (day.start, day.end) if day else _today_window()
+    today = (day.local_date if day else start.date()).isoformat()
     since = datetime.now(timezone.utc) - timedelta(hours=48)
     try:
         users = _data(db_session.table("users").select("*").eq("id", str(user_id)).limit(1).execute())

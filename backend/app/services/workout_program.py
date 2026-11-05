@@ -160,7 +160,7 @@ def objective_guidance(objective: str | None) -> dict[str, Any]:
             "min_reps": 3, "max_reps": 6, "rest_seconds": 150,
             "summary": "heavy compounds, low reps, long rest",
         }
-    if any(key in text for key in ("weight loss", "fat", "grasa", "cut", "deficit", "déficit")):
+    if any(key in text for key in ("weight loss", "lose", "fat", "grasa", "cut", "deficit", "déficit")):
         return {
             "branch": "fat_loss", "min_sets": 2, "max_sets": 4,
             "min_reps": 8, "max_reps": 15, "rest_seconds": 75,

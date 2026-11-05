@@ -1,6 +1,7 @@
 import json
 import logging
 import random
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -10,6 +11,7 @@ from groq import AsyncGroq, BadRequestError
 
 from app.core.config import get_settings
 from app.core.local_day import LocalDay
+from app.services.ai_tip_history import clean_name, instant
 from app.services.ai_tips_service import accepted_training_notes
 from app.services.workout_program import (
     MIN_EXERCISES,
@@ -28,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 _DEFICIT_RATIO = 0.8
 _SURPLUS_RATIO = 1.2
+
+MIN_PLAN_EXERCISES = MIN_EXERCISES  # shorter routines and past sessions are not a full day's training
+HISTORY_DAYS = 60
+MAX_HISTORY_OPTIONS = 3
 
 
 def _is_gpt_oss(model: str) -> bool:
@@ -200,6 +206,94 @@ def _sample_exercise_pool(
     return pool
 
 
+def _most_common(values: list[Any]) -> Any:
+    return Counter(values).most_common(1)[0][0]
+
+
+def _session_exercises(sets: list[dict[str, Any]], guidance: dict[str, Any]) -> list[dict[str, Any]]:
+    """What the user really did in a past session, kept inside their current goal."""
+    by_exercise: dict[str, list[dict[str, Any]]] = {}
+    for row in sorted(sets, key=lambda item: item.get("exercise_order") or 0):
+        by_exercise.setdefault(str(row["exercise_id"]), []).append(row)
+    exercises: list[dict[str, Any]] = []
+    for exercise_id, rows in by_exercise.items():
+        reps = [int(row["reps"]) for row in rows if row.get("reps")]
+        if not reps:
+            continue
+        weights = [float(row["weight"]) for row in rows if row.get("weight")]
+        exercises.append({
+            "exercise_id": exercise_id,
+            "exercises": rows[0].get("exercises"),
+            "target_sets": min(len(rows), guidance["max_sets"]),
+            "target_reps": max(guidance["min_reps"], min(_most_common(reps), guidance["max_reps"])),
+            "previous_weight_kg": _most_common(weights) if weights else None,
+        })
+    return exercises
+
+
+def history_sessions(
+    workouts: list[dict[str, Any]],
+    sets: list[dict[str, Any]],
+    blocked_muscle_groups: set[str],
+    guidance: dict[str, Any],
+    now: datetime,
+) -> list[dict[str, Any]]:
+    """Past sessions worth repeating, the ones whose muscles rested longest first."""
+    sets_by_workout: dict[str, list[dict[str, Any]]] = {}
+    for row in sets:
+        if row.get("exercise_id"):
+            sets_by_workout.setdefault(str(row["workout_id"]), []).append(row)
+    finished = [
+        (started, workout) for workout in workouts
+        if workout.get("end_time") and (started := instant(workout.get("start_time")))
+    ]
+    last_trained: dict[str, datetime] = {}
+    sessions: dict[str, dict[str, Any]] = {}
+    for started, workout in sorted(finished, key=lambda pair: pair[0], reverse=True):
+        exercises = _session_exercises(sets_by_workout.get(str(workout["id"]), []), guidance)
+        groups = sorted({group for item in exercises if (group := _exercise_muscle_group(item))})
+        for group in groups:
+            last_trained.setdefault(group, started)
+        name = clean_name(workout.get("name"))
+        # Newest first, so a name that repeats keeps its latest full session.
+        if name and groups and name.lower() not in sessions and len(exercises) >= MIN_PLAN_EXERCISES:
+            sessions[name.lower()] = {
+                "id": str(workout["id"]), "name": name, "exercises": exercises,
+                "muscle_groups": groups, "last_done": started.strftime("%b %d"), "started": started,
+            }
+
+    def rest(session: dict[str, Any]) -> float:
+        days = [(now - last_trained[group]).total_seconds() for group in session["muscle_groups"]]
+        return sum(days) / len(days)
+
+    usable = [row for row in sessions.values() if not set(row["muscle_groups"]) & blocked_muscle_groups]
+    usable.sort(key=lambda row: (-rest(row), row["started"]))
+    return [{key: value for key, value in row.items() if key != "started"} for row in usable]
+
+
+def _load_history_sessions(
+    db_session: Any, user_id: UUID, blocked_muscle_groups: set[str], guidance: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """A failed read only costs the personal plan: the generic template still works."""
+    now = datetime.now(timezone.utc)
+    try:
+        workouts = _data(
+            db_session.table("workouts").select("id,name,start_time,end_time").eq("user_id", str(user_id))
+            .gte("start_time", (now - timedelta(days=HISTORY_DAYS)).isoformat()).execute()
+        )
+        if not workouts:
+            return []
+        sets = _data(
+            db_session.table("workout_sets")
+            .select("workout_id,exercise_id,exercise_order,reps,weight,exercises(name,muscle_group)")
+            .in_("workout_id", [str(row["id"]) for row in workouts]).eq("is_done", True).execute()
+        )
+    except Exception:
+        logger.exception("Could not load workout history")
+        return []
+    return history_sessions(workouts, sets, blocked_muscle_groups, guidance, now)[:MAX_HISTORY_OPTIONS]
+
+
 def _plan_retry_is_usable(
     plan: Any,
     pool_by_id: dict[str, dict[str, Any]],
@@ -351,7 +445,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
                     if (group := _exercise_muscle_group(exercise))
                 }),
             }
-            for routine in routines if exercises_by_routine.get(str(routine["id"]))
+            for routine in routines
+            if len(exercises_by_routine.get(str(routine["id"]), [])) >= MIN_PLAN_EXERCISES
         ]
     safe_routines = [
         routine for routine in available_routines
@@ -359,6 +454,10 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     ]
     objective = user.get("objective")
     guidance = objective_guidance(objective)
+    from_history = False
+    if not safe_routines:
+        safe_routines = _load_history_sessions(db_session, user_id, recent_muscle_groups, guidance)
+        from_history = bool(safe_routines)
     session: dict[str, Any] | None = None
     available_exercises: list[dict[str, Any]] = []
     if not safe_routines:
@@ -392,7 +491,12 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     }
     calorie_target = user.get("calorie_goal")
     calorie_status = "unknown"
-    if calorie_target is not None:
+    # A day with nothing logged means a forgotten log, not a day without food.
+    logged_yesterday = any(
+        (moment := instant(meal.get("consumed_at"))) and start - timedelta(days=1) <= moment < start
+        for meal in meals
+    )
+    if calorie_target is not None and logged_yesterday:
         target_48h = float(calorie_target) * 2
         if totals["calories"] < target_48h * _DEFICIT_RATIO:
             calorie_status = "severe_deficit"
@@ -419,7 +523,11 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         f"({guidance['summary']}), resting about {guidance['rest_seconds']} seconds between sets."
     )
     if safe_routines:
-        plan_instruction = "Choose one supplied routine and return its id. Return every exercise in that routine, preserving exercise_id. Adjust set and rep counts based on the nutrition context."
+        plan_instruction = (
+            "Choose one of the user's past sessions in available_routines and return its id. They are ordered "
+            "best first, so take the first unless user_commitments point to another. Return every exercise in it, "
+            "preserving exercise_id. Keep its sets and reps, lowering them only if the nutrition context calls for it."
+        ) if from_history else "Choose one supplied routine and return its id. Return every exercise in that routine, preserving exercise_id. Adjust set and rep counts based on the nutrition context."
         routine_context = safe_routines
         program_context = None
         exercise_context: list[dict[str, Any]] = []
@@ -469,7 +577,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         },
         "user_goal": objective,
         "training_guidance": guidance,
-        "last_48_hours_intake": totals,
+        # Incomplete logs read as starving, so the model must not see them.
+        "last_48_hours_intake": totals if calorie_status != "unknown" else None,
         "calorie_status": calorie_status,
         "recent_muscle_groups": sorted(recent_muscle_groups),
         "program": program_context,
@@ -496,6 +605,9 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     ):
         raise HTTPException(status_code=502, detail="Groq returned an invalid workout plan")
 
+    if result["rest_day"] and from_history and calorie_status != "severe_deficit":
+        # These muscles are already known to be recovered, so nothing justifies a rest day.
+        result.update(rest_day=False, adjusted=False, exercises=[])
     if result["rest_day"]:
         return _save_rest_day(
             db_session, user_id, today, result["reasoning"], bool(result["adjusted"]),
@@ -504,8 +616,9 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     selected_routine_id = str(result["routine_id"]) if result.get("routine_id") else None
     if safe_routines:
         selected_routine = next((row for row in safe_routines if str(row["id"]) == selected_routine_id), None)
-        if selected_routine is None:
+        if selected_routine is None and not from_history:
             raise HTTPException(status_code=502, detail="Groq selected an unavailable routine")
+        selected_routine = selected_routine or safe_routines[0]
         routine_exercises = selected_routine["exercises"]
         workout_name = selected_routine["name"]
     else:
@@ -544,20 +657,26 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
 
     by_id = {str(row.get("exercise_id")): row for row in routine_exercises}
     recommendations = {item["exercise_id"]: item for item in result["exercises"]}
-    if set(recommendations) != set(by_id):
+    if set(recommendations) != set(by_id) and not from_history:
         raise HTTPException(status_code=502, detail="Groq returned an invalid exercise plan")
 
     plan_exercises = []
     for exercise_id, source in by_id.items():
-        recommendation = recommendations[exercise_id] if result["adjusted"] else {
-            "sets": source.get("target_sets"), "reps": source.get("target_reps"),
-        }
-        plan_exercises.append({
-            "exercise_id": exercise_id,
-            "name": _exercise_name(source),
-            "sets": int(recommendation.get("sets") or 0),
-            "reps": int(recommendation.get("reps") or 0),
-        })
+        recommendation = recommendations.get(exercise_id, {}) if result["adjusted"] else {}
+        sets = int(recommendation.get("sets") or source.get("target_sets") or 0)
+        reps = int(recommendation.get("reps") or source.get("target_reps") or 0)
+        planned = {"exercise_id": exercise_id, "name": _exercise_name(source), "sets": sets, "reps": reps}
+        if from_history:  # the model may ease a past session, never make it harder
+            planned["sets"] = min(sets, source["target_sets"])
+            planned["reps"] = min(reps, source["target_reps"])
+            planned["previous_weight_kg"] = source["previous_weight_kg"]
+        plan_exercises.append(planned)
+
+    if from_history:
+        selected_routine_id = None  # a past workout's id is not a saved routine
+        reason = f"Based on your {workout_name} session from {selected_routine['last_done']}. Its muscles have recovered."
+        result["reasoning"] = f"{reason} {result['reasoning']}" if result["adjusted"] else reason
+        result["adjusted"] = True
 
     try:
         saved = _data(db_session.table("workout_plans").upsert({

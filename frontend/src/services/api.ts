@@ -34,6 +34,7 @@ export interface PlanExercise {
   name: string
   sets: number
   reps: number
+  previous_weight_kg?: number | null
 }
 
 export interface WorkoutPlanSummary {

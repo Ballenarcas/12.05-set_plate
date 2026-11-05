@@ -9,6 +9,12 @@ from fastapi import HTTPException
 from app.services import workout_adjustment_service as service
 
 
+@pytest.fixture(autouse=True)
+def short_routines_are_usable(monkeypatch):
+    """Most tests here use a one-exercise routine; the minimum has its own tests."""
+    monkeypatch.setattr(service, "MIN_PLAN_EXERCISES", 1)
+
+
 class FakeQuery:
     def __init__(self, database, table):
         self.database = database
@@ -18,6 +24,7 @@ class FakeQuery:
         self.filters = {}
         self.in_filters = {}
         self.range_bounds = None
+        self.date_checks = []
 
     def select(self, columns):
         self.columns = columns
@@ -36,10 +43,12 @@ class FakeQuery:
         self.filters[column] = value
         return self
 
-    def gte(self, *_):
+    def gte(self, column, value):
+        self.date_checks.append(lambda row: str(row[column]) >= value if row.get(column) else True)
         return self
 
-    def lt(self, *_):
+    def lt(self, column, value):
+        self.date_checks.append(lambda row: str(row[column]) < value if row.get(column) else True)
         return self
 
     def order(self, *_):
@@ -87,6 +96,7 @@ class FakeQuery:
         for column, values in self.in_filters.items():
             allowed = {str(value) for value in values}
             rows = [row for row in rows if str(row.get(column)) in allowed]
+        rows = [row for row in rows if all(check(row) for check in self.date_checks)]
         if self.table_name == "workout_sets" and self.filters.get("is_done") is True:
             rows = [row for row in rows if row.get("is_done")]
         elif self.table_name == "workout_sets" and self.columns != "id":

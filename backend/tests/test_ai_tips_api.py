@@ -162,6 +162,18 @@ def test_undo_removes_the_calories_and_offers_the_tip_again(use_database):
     assert _undo(tip["id"]).json()["applied"] is False  # repeating an undo changes nothing
 
 
+def test_a_tip_without_a_change_can_be_accepted_and_undone(use_database):
+    database = use_database(_database())
+    tip = _current().json()["tip"]
+    assert tip["kind"] == "nothing_logged"
+    accepted = _decide(tip["id"], "accepted").json()
+    assert accepted["applied"] is True
+    assert accepted["confirmation"] == "Got it, I'll follow up on this."
+    assert database.rows["ai_tips"][0]["status"] == "accepted"
+    assert _bonus(database) == 0  # choosing to follow a tip never changes the goal
+    assert _undo(tip["id"]).json()["tip"]["id"] == tip["id"]
+
+
 def test_accepting_and_undoing_a_set_changes_the_plan(use_database):
     database = use_database(_database(workouts=[_workout(9, 30)], workout_plans=[_plan()]))
     tip = _current().json()["tip"]

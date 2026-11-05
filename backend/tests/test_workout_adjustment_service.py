@@ -338,6 +338,28 @@ async def test_daily_plan_keeps_a_routine_that_avoids_recent_muscles(monkeypatch
     assert prompt_data["recent_muscle_groups"] == ["Legs"]
 
 
+@pytest.mark.asyncio
+async def test_daily_plan_receives_accepted_training_tips(monkeypatch):
+    database = FakeDatabase()
+    set_routine_muscle_group(database, "Chest")
+    database.rows["ai_tips"] = [{"kind": "muscle_gap", "action": {"type": "focus_muscle", "muscle": "Legs"}, "status": "accepted"}]
+    prompts = []
+
+    async def recommend(prompt, _schema):
+        prompts.append(prompt)
+        return {
+            "routine_id": database.routine_id, "workout_name": "Routine", "rest_day": False, "adjusted": False,
+            "reasoning": "Fresh.", "exercises": [{"exercise_id": database.exercise_id, "sets": 2, "reps": 8}],
+        }
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database)
+
+    commitments = json.loads(prompts[0])["user_commitments"]
+    assert commitments["notes"] == ["Agreed to train Legs next: prefer it if it is available."]
+    assert "never override recovery" in commitments["instruction"]
+
+
 def test_exercise_pool_skips_blocked_muscles_and_recent_exercises():
     catalog = [
         {"id": f"chest-{index}", "muscle_group": "Chest"} for index in range(3)

@@ -10,6 +10,7 @@ from groq import AsyncGroq, BadRequestError
 
 from app.core.config import get_settings
 from app.core.local_day import LocalDay
+from app.services.ai_tips_service import accepted_training_notes
 from app.services.workout_program import (
     MIN_EXERCISES,
     TARGET_EXERCISES,
@@ -478,6 +479,12 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
             + " Set adjusted true if you changed a saved routine or created a new workout; otherwise use false."
             + " If recovery is the better choice today, set rest_day true, return routine_id null, workout_name \"Rest day\", an empty exercises array, and a short reasoning.",
     }
+    commitments = accepted_training_notes(user_id, start, db_session)
+    if commitments:
+        prompt_data["user_commitments"] = {
+            "notes": commitments,
+            "instruction": "Follow these when the supplied options allow it. They never override recovery or the supplied options.",
+        }
     result = await _request_json(json.dumps(prompt_data), schema)
     if (
         not isinstance(result, dict)

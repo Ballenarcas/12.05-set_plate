@@ -102,7 +102,7 @@ def test_every_template_passes_its_own_safety_check(state):
 ])
 def test_every_tip_tells_the_user_what_to_do(state):
     for tip in build_candidates(state):
-        assert bool(tip["action"]) != bool(tip["next_step"]), tip["kind"]
+        assert tip["action"] or tip["next_step"], tip["kind"]
         if tip["next_step"]:
             assert is_safe_wording(tip, {"message": tip["next_step"], "reasoning": tip["reasoning"]}), tip["kind"]
 

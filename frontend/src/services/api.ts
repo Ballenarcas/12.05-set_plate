@@ -1000,7 +1000,6 @@ export interface AiTip {
   kind: string
   message: string
   reasoning: string
-  has_action: boolean
 }
 
 export interface AiTipDecision {

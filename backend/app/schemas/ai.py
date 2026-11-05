@@ -89,7 +89,6 @@ class AiTip(BaseModel):
     kind: str
     message: str
     reasoning: str
-    has_action: bool
 
 
 class AiTipResponse(BaseModel):

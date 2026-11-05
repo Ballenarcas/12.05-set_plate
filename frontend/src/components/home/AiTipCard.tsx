@@ -85,9 +85,7 @@ export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
           )}
           {tip && (
             <div className="ai-tip-actions">
-              {tip.has_action && (
-                <button type="button" className="ai-tip-btn ai-tip-accept" disabled={busy} onClick={() => decide('accepted')}>Accept</button>
-              )}
+              <button type="button" className="ai-tip-btn ai-tip-accept" disabled={busy} onClick={() => decide('accepted')}>Accept</button>
               <button type="button" className="ai-tip-btn" disabled={busy} onClick={() => decide('dismissed')}>Dismiss</button>
               <button type="button" className="ai-tip-btn ai-tip-why" aria-label="Why this tip?" onClick={() => setShowWhy(true)}>
                 <CircleHelp size={16} aria-hidden="true" />

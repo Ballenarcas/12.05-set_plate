@@ -11,6 +11,16 @@ ON_GOAL_BAND = 0.10
 MUSCLE_GAP_DAYS = 8
 MAX_NAME_LENGTH = 40
 IGNORED_MUSCLES = {"Cardio"}  # not a muscle a user would miss training
+ACCEPTED_LOOKBACK_DAYS = 14
+# Fixed labels, not the stored tip text, so old numbers never reach the model as facts.
+ACCEPTED_LABELS = {
+    "protein_behind": "eating more protein",
+    "protein_week": "eating more protein",
+    "yesterday_recap": "eating more protein",
+    "training_gap": "getting back to training",
+    "hard_session": "recovering well",
+    "lift_progress": "holding their new best weight",
+}
 
 
 def instant(value: Any) -> datetime | None:
@@ -109,12 +119,28 @@ def summarize_workouts(rows: list[dict[str, Any]], day: LocalDay) -> dict[str, A
             muscle_gap = {"muscle": muscle, "days": age}
 
     return {
+        "muscle_ages": muscle_age,
         "days_since_workout": latest[0] if latest else None,
         "last_workout_name": latest[1] if latest else "",
         "today_rpe": round(sum(today_rpe) / len(today_rpe), 1) if today_rpe else None,
         "lift_progress": lift_progress,
         "muscle_gap": muscle_gap,
     }
+
+
+def summarize_accepted(rows: list[dict[str, Any]], day: LocalDay) -> list[dict[str, Any]]:
+    """Tips the user accepted on earlier days, newest first. Today's are still being acted on."""
+    accepted = []
+    for row in rows:
+        moment = instant(row.get("created_at"))
+        if moment is None or moment >= day.start:
+            continue
+        accepted.append({
+            "kind": row.get("kind"),
+            "days_ago": days_ago(moment, day),
+            "muscle": (row.get("action") or {}).get("muscle"),
+        })
+    return sorted(accepted, key=lambda item: item["days_ago"])
 
 
 def personal_facts(state: dict[str, Any]) -> list[str]:
@@ -148,4 +174,11 @@ def personal_facts(state: dict[str, Any]) -> list[str]:
         facts.append(f"Not trained for {state['muscle_gap']['days']} days: {state['muscle_gap']['muscle']}")
     if state.get("streak_days", 0) >= 2:
         facts.append(f"Meal logging streak: {state['streak_days']} days")
+    agreed = []
+    for item in state.get("accepted_recent", []):
+        label = f"training {item['muscle']}" if item.get("muscle") else ACCEPTED_LABELS.get(item["kind"])
+        if label and label not in agreed:
+            agreed.append(label)
+    if agreed:
+        facts.append(f"Recently agreed to work on: {', '.join(agreed[:3])}")
     return facts

@@ -94,6 +94,31 @@ def test_every_template_passes_its_own_safety_check(state):
         assert is_safe_wording(tip, tip)
 
 
+@pytest.mark.parametrize("state", [
+    _state(), _state(workouts_done_today=1), _state(meals_count=2, eaten_kcal=1100),
+    _state(meals_count=2, eaten_kcal=2200), _state(meals_count=3, eaten_kcal=2600),
+    _state(meals_count=2, eaten_kcal=1500, protein_eaten=20), _state(streak_days=5),
+    _state(plan=REST_PLAN), SET_STATE, RICH_STATE, _state(yesterday={"kcal": 2000, "protein": 130}),
+])
+def test_every_tip_tells_the_user_what_to_do(state):
+    for tip in build_candidates(state):
+        assert bool(tip["action"]) != bool(tip["next_step"]), tip["kind"]
+        if tip["next_step"]:
+            assert is_safe_wording(tip, {"message": tip["next_step"], "reasoning": tip["reasoning"]}), tip["kind"]
+
+
+def test_new_best_never_suggests_more_weight():
+    tip = next(item for item in build_candidates(RICH_STATE) if item["kind"] == "lift_progress")
+    assert "Stay at this weight" in tip["next_step"]
+
+
+def test_model_cannot_change_or_lose_the_next_step(use_database, model):  # noqa: F811
+    use_database(_database())
+    model.reply = {"message": "A fresh day for your goals.", "reasoning": "You have nothing logged yet."}
+    tip = _current().json()["tip"]
+    assert tip["message"] == "A fresh day for your goals. Log your first meal so I can tailor today's tips."
+
+
 def test_good_rewording_is_accepted():
     assert is_safe_wording(KCAL_TIP, _wording("Great session! Want 120 kcal more on today's plan?"))
     assert is_safe_wording(SET_TIP, _wording("You're on a roll. Try one set more of Squat today?"))
@@ -143,7 +168,7 @@ def model(monkeypatch):
     """Fake model with the switch on and a Premium user. Tests narrow these to each case."""
     state = SimpleNamespace(calls=[], premium=True, reply=None)
 
-    def phrase(message, reasoning, facts):
+    def phrase(message, reasoning, facts, next_step):
         state.calls.append(message)
         state.facts = facts
         if isinstance(state.reply, Exception):
@@ -191,7 +216,7 @@ def test_unsafe_model_wording_falls_back_to_the_template(use_database, model):  
     database = use_database(_database())
     model.reply = {"message": "This will treat your condition.", "reasoning": "Trust me."}
     tip = _current().json()["tip"]
-    assert tip["message"] == "Log your first meal so I can tailor today's tips."
+    assert tip["message"] == "You haven't logged any meals yet today. Log your first meal so I can tailor today's tips."
     assert database.rows["ai_tips"][0].get("source") != "model"  # the column defaults to template
 
 

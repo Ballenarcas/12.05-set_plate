@@ -5,10 +5,14 @@ the safety limits. Tips only ever add calories (never a deeper deficit) and add
 at most one set, and only while the weekly set count stays within 10% of the
 previous week.
 
+Every tip tells the user what to do: either Accept, or a "next_step" written by
+the rule and added to the message word for word.
+
 A model may rewrite a tip for Premium users when AI_TIPS_MODEL_ENABLED is on,
 using facts about the user to make it personal. It is called at most once per
-change in their data, never changes what Accept does, and anything it writes that
-fails is_safe_wording is thrown away in favour of the rule's text.
+change in their data, never touches the next step or what Accept does, and
+anything it writes that fails is_safe_wording is thrown away in favour of the
+rule's text.
 """
 
 import logging
@@ -42,7 +46,7 @@ MAX_WORKOUT_KCAL_BONUS = 200
 BURNED_KCAL_SHARE = 1 / 3  # eat back part of the session, so a deficit is reduced but not erased
 MIN_STREAK_DAYS = 3
 MAX_MODEL_TIPS_PER_DAY = 8
-MAX_MESSAGE_LENGTH = 140
+MAX_MESSAGE_LENGTH = 120  # before the next step is added
 MAX_REASONING_LENGTH = 240
 PROTEIN_REMINDER_HOUR = 14  # earlier than this, a low protein total only means the day is young
 HARD_SESSION_RPE = 8.5
@@ -127,7 +131,7 @@ def is_safe_wording(tip: dict[str, Any], wording: Any, facts: tuple[str, ...] | 
     text = f"{message} {reasoning}"
     if BLOCKED_WORDING.search(text):
         return False
-    known = " ".join((tip["message"], tip["reasoning"], *facts))
+    known = " ".join((tip["message"], tip["reasoning"], tip.get("next_step") or "", *facts))
     if not set(NUMBER.findall(text)) <= set(NUMBER.findall(known)) or not _amounts(text) <= _amounts(known):
         return False
 
@@ -166,6 +170,7 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
                 "based on how long you trained, helps you recover and never makes your deficit "
                 "bigger. It only changes today's goal."
             ),
+            "next_step": None,
             "action": {"type": "add_kcal", "kcal": bonus},
         })
     elif plan and not plan.get("is_rest_day") and plan.get("exercises") and can_add_set(
@@ -182,6 +187,7 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
                 f"{state['planned_sets_today']}. One more set makes {total}, still within 10% of the "
                 f"{state['sets_prev_7d']} sets you did the week before, so the increase stays gradual."
             ),
+            "next_step": None,
             "action": {"type": "add_set", "exercise_id": str(first["exercise_id"]), "name": first["name"]},
         })
 
@@ -190,7 +196,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "lift_progress",
             "state_key": reading,
-            "message": f"New best on {lift['exercise']}: {lift['after']} kg, up from {lift['before']} kg. Strong session!",
+            "message": f"New best on {lift['exercise']}: {lift['after']} kg, up from {lift['before']} kg.",
+            "next_step": "Stay at this weight next session until it feels solid.",
             "reasoning": (
                 f"Your heaviest {lift['exercise']} set today was {lift['after']} kg. Your best in the "
                 f"previous 30 days was {lift['before']} kg."
@@ -202,7 +209,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "hard_session",
             "state_key": reading,
-            "message": f"That was a tough one, with an average effort of {effort} out of 10. Good food and sleep will help you bounce back.",
+            "message": f"That was a tough one, with an average effort of {effort} out of 10.",
+            "next_step": "Have a protein-rich meal and get a good night's sleep.",
             "reasoning": "You rated today's sets as very hard. Your body rebuilds after the session, so recovery is part of the work.",
             "action": None,
         })
@@ -212,7 +220,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "protein_behind",
             "state_key": reading,
-            "message": f"Protein is a bit low today: {round(protein)} of {round(protein_goal)} g. A protein-rich snack would help.",
+            "message": f"Protein is a bit low today: {round(protein)} of {round(protein_goal)} g.",
+            "next_step": "Make protein the focus of your next meal.",
             "reasoning": (
                 f"You have eaten {eaten} of {goal} kcal but only {round(protein)} g of your "
                 f"{round(protein_goal)} g protein target. Protein supports muscle recovery."
@@ -223,22 +232,25 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "over_target",
             "state_key": reading,
-            "message": f"You're {eaten - goal} kcal over today's goal. That's fine, no need to make up for it tomorrow.",
+            "message": f"You're {eaten - goal} kcal over today's goal, and that's fine.",
+            "next_step": "Go back to your normal plan tomorrow, with no need to make up for it.",
             "reasoning": "One day above target rarely changes your progress. Your weekly average matters more than a single day.",
             "action": None,
         })
     if meals and eaten < goal:
         last_meal = state.get("last_meal")
         message = f"Nice, {meals} meal{'s' if meals != 1 else ''} logged and {goal - eaten} kcal left today."
-        if last_meal and protein_goal > 0:
-            message = (
-                f"{last_meal['name']} gave you {last_meal['protein']} g of protein. You're at {round(protein)} of "
-                f"{round(protein_goal)} g, with {goal - eaten} kcal left."
-            )
+        if last_meal:
+            message = f"{last_meal['name']} gave you {last_meal['protein']} g of protein, and you have {goal - eaten} kcal left."
+        protein_left = round(protein_goal - protein)
         tips.append({
             "kind": "on_track",
             "state_key": reading,
             "message": message,
+            "next_step": (
+                f"Aim for {protein_left} g more protein in your remaining meals." if protein_left > 0
+                else "Protein is done for today, so just keep logging your meals."
+            ),
             "reasoning": f"Based on {eaten} kcal eaten so far against your {goal} kcal goal.",
             "action": None,
         })
@@ -246,7 +258,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "goal_reached",
             "state_key": reading,
-            "message": "You've reached today's calorie goal. Nice work!",
+            "message": "You've reached today's calorie goal.",
+            "next_step": "That's today done, so just log anything else you eat.",
             "reasoning": f"You have eaten {eaten} kcal against your {goal} kcal goal.",
             "action": None,
         })
@@ -258,7 +271,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "protein_week",
             "state_key": reading,
-            "message": f"Your protein averaged {week_protein} g this week, under your {round(protein_goal)} g target. One extra protein source a day would close the gap.",
+            "message": f"Your protein averaged {week_protein} g this week, under your {round(protein_goal)} g target.",
+            "next_step": "Add one protein source to a meal each day.",
             "reasoning": (
                 f"This comes from the {week_days} days you logged in the past week."
                 + (f" Enough protein matters for your {objective} goal." if objective else "")
@@ -269,7 +283,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "calorie_week",
             "state_key": reading,
-            "message": f"You hit your calorie goal on {state['week_days_on_goal']} of the last 7 days. That consistency is what brings results.",
+            "message": f"You hit your calorie goal on {state['week_days_on_goal']} of the last 7 days.",
+            "next_step": "Plan today's meals the same way to keep that going.",
             "reasoning": "Those days landed within 10% of your calorie goal. Steady weeks matter more than any single day.",
             "action": None,
         })
@@ -278,7 +293,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "muscle_gap",
             "state_key": reading,
-            "message": f"You haven't trained {gap['muscle']} in {gap['days']} days. Worth fitting it in soon.",
+            "message": f"You haven't trained {gap['muscle']} in {gap['days']} days.",
+            "next_step": f"Put a {gap['muscle']} exercise in your next workout.",
             "reasoning": f"It's the muscle group you've gone longest without training in the past 30 days.",
             "action": None,
         })
@@ -287,7 +303,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "training_gap",
             "state_key": reading,
-            "message": f"It's been {since} days since your last workout. Even a short session keeps the habit alive.",
+            "message": f"It's been {since} days since your last workout.",
+            "next_step": "Plan a short session in the next day or two.",
             "reasoning": "Regular training matters more than any single big session, so a short workout still counts.",
             "action": None,
         })
@@ -295,7 +312,8 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "rest_day",
             "state_key": reading,
-            "message": "Rest day today. Recovery is part of your training, so enjoy it.",
+            "message": "It's a rest day, and recovery is part of your training.",
+            "next_step": "Go for a walk or stretch a little if you feel like moving.",
             "reasoning": "Your plan has no workout today. Muscles get stronger while you rest, not only while you train.",
             "action": None,
         })
@@ -304,24 +322,34 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
         tips.append({
             "kind": "logging_streak",
             "state_key": reading,
-            "message": f"{streak} days of logging in a row. Keep it going!",
+            "message": f"{streak} days of logging in a row.",
+            "next_step": "Log your next meal to keep it going.",
             "reasoning": f"You logged meals on each of the last {streak} days. Staying consistent makes my tips more useful.",
             "action": None,
         })
     yesterday = state.get("yesterday")
     if not meals and yesterday:
+        protein_short = round(protein_goal - yesterday["protein"])
         tips.append({
             "kind": "yesterday_recap",
             "state_key": reading,
-            "message": f"Yesterday you had {yesterday['kcal']} kcal and {yesterday['protein']} g of protein. New day, fresh start!",
-            "reasoning": "This is what you logged yesterday. Log your first meal today and I'll keep you up to date.",
+            "message": (
+                f"You were {protein_short} g short on protein yesterday." if protein_short > 0
+                else f"You reached {yesterday['protein']} g of protein yesterday."
+            ),
+            "next_step": (
+                "Make your first meal today rich in protein." if protein_short > 0
+                else "Log your first meal to start today the same way."
+            ),
+            "reasoning": f"Yesterday you logged {yesterday['kcal']} kcal and {yesterday['protein']} g of protein.",
             "action": None,
         })
     if not meals:
         tips.append({
             "kind": "nothing_logged",
             "state_key": reading,
-            "message": "Log your first meal so I can tailor today's tips.",
+            "message": "You haven't logged any meals yet today.",
+            "next_step": "Log your first meal so I can tailor today's tips.",
             "reasoning": "There are no meals logged for today yet, so there is nothing to base a tip on.",
             "action": None,
         })
@@ -445,7 +473,7 @@ def _with_model_wording(
     try:
         if not has_active_premium(str(user_id), session):
             return tip
-        wording = phrase_tip(tip["message"], tip["reasoning"], facts)
+        wording = phrase_tip(tip["message"], tip["reasoning"], facts, tip["next_step"])
     except Exception:
         logger.warning("Could not reword the tip; using the template", exc_info=True)
         return tip
@@ -474,9 +502,11 @@ def get_current_tip(user_id: UUID, day: LocalDay | None = None, session: Any = N
                 return _public(row)
             continue
         tip = _with_model_wording(tip, user_id, seen_keys, state, session)
+        next_step = tip.pop("next_step")
+        message = f"{tip['message']} {next_step}" if next_step else tip["message"]
         try:
             inserted = _rows(session.table(TIPS_TABLE).insert(
-                {**tip, "user_id": str(user_id), "tip_date": tip_date}).execute())
+                {**tip, "message": message, "user_id": str(user_id), "tip_date": tip_date}).execute())
         except Exception as err:
             if "23505" not in str(err):  # another request stored it first; show the stored one
                 raise

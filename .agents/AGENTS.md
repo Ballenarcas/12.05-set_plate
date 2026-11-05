@@ -46,7 +46,7 @@ Use this guide with the concise repository-level `AGENTS.md`. Prefer accurate, f
 
 - AI Tips are an active feature, not a placeholder. Rules in `backend/app/services/ai_tips_service.py` choose each tip, its numbers and its Accept action; the UI is `frontend/src/components/home/AiTipCard.tsx`.
 - Tips must stay within the safety limits: never diagnose or treat conditions, never recommend a deficit above 500 kcal/day, and never raise workout load more than 10% per week.
-- A model may personalize tips only for Premium users when `AI_TIPS_MODEL_ENABLED` is on, once per change in the user's data and at most 8 times per user per day; it never chooses actions or invents numbers, and `is_safe_wording` must stay the gate for its output.
+- A model may personalize tips only for Premium users when `AI_TIPS_MODEL_ENABLED` is on, once per change in the user's data and at most 8 times per user per day; it never chooses actions or invents numbers, and `is_safe_wording` must stay the gate for its output. Every tip must tell the user what to do: an Accept action, or a rule-written `next_step` that the model cannot change.
 
 ## 4. Skill & Rule Directory Reference
 

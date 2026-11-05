@@ -2,6 +2,8 @@ from enum import Enum
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
+from app.schemas.health import HealthActivitySummary
+
 
 class TrainerInsightRequest(BaseModel):
     nutrition_summary: str = Field(min_length=1, max_length=4000)
@@ -25,6 +27,7 @@ class CalorieAdjustmentResponse(BaseModel):
     avg_daily_intake: int
     compliance_rate: float
     weekly_volume: int
+    activity: HealthActivitySummary = Field(default_factory=HealthActivitySummary)
 
 
 class CalorieAdjustmentDecisionRequest(BaseModel):

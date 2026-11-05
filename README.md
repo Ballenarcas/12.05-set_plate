@@ -89,10 +89,11 @@ SET&PLATE is organised around a simple loop: set up a profile, log what you eat,
 ### AI-assisted training
 
 - AI-generated daily workout plan when a Groq API key is configured.
-- The planner considers recent training, recovery, saved routines, and recent calorie intake.
+- The planner considers recent training, recovery, saved routines, recent calorie intake, and synced Health Connect activity.
 - It can select an existing routine, build a new workout from the exercise catalog, or prescribe a rest day.
 - Live workout adjustments can change weight, reps, set count, or rest time during a session.
 - Live adjustments have a 60-second per-user cooldown.
+- Health Connect steps and active calories feed the calorie goal rules and the planner's recovery context.
 
 ### Premium screen
 
@@ -105,6 +106,7 @@ SET&PLATE is organised around a simple loop: set up a profile, log what you eat,
 ### Settings
 
 - Update age, weight, height, gender, and training goal.
+- Connect or disconnect Health Connect, review today's steps and active calories, and sync on demand.
 - Logout with a confirmation dialog.
 - Saving profile details clears the dashboard cache so the next load uses the new values.
 
@@ -125,7 +127,8 @@ This table separates what is wired end to end from what is still a placeholder.
 | Exercise catalog and wger import | Available | Search, filters, pagination, and import endpoint. |
 | AI daily workout plan | Available with Groq | Requires `GROQ_API_KEY`. The dashboard still loads without it. |
 | Live AI workout adjustments | Available with Groq | Requires `GROQ_API_KEY`; 60-second cooldown. |
-| Rule-based calorie goal adjustment | Available | Deterministic rules over seven days of data; not an LLM call. |
+| Rule-based calorie goal adjustment | Available | Deterministic rules over seven days of data; not an LLM call. Health Connect activity is a safety and context input. |
+| Health Connect activity sync | Available with the Android bridge | Requires the `health_connect` tables. Browser builds sync a labelled preview source through the same endpoints. |
 | Home "AI Trainer" insight | Placeholder | The dashboard shows a static message. |
 | Plate scanning | Placeholder | The "Scan plate" control is disabled and marked PRO. |
 | Premium checkout | Mock | Activates a database status; no payment is processed. |
@@ -150,7 +153,7 @@ This table separates what is wired end to end from what is still a placeholder.
 | `/nutrition` | Saved meal history for a selected date | Protected |
 | `/log-meals` | Manual meal registration and daily nutrition summary | Public route, requires a local profile to save |
 | `/premium` | Premium plans and mock checkout | Protected |
-| `/settings` | Profile settings and logout | Protected |
+| `/settings` | Profile settings, Health Connect, and logout | Protected |
 
 Unknown routes redirect to `/` when signed in, or to `/welcome` when no session exists.
 
@@ -367,6 +370,8 @@ If you are starting from an empty Supabase project, create the base tables (`use
 | `exercises` | Exercise catalog, including wger identifiers and media |
 | `subscriptions` | Mock premium subscription periods |
 | `ai_calorie_adjustments` | Pending and decided calorie goal proposals |
+| `health_connections` | Health Connect consent, source, and last sync |
+| `health_activity` | Daily steps and active calories synced from Health Connect |
 
 ### Migrations
 
@@ -378,6 +383,7 @@ Run the SQL files below in the Supabase SQL editor. They cover the tables and co
 4. `add_routine_reps_by_set.sql`
 5. `add_workout_ai_adjustment_metadata.sql`
 6. `grant_subscriptions_access.sql`
+7. `create_health_connect_tables.sql`
 
 The migrations are idempotent where practical and add Row Level Security policies. If a table referenced by a migration does not exist yet, create the base table first or restore an existing SET&PLATE schema.
 
@@ -392,6 +398,7 @@ The migrations are idempotent where practical and add Row Level Security policie
 - If `meal_ingredients` is missing, meal creation returns a `503` with a storage-unavailable message.
 - If `workout_plans` is missing, daily planning cannot persist.
 - If `ai_calorie_adjustments` is missing, the calorie adjustment endpoint returns a table-missing error.
+- If the `health_connections` or `health_activity` tables are missing, the Health Connect endpoints report that the feature is not set up on the server. Run `create_health_connect_tables.sql`; suggestions fall back to no activity context until then.
 - If the backend role cannot read `subscriptions`, premium checkout returns a message asking you to run `grant_subscriptions_access.sql`.
 
 ---
@@ -559,6 +566,17 @@ Supported exercise query parameters: `q`, `category`, `muscle_group`, `muscle`, 
 | `POST` | `/api/v1/ai/calorie-adjustment/decision` | Accept or reject a calorie goal proposal |
 
 The conversational and intent endpoints are available in the backend and in the frontend API client, but they are not currently connected to a screen.
+
+### Health Connect
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/health-connect/status` | Connection, today's activity, and the last seven days |
+| `POST` | `/api/v1/health-connect/connect` | Store consent and the first activity sync |
+| `POST` | `/api/v1/health-connect/sync` | Upsert newer daily steps and active calories |
+| `POST` | `/api/v1/health-connect/disconnect` | Revoke consent and delete stored activity |
+
+The Android host supplies real data through `window.SETPLATEHealthConnect` with `requestPermissions`, `readActivity(days)`, and optional `revokePermissions`. The browser build uses a preview source so the flow stays testable without a device.
 
 ### Settings
 
@@ -745,9 +763,9 @@ Then open `http://localhost:5173`, create a profile, sign in, open the dashboard
 - **Plate scanning is not implemented.** The control is disabled and marked PRO.
 - **Premium is a mock.** `POST /api/v1/premium/subscribe` activates the subscription immediately for the signed-in user; no payment is taken. Anyone with an account can activate, so real checkout needs a provider webhook first.
 - **Workout statistics are not exposed.** `/api/v1/stats/` returns an empty list and there is no routed statistics screen.
-- **AI features require a Groq key.** Without one, planning and live adjustments return configuration errors.
+- **AI features require a Groq key.** Without one, planning and live adjustments return configuration errors. The rule-based calorie adjustment and Health Connect activity still work.
+- **Health Connect has no browser API.** The Android host must inject `window.SETPLATEHealthConnect`; browser builds sync a clearly labelled preview source through the same backend endpoints.
 - **Food search depends on a network fallback.** Local matches work offline; Open Food Facts results need outbound network access.
-- **Objective matching is substring-based.** Onboarding uses `Lose Weight`, which the calorie calculators recognize. The Settings option `Weight Loss` does not match the current `lose`/`fat`/`cut` checks and falls through to maintenance.
 - **Nutrition and calorie calculations are estimates.** They are not medical advice or a substitute for professional guidance.
 
 ---

@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from groq import AsyncGroq, BadRequestError
 
 from app.core.config import get_settings
+from app.services.health_service import get_activity_summary
 from app.services.workout_program import (
     MIN_EXERCISES,
     TARGET_EXERCISES,
@@ -277,6 +278,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         if not users:
             raise HTTPException(status_code=404, detail="User not found")
         user = users[0]
+        activity = get_activity_summary(user_id, db_session=db_session, today=today)
         meals = _data(
             db_session.table("meals").select("*").eq("user_id", str(user_id))
             .gte("consumed_at", since.isoformat()).lt("consumed_at", end.isoformat()).execute()
@@ -389,12 +391,14 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         for key, field in (("calories", "calories"), ("protein", "proteins"), ("carbs", "carbs"), ("fat", "fats"))
     }
     calorie_target = user.get("calorie_goal")
+    activity_burn_48h = activity.active_calories_avg_7d * 2 if activity.connected else 0
+    net_calories = totals["calories"] - activity_burn_48h
     calorie_status = "unknown"
     if calorie_target is not None:
         target_48h = float(calorie_target) * 2
-        if totals["calories"] < target_48h * _DEFICIT_RATIO:
+        if net_calories < target_48h * _DEFICIT_RATIO:
             calorie_status = "severe_deficit"
-        elif totals["calories"] > target_48h * _SURPLUS_RATIO:
+        elif net_calories > target_48h * _SURPLUS_RATIO:
             calorie_status = "severe_surplus"
         else:
             calorie_status = "near_target"
@@ -468,6 +472,9 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         "user_goal": objective,
         "training_guidance": guidance,
         "last_48_hours_intake": totals,
+        "net_calories_48h": round(net_calories),
+        "activity_burn_48h": round(activity_burn_48h),
+        "health_activity": activity.model_dump(mode="json") if activity.connected else None,
         "calorie_status": calorie_status,
         "recent_muscle_groups": sorted(recent_muscle_groups),
         "program": program_context,
@@ -475,6 +482,8 @@ async def plan_daily_workout(user_id: UUID, db_session: Any) -> dict[str, Any]:
         "available_exercises": exercise_context if not routine_context else [],
         "instruction": plan_instruction
             + " Set adjusted true if you changed a saved routine or created a new workout; otherwise use false."
+            + " Health Connect steps and active calories are energy already spent outside training. When they are high,"
+            + " prefer recovery or hold the current volume instead of adding load; mention the activity in the reasoning."
             + " If recovery is the better choice today, set rest_day true, return routine_id null, workout_name \"Rest day\", an empty exercises array, and a short reasoning.",
     }
     result = await _request_json(json.dumps(prompt_data), schema)

@@ -1,4 +1,4 @@
-import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Lightbulb, Plus } from 'lucide-react'
+import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Footprints, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
@@ -105,6 +105,7 @@ function Home() {
   const { nutrition } = summary
   const plan = summary.plan
   const completedWorkoutToday = summary.completed_workout_today
+  const activity = summary.activity
   const calorieProgress = Math.max(
     0,
     Math.min(100, Math.round(((nutrition.target_kcals - nutrition.remaining_kcals) / nutrition.target_kcals) * 100)),
@@ -138,6 +139,41 @@ function Home() {
           <Lightbulb size={21} aria-hidden="true" />
           <p>{TRAINER_INSIGHT}</p>
         </div>
+      </section>
+
+      <section className="section" aria-labelledby="daily-activity">
+        <h2 className="section-title" id="daily-activity"><Footprints size={16} aria-hidden="true" /> Daily activity</h2>
+        {activity?.connected ? (
+          <div className="card activity-card">
+            <div className="activity-stats">
+              <div className="activity-stat">
+                <span>Steps today</span>
+                <strong>{activity.steps_today.toLocaleString()}</strong>
+              </div>
+              <div className="activity-stat">
+                <span>Active kcal</span>
+                <strong>{activity.active_calories_today}</strong>
+              </div>
+            </div>
+            <p className="activity-note">
+              Health Connect · 7-day average {activity.steps_avg_7d.toLocaleString()} steps and{' '}
+              {activity.active_calories_avg_7d} active kcal. Included in your AI trainer guidance.
+            </p>
+            {activity.source === 'preview' && (
+              <p className="activity-preview">Browser preview activity. The Android app reads Health Connect directly.</p>
+            )}
+          </div>
+        ) : (
+          <div className="card activity-card activity-empty">
+            <div>
+              <h3>Bring your steps into the plan</h3>
+              <p>Connect Health Connect so the AI trainer can read steps and active calories.</p>
+            </div>
+            <button className="secondary-action" type="button" onClick={() => navigate('/settings')}>
+              Connect in Settings
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="section" aria-labelledby="nutrition-summary">

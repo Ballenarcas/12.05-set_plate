@@ -138,6 +138,22 @@ def purchase_premium_db(user_id: str, plan: PremiumPlan) -> PremiumPurchaseRespo
     )
 
 
+def has_active_premium(user_id: str, client=None) -> bool:
+    """True while the paid period is running, including a cancelled one that has not ended yet."""
+    client = client or get_supabase(admin=True)
+    rows = (
+        client.table(SUBSCRIPTIONS_TABLE_NAME)
+        .select("status,current_period_end")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not rows or rows[0].get("status") not in ACTIVE_SUBSCRIPTION_STATUSES:
+        return False
+    period_end = _parse_timestamp(rows[0].get("current_period_end"))
+    return period_end is not None and period_end > datetime.now(timezone.utc)
+
+
 def cancel_premium_db(user_id: str) -> PremiumCancelResponse:
     """Stop the subscription at period end. Access stays until then; repeating changes nothing."""
     client = get_supabase(admin=True)

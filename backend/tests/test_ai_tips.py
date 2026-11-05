@@ -38,7 +38,7 @@ def test_add_set_is_offered_only_inside_the_weekly_limit():
     over = _state(plan=plan, planned_sets_today=6, sets_last_7d=30, sets_prev_7d=30)
     assert "add_set" in _kinds(within)
     assert "add_set" not in _kinds(over)
-    assert build_candidates(within)[0]["action"] == {"type": "add_set", "exercise_id": "a"}
+    assert build_candidates(within)[0]["action"] == {"type": "add_set", "exercise_id": "a", "name": "Squat"}
 
 
 def test_no_set_on_a_rest_day_or_after_training():

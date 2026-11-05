@@ -1023,7 +1023,7 @@ function clearGoalCaches(): void {
 }
 
 export async function fetchCurrentTip(): Promise<AiTip | null> {
-  const response = await apiFetch(`${API_URL}/api/v1/ai/tips/current?${localDayQuery()}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+  const response = await apiFetch(`${API_URL}/api/v1/ai/tips/current?${localDayQuery()}`, { signal: AbortSignal.timeout(LLM_TIMEOUT_MS) })
   if (!response.ok) throw new Error("We couldn't load your tip.")
   return ((await response.json()) as { tip: AiTip | null }).tip
 }

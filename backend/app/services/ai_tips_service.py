@@ -1,30 +1,58 @@
 """Short Home tips chosen by rules from today's meals and training.
 
-No model is called: the rules pick the tip and its numbers, which keeps every
-tip inside the safety limits and costs no tokens. Tips only ever add calories
-(never a deeper deficit) and add at most one set, and only while the weekly set
-count stays within 10% of the previous week.
+The rules pick the tip, its numbers and its action, which keeps every tip inside
+the safety limits. Tips only ever add calories (never a deeper deficit) and add
+at most one set, and only while the weekly set count stays within 10% of the
+previous week.
+
+A model may reword a tip for Premium users when AI_TIPS_MODEL_ENABLED is on. It
+sees only the rule's own text, never changes what Accept does, and anything it
+writes that fails is_safe_wording is thrown away in favour of the rule's text.
 """
 
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
+from app.core.config import get_settings
 from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
+from app.services.ai_service import phrase_tip
+from app.services.nutrition_math import estimate_burned_kcal
+from app.services.premium_service import has_active_premium
 from app.services.user_profile_service import calculate_calorie_goal
 
 logger = logging.getLogger(__name__)
 
 TIPS_TABLE = "ai_tips"
-WORKOUT_KCAL_BONUS = 100
+WORKOUT_KCAL_BONUS = 100  # used when the session length or body weight is unknown
+MIN_WORKOUT_KCAL_BONUS = 50
+MAX_WORKOUT_KCAL_BONUS = 200
+BURNED_KCAL_SHARE = 1 / 3  # eat back part of the session, so a deficit is reduced but not erased
+MIN_STREAK_DAYS = 3
+STREAK_LOOKBACK_DAYS = 30
+MAX_MODEL_TIPS_PER_DAY = 5
+MAX_MESSAGE_LENGTH = 120
+MAX_REASONING_LENGTH = 260
 MAX_WEEKLY_SET_GROWTH = 1.10
 PROTEIN_PER_KG = 1.6  # same factor as the dashboard's protein target
 OVER_TARGET_RATIO = 1.10
 LOW_PROTEIN_RATIO = 0.5
 NOT_AVAILABLE = "That change is no longer available, so nothing was changed."
+NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+# Medical advice, eating less, spelled-out amounts the number check cannot see, claiming
+# a change was already made, and the model talking about its own rewriting.
+BLOCKED_WORDING = re.compile(
+    r"\b(diagnos\w*|treat\w*|cure\w*|disease\w*|disorder\w*|illness\w*|medic\w*|deficien\w*|diabet\w*"
+    r"|symptom\w*|therap\w*|injur\w*|supplement\w*|doctor\w*|eat less|skip\w*|fast|fasting|starv\w*|detox\w*"
+    r"|restrict\w*|cut back|cut down|cut calories|burn it off|burn off"
+    r"|percent|hundred|thousand|double|twice|triple|added"
+    r"|rephras\w*|rewr[io]\w*|reword\w*|the tip|this tip|meaning|tone|instructions?)\b",
+    re.IGNORECASE,
+)
 
 
 def can_add_set(sets_last_7d: int, planned_today: int, sets_prev_7d: int) -> bool:
@@ -46,6 +74,51 @@ def bump_exercise_sets(
     ]
 
 
+def workout_kcal_bonus(weight_kg: float | None, workout_seconds: int) -> int:
+    """Calories to offer after training. A timer left running is limited by the maximum."""
+    burned = estimate_burned_kcal(weight_kg, workout_seconds)
+    if burned <= 0:
+        return WORKOUT_KCAL_BONUS
+    rounded = round(burned * BURNED_KCAL_SHARE / 10) * 10
+    return max(MIN_WORKOUT_KCAL_BONUS, min(MAX_WORKOUT_KCAL_BONUS, rounded))
+
+
+def logging_streak(days_ago: set[int]) -> int:
+    """Consecutive days with a meal, up to today, or up to yesterday if today has none yet."""
+    first = 0 if 0 in days_ago else 1
+    streak = 0
+    while first + streak in days_ago:
+        streak += 1
+    return streak
+
+
+def is_safe_wording(tip: dict[str, Any], wording: Any) -> bool:
+    """Accept a model's rewording only if it says what the rule said and nothing more."""
+    if not isinstance(wording, dict):
+        return False
+    message, reasoning = wording.get("message"), wording.get("reasoning")
+    if not isinstance(message, str) or not isinstance(reasoning, str):
+        return False
+    message, reasoning = message.strip(), reasoning.strip()
+    if not message or not reasoning or len(message) > MAX_MESSAGE_LENGTH or len(reasoning) > MAX_REASONING_LENGTH:
+        return False
+    text = f"{message} {reasoning}"
+    if BLOCKED_WORDING.search(text):
+        return False
+    if not set(NUMBER.findall(text)) <= set(NUMBER.findall(f"{tip['message']} {tip['reasoning']}")):
+        return False
+
+    action = tip.get("action")
+    if not action:
+        return True
+    lowered = message.lower()
+    if "?" not in message:  # nothing has happened until the user taps Accept
+        return False
+    if action["type"] == "add_kcal":
+        return str(action["kcal"]) in NUMBER.findall(message) and "kcal" in lowered
+    return "one set" in lowered and str(action["name"]).lower() in lowered
+
+
 def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
     """Return possible tips, best first. Pure: no database access."""
     goal = int(state["goal"])
@@ -57,16 +130,17 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
     tips: list[dict[str, Any]] = []
 
     if state["workouts_done_today"] > 0:
+        bonus = workout_kcal_bonus(state.get("weight_kg"), state.get("workout_seconds", 0))
         tips.append({
             "kind": "workout_done_kcal",
             "state_key": "day",
-            "message": f"Good job in your training! Add {WORKOUT_KCAL_BONUS} kcal to today's plan?",
+            "message": f"Good job in your training! Add {bonus} kcal to today's plan?",
             "reasoning": (
-                "You finished a workout today, so you burned extra energy. Adding "
-                f"{WORKOUT_KCAL_BONUS} kcal helps you recover and never makes your deficit bigger. "
-                "It only changes today's goal."
+                f"You finished a workout today, so you burned extra energy. Adding {bonus} kcal, "
+                "based on how long you trained, helps you recover and never makes your deficit "
+                "bigger. It only changes today's goal."
             ),
-            "action": {"type": "add_kcal", "kcal": WORKOUT_KCAL_BONUS},
+            "action": {"type": "add_kcal", "kcal": bonus},
         })
     elif plan and not plan.get("is_rest_day") and plan.get("exercises") and can_add_set(
         state["sets_last_7d"], state["planned_sets_today"], state["sets_prev_7d"],
@@ -82,7 +156,7 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
                 f"{state['planned_sets_today']}. One more set makes {total}, still within 10% of the "
                 f"{state['sets_prev_7d']} sets you did the week before, so the increase stays gradual."
             ),
-            "action": {"type": "add_set", "exercise_id": str(first["exercise_id"])},
+            "action": {"type": "add_set", "exercise_id": str(first["exercise_id"]), "name": first["name"]},
         })
 
     reading = f"{meals}:{eaten}"
@@ -121,7 +195,25 @@ def build_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
             "reasoning": f"You have eaten {eaten} kcal against your {goal} kcal goal.",
             "action": None,
         })
-    elif not meals:
+    # Below the meal tips on purpose: logging food must always change what is shown.
+    if plan and plan.get("is_rest_day") and not state["workouts_done_today"]:
+        tips.append({
+            "kind": "rest_day",
+            "state_key": "day",
+            "message": "Rest day today. Recovery is part of your training, so enjoy it.",
+            "reasoning": "Your plan has no workout today. Muscles get stronger while you rest, not only while you train.",
+            "action": None,
+        })
+    streak = state.get("streak_days", 0)
+    if streak >= MIN_STREAK_DAYS:
+        tips.append({
+            "kind": "logging_streak",
+            "state_key": "day",
+            "message": f"{streak} days of logging in a row. Keep it going!",
+            "reasoning": f"You logged meals on each of the last {streak} days. Staying consistent makes my tips more useful.",
+            "action": None,
+        })
+    if not meals:
         tips.append({
             "kind": "nothing_logged",
             "state_key": "0",
@@ -137,6 +229,13 @@ def _rows(response: Any) -> list[dict[str, Any]]:
     return rows if isinstance(rows, list) else [rows]
 
 
+def _instant(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")) if value else None
+    except ValueError:
+        return None
+
+
 def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
     uid = str(user_id)
     prev_start = day.start - timedelta(days=13)
@@ -149,6 +248,11 @@ def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
         return _rows(session.table("meals").select("calories,proteins").eq("user_id", uid)
                      .gte("consumed_at", day.start.isoformat()).lt("consumed_at", day.end.isoformat()).execute())
 
+    def meal_times():
+        return _rows(session.table("meals").select("consumed_at").eq("user_id", uid)
+                     .gte("consumed_at", (day.start - timedelta(days=STREAK_LOOKBACK_DAYS)).isoformat())
+                     .lt("consumed_at", day.end.isoformat()).execute())
+
     def workouts():
         return _rows(session.table("workouts").select("start_time,end_time,workout_sets(is_done)")
                      .eq("user_id", uid).gte("start_time", prev_start.isoformat()).execute())
@@ -157,9 +261,9 @@ def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
         return _rows(session.table("workout_plans").select("is_rest_day,exercises")
                      .eq("user_id", uid).eq("plan_date", day.local_date.isoformat()).limit(1).execute())
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = [pool.submit(fn) for fn in (users, meals, workouts, plan)]
-        user_rows, meal_rows, workout_rows, plan_rows = (future.result() for future in futures)
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(fn) for fn in (users, meals, meal_times, workouts, plan)]
+        user_rows, meal_rows, meal_time_rows, workout_rows, plan_rows = (future.result() for future in futures)
 
     user = user_rows[0] if user_rows else {}
     goal = int(user["calorie_goal"]) if user.get("calorie_goal") else calculate_calorie_goal(
@@ -169,19 +273,26 @@ def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
     weight = float(user.get("weight") or 0)
 
     week_start = day.start - timedelta(days=6)
-    sets_last_7d = sets_prev_7d = workouts_done_today = 0
+    sets_last_7d = sets_prev_7d = workouts_done_today = workout_seconds = 0
     for workout in workout_rows:
-        try:
-            started = datetime.fromisoformat(str(workout["start_time"]).replace("Z", "+00:00"))
-        except (KeyError, ValueError):
+        started = _instant(workout.get("start_time"))
+        if started is None:
             continue
         sets = sum(1 for row in workout.get("workout_sets") or [] if row.get("is_done") is not False)
         if started >= week_start:
             sets_last_7d += sets
         else:
             sets_prev_7d += sets
-        if day.start <= started < day.end and workout.get("end_time"):
+        finished = _instant(workout.get("end_time"))
+        if day.start <= started < day.end and finished is not None:
             workouts_done_today += 1
+            workout_seconds += max(0, int((finished - started).total_seconds()))
+
+    days_ago = set()
+    for row in meal_time_rows:
+        consumed = _instant(row.get("consumed_at"))
+        if consumed is not None:
+            days_ago.add(-((consumed - day.start) // timedelta(days=1)))
 
     today_plan = plan_rows[0] if plan_rows else None
     exercises = (today_plan or {}).get("exercises") or []
@@ -192,6 +303,9 @@ def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
         "protein_goal": round(weight * PROTEIN_PER_KG, 1),
         "meals_count": len(meal_rows),
         "workouts_done_today": workouts_done_today,
+        "workout_seconds": workout_seconds,
+        "weight_kg": weight,
+        "streak_days": logging_streak(days_ago),
         "sets_last_7d": sets_last_7d,
         "sets_prev_7d": sets_prev_7d,
         "planned_sets_today": sum(int(item.get("sets") or 0) for item in exercises),
@@ -218,6 +332,25 @@ def _public(row: dict[str, Any]) -> dict[str, Any]:
             "reasoning": row["reasoning"], "has_action": bool(row.get("action"))}
 
 
+def _with_model_wording(tip: dict[str, Any], user_id: UUID, tips_today: int, session: Any) -> dict[str, Any]:
+    """Reword a new tip if allowed. Any failure keeps the rule's text, so Home never depends on the model."""
+    settings = get_settings()
+    # Counting every tip, not only reworded ones, also limits calls whose answer was rejected.
+    if not settings.ai_tips_model_enabled or not settings.groq_api_key or tips_today >= MAX_MODEL_TIPS_PER_DAY:
+        return tip
+    try:
+        if not has_active_premium(str(user_id), session):
+            return tip
+        wording = phrase_tip(tip["message"], tip["reasoning"])
+    except Exception:
+        logger.warning("Could not reword the tip; using the template", exc_info=True)
+        return tip
+    if not is_safe_wording(tip, wording):
+        logger.warning("Rejected the model's wording for a %s tip", tip["kind"])
+        return tip
+    return {**tip, "message": wording["message"].strip(), "reasoning": wording["reasoning"].strip(), "source": "model"}
+
+
 def get_current_tip(user_id: UUID, day: LocalDay | None = None, session: Any = None) -> dict[str, Any] | None:
     """First candidate the user has not answered. Stored on first display so it can be decided later."""
     session = session or get_supabase(admin=True)
@@ -232,6 +365,7 @@ def get_current_tip(user_id: UUID, day: LocalDay | None = None, session: Any = N
             if row["status"] == "pending":
                 return _public(row)
             continue
+        tip = _with_model_wording(tip, user_id, len(stored), session)
         try:
             inserted = _rows(session.table(TIPS_TABLE).insert(
                 {**tip, "user_id": str(user_id), "tip_date": tip_date}).execute())

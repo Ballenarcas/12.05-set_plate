@@ -20,7 +20,7 @@
 ## AI Tips (Home)
 - AI Tips are an active feature, not a placeholder. Rules in `backend/app/services/ai_tips_service.py` choose each tip, its numbers and its Accept action; the UI is `frontend/src/components/home/AiTipCard.tsx`.
 - Tips must stay within the safety limits: never diagnose or treat conditions, never recommend a deficit above 500 kcal/day, and never raise workout load more than 10% per week.
-- Model-written wording is not enabled yet to conserve tokens; do not add model calls to tips until the user explicitly asks.
+- A model may reword tips only for Premium users when `AI_TIPS_MODEL_ENABLED` is on, at most 5 tips per user per day; it never chooses numbers or actions, and `is_safe_wording` must stay the gate for its output.
 
 ## Coordination
 - Delegate only when parallel work materially helps. Assign clear file ownership, coordinate shared contracts, and integrate the results before reporting completion.

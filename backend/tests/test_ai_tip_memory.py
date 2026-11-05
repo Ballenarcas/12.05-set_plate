@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 
-import httpx
-
 from app.core.local_day import LocalDay
 from app.services.ai_tip_history import personal_facts, summarize_accepted
 from app.services.ai_tips_service import accepted_training_notes, build_candidates
@@ -104,21 +102,6 @@ def test_planner_still_works_when_tips_cannot_be_read():
             raise RuntimeError("no table")
 
     assert accepted_training_notes(USER, _now(), Broken()) == []
-
-
-def test_a_dropped_connection_is_retried_once(use_database):  # noqa: F811
-    database = use_database(_database())
-    original, drops = database.table, []
-
-    def flaky(name):
-        if name == "meals" and not drops:
-            drops.append(name)
-            raise httpx.RemoteProtocolError("Server disconnected")
-        return original(name)
-
-    database.table = flaky
-    assert _current().status_code == 200
-    assert drops == ["meals"]
 
 
 def test_accepting_a_training_tip_promises_the_next_plan(use_database):  # noqa: F811

@@ -22,8 +22,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-import httpx
-
 from app.core.config import get_settings
 from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
@@ -426,14 +424,6 @@ def _rows(response: Any) -> list[dict[str, Any]]:
     return rows if isinstance(rows, list) else [rows]
 
 
-def _read_with_retry(read: Any) -> list[dict[str, Any]]:
-    """Supabase occasionally drops a connection mid-request. These reads are safe to repeat."""
-    try:
-        return read()
-    except httpx.TransportError:
-        return read()
-
-
 def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
     uid = str(user_id)
     history_start = day.start - timedelta(days=HISTORY_DAYS)
@@ -466,7 +456,7 @@ def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
                      .eq("user_id", uid).eq("plan_date", day.local_date.isoformat()).limit(1).execute())
 
     with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = [pool.submit(_read_with_retry, fn) for fn in (users, meals, meal_history, workouts, plan, accepted)]
+        futures = [pool.submit(fn) for fn in (users, meals, meal_history, workouts, plan, accepted)]
         user_rows, meal_rows, meal_history_rows, workout_rows, plan_rows, accepted_rows = (
             future.result() for future in futures
         )
@@ -523,14 +513,11 @@ def collect_state(session: Any, user_id: UUID, day: LocalDay) -> dict[str, Any]:
 
 def kcal_bonus(user_id: UUID | str, day: LocalDay, session: Any = None) -> int:
     """Calories the user accepted for this day. A missing table must not break the dashboard."""
-    def read():
-        return _rows(session.table(TIPS_TABLE).select("action").eq("user_id", str(user_id))
-                     .eq("status", "accepted").gte("created_at", day.start.isoformat())
-                     .lt("created_at", day.end.isoformat()).execute())
-
     try:
         session = session or get_supabase(admin=True)
-        rows = _read_with_retry(read)
+        rows = _rows(session.table(TIPS_TABLE).select("action").eq("user_id", str(user_id))
+                     .eq("status", "accepted").gte("created_at", day.start.isoformat())
+                     .lt("created_at", day.end.isoformat()).execute())
     except Exception:
         logger.warning("Could not read accepted calorie tips", exc_info=True)
         return 0

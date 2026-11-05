@@ -1,5 +1,6 @@
 import json
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -37,6 +38,9 @@ class FakeQuery:
         return self
 
     def gte(self, *_):
+        return self
+
+    def lte(self, *_):
         return self
 
     def lt(self, *_):
@@ -164,6 +168,47 @@ async def test_daily_plan_persists_ai_reasoning_in_the_plan_document(monkeypatch
         "reps": 6,
     }]
     assert all(table not in {"workouts", "workout_sets"} for table, _ in database.writes)
+
+
+@pytest.mark.asyncio
+async def test_daily_plan_uses_health_connect_activity(monkeypatch):
+    database = FakeDatabase()
+    planned_user_id = database.rows["users"][0]["id"]
+    today = datetime.now(timezone.utc).date()
+    database.rows["health_connections"] = [{
+        "user_id": planned_user_id, "connected": True, "source": "preview",
+    }]
+    database.rows["health_activity"] = [
+        {
+            "user_id": planned_user_id,
+            "activity_date": (today - timedelta(days=offset)).isoformat(),
+            "steps": 12000,
+            "active_calories": 600,
+        }
+        for offset in range(7)
+    ]
+    prompts = []
+    recommendation = {
+        "routine_id": database.routine_id,
+        "workout_name": "Routine",
+        "rest_day": False,
+        "adjusted": True,
+        "reasoning": "Keep the session while activity is high.",
+        "exercises": [{"exercise_id": database.exercise_id, "sets": 1, "reps": 6}],
+    }
+
+    async def recommend(prompt, _schema):
+        prompts.append(prompt)
+        return recommendation
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    await service.plan_daily_workout(UUID(planned_user_id), database)
+
+    prompt_data = json.loads(prompts[0])
+    assert prompt_data["health_activity"]["connected"] is True
+    assert prompt_data["health_activity"]["active_calories_avg_7d"] == 600
+    assert prompt_data["activity_burn_48h"] == 1200
+    assert prompt_data["calorie_status"] == "severe_deficit"
 
 
 @pytest.mark.asyncio

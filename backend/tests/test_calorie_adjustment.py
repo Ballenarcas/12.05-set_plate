@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from main import app
 
+from app.schemas.health import HealthActivitySummary
 from app.services.calorie_adjustment_service import classify_objective, propose_adjustment
 from tests.auth_helpers import auth_headers
 
@@ -50,10 +51,58 @@ def _metrics(**overrides) -> dict:
 
 def test_objectives_map_to_the_three_rule_branches():
     assert classify_objective("lose weight") == "fat_loss"
+    assert classify_objective("Weight Loss") == "fat_loss"
     assert classify_objective("Hypertrophy") == "muscle_gain"
     assert classify_objective("strength") == "muscle_gain"
     assert classify_objective("maintain") == "maintenance"
     assert classify_objective(None) == "maintenance"
+
+
+def test_high_activity_holds_a_fat_loss_cut():
+    result = propose_adjustment(_metrics(health=HealthActivitySummary(
+        connected=True, source="preview", steps_avg_7d=11000, active_calories_avg_7d=520,
+    )))
+
+    assert result["has_change"] is False
+    assert result["proposed_goal"] == 2200
+    assert "Activity is already widening the deficit" in result["reason"]
+
+
+def test_low_activity_cut_suggests_walking_instead():
+    result = propose_adjustment(_metrics(health=HealthActivitySummary(
+        connected=True, source="preview", steps_avg_7d=2500, active_calories_avg_7d=90,
+    )))
+
+    assert result["has_change"] is True
+    assert result["proposed_goal"] == 2050
+    assert "daily walk" in result["reason"]
+
+
+def test_activity_raises_a_maintenance_target():
+    result = propose_adjustment(_metrics(
+        objective="maintenance",
+        health=HealthActivitySummary(
+            connected=True, source="preview", steps_avg_7d=9000, active_calories_avg_7d=420,
+        ),
+    ))
+
+    assert result["has_change"] is True
+    assert result["proposed_goal"] == 2305
+    assert "active kcal" in result["reason"]
+
+
+def test_activity_raises_a_muscle_gain_target():
+    result = propose_adjustment(_metrics(
+        objective="hypertrophy",
+        health=HealthActivitySummary(
+            connected=True, source="preview", steps_avg_7d=9000, active_calories_avg_7d=420,
+        ),
+    ))
+
+    assert result["has_change"] is True
+    assert result["proposed_goal"] == 2505
+    assert "Training volume rose" in result["reason"]
+    assert "active kcal" in result["reason"]
 
 
 def test_fat_loss_with_high_compliance_lowers_the_goal():

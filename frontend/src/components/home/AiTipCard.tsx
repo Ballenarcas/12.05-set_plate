@@ -76,7 +76,7 @@ export default function AiTipCard({ onApplied }: { onApplied: () => void }) {
       <div className="card ai-banner ai-tip" aria-live="polite" aria-busy={!loaded}>
         <Lightbulb size={21} aria-hidden="true" />
         <div className="ai-tip-body">
-          <p>{tip ? tip.message : loaded ? ENCOURAGEMENT : 'Thinking about your day…'}</p>
+          <p className="ai-tip-message" key={tip?.id ?? (loaded ? 'done' : 'loading')}>{tip ? tip.message : loaded ? ENCOURAGEMENT : 'Thinking about your day…'}</p>
           {notice && (
             <div className="ai-tip-notice" role="status">
               <p>{notice}</p>

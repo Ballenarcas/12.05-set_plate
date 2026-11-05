@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, CalendarDays, Clock3, Dumbbell, History, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
+import { ArrowRight, BarChart3, Dumbbell, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
@@ -32,6 +32,11 @@ function createActiveExercises(routine: Routine): ActiveExercise[] {
       is_completed: false,
     })),
   }))
+}
+
+function summarizeSets(sets: WorkoutHistoryEntry['exercises'][number]['sets']): string {
+  const heaviest = Math.max(0, ...sets.map((set) => set.weight_kg))
+  return heaviest > 0 ? `${sets.length} × ${heaviest} kg` : `${sets.length} sets`
 }
 
 function Workouts() {
@@ -219,12 +224,12 @@ function Workouts() {
     <div className="screen workouts-screen">
       <header className="workouts-page-header">
         <div className="workouts-heading">
-          <div><p className="eyebrow">Train with purpose</p><h1>Workouts</h1></div>
-          <PremiumUpsellButton className="workouts-premium-button" />
+          <h1>Workouts</h1>
+          <PremiumUpsellButton />
         </div>
         <div className="workouts-header-actions">
-          <button className="secondary-action create-routine-action" type="button" onClick={() => navigate('/workouts/create')}><Plus size={16} /> Create Routine</button>
-          <button className="secondary-action" type="button" onClick={requestEmptyWorkout}><Plus size={16} /> Start empty workout</button>
+          <button className="primary-button" type="button" onClick={requestEmptyWorkout}><Plus size={16} aria-hidden="true" /> Empty workout</button>
+          <button className="secondary-action" type="button" onClick={() => navigate('/workouts/create')}><Plus size={16} aria-hidden="true" /> New routine</button>
         </div>
       </header>
 
@@ -234,8 +239,8 @@ function Workouts() {
 
       <section className="workout-history-section" aria-labelledby="workout-history-title">
         <div className="workout-history-heading">
-          <h2 className="section-title" id="workout-history-title"><History size={16} aria-hidden="true" /> Workout history</h2>
-          <button className="secondary-action" type="button" onClick={() => navigate('/workouts/statistics')}>
+          <h2 className="section-title" id="workout-history-title">History</h2>
+          <button className="text-action" type="button" onClick={() => navigate('/workouts/statistics')}>
             <BarChart3 size={16} aria-hidden="true" /> Statistics
           </button>
         </div>
@@ -248,8 +253,11 @@ function Workouts() {
           <div className="routine-list workout-history-list">
             {workoutHistory.map((workout) => (
               <article className="card workout-history-card" key={workout.id}>
-                <div className="routine-card-heading workout-history-heading">
-                  <div><p className="eyebrow">Completed workout</p><h2>{workout.name}</h2></div>
+                <div className="routine-card-heading">
+                  <div>
+                    <h2>{workout.name}</h2>
+                    <p className="routine-meta">{formatWorkoutDate(workout.started_at)} · {formatWorkoutDuration(workout.duration_seconds)}</p>
+                  </div>
                   <div className="workout-history-actions">
                     <button
                       className="routine-edit-button"
@@ -267,28 +275,21 @@ function Workouts() {
                     >
                       <Trash2 size={17} aria-hidden="true" />
                     </button>
-                    <Dumbbell size={21} aria-hidden="true" />
                   </div>
                 </div>
-                <div className="routine-meta">
-                  <span><CalendarDays size={14} aria-hidden="true" />{formatWorkoutDate(workout.started_at)}</span>
-                  <span><Clock3 size={14} aria-hidden="true" />{formatWorkoutDuration(workout.duration_seconds)}</span>
-                  <span>{workout.exercises.length} exercises</span>
-                  <span>{workout.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => set.is_completed).length, 0)} sets completed</span>
-                </div>
                 {workout.exercises.length > 0 && (
-                  <ul className="routine-preview">
+                  <ul className="preview-rows">
                     {workout.exercises.slice(0, 3).map((exercise) => (
                       <li key={exercise.exercise_id}>
-                        {exercise.name} — {exercise.sets.length} sets
-                        {exercise.sets.length > 0 && ` · ${exercise.sets.map((set) => `${set.weight_kg} kg × ${set.reps}`).join(' / ')}`}
+                        <span>{exercise.name}</span>
+                        <span>{summarizeSets(exercise.sets)}</span>
                       </li>
                     ))}
-                    {workout.exercises.length > 3 && <li>+{workout.exercises.length - 3} more</li>}
+                    {workout.exercises.length > 3 && <li><span>+{workout.exercises.length - 3} more</span></li>}
                   </ul>
                 )}
-                <button className="primary-button" type="button" onClick={() => repeatWorkout(workout)}>
-                  REPEAT WORKOUT <Repeat2 size={16} aria-hidden="true" />
+                <button className="secondary-action card-action" type="button" onClick={() => repeatWorkout(workout)}>
+                  <Repeat2 size={16} aria-hidden="true" /> Repeat workout
                 </button>
               </article>
             ))}
@@ -297,30 +298,36 @@ function Workouts() {
       </section>
 
       <section aria-labelledby="saved-routines-title">
-        <h2 className="section-title" id="saved-routines-title"><Dumbbell size={16} aria-hidden="true" /> Saved routines</h2>
+        <h2 className="section-title" id="saved-routines-title">Saved routines</h2>
       {!isLoading && !error && routines.length === 0 && <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No saved routines yet.</p></div>}
 
       <div className="routine-list">
         {routines.map((routine) => (
           <article className="card routine-card" key={routine.id}>
             <div className="routine-card-heading">
-              <div><p className="eyebrow">Saved routine</p><h2>{routine.name}</h2></div>
+              <div>
+                <h2>{routine.name}</h2>
+                <p className="routine-meta">{routine.exercises.length} exercises{routine.estimated_duration_minutes !== null && ` · Est. ${routine.estimated_duration_minutes} min`}</p>
+              </div>
               <div className="routine-card-actions">
                 <button className="routine-edit-button" type="button" aria-label={`Edit ${routine.name}`} onClick={() => navigate('/workouts/create', { state: { routine } })}>
                   <Pencil size={17} aria-hidden="true" />
                 </button>
                 <button className="routine-delete-button" type="button" aria-label={`Delete ${routine.name}`} onClick={() => { setRoutineDeleteError(null); setRoutineToDelete(routine) }}>
-                  <Trash2 size={18} aria-hidden="true" />
+                  <Trash2 size={17} aria-hidden="true" />
                 </button>
-                <Dumbbell size={22} aria-hidden="true" />
               </div>
             </div>
-            <div className="routine-meta"><span>{routine.exercises.length} exercises</span>{routine.estimated_duration_minutes !== null && <span>Est. {routine.estimated_duration_minutes} min</span>}</div>
-            <ul className="routine-preview">
-              {routine.exercises.slice(0, 3).map((exercise) => <li key={exercise.exercise_id}>{exercise.name}</li>)}
-              {routine.exercises.length > 3 && <li>+{routine.exercises.length - 3} more</li>}
+            <ul className="preview-rows">
+              {routine.exercises.slice(0, 3).map((exercise) => (
+                <li key={exercise.exercise_id}>
+                  <span>{exercise.name}</span>
+                  {exercise.target_sets && exercise.target_reps ? <span>{exercise.target_sets} × {exercise.target_reps}</span> : null}
+                </li>
+              ))}
+              {routine.exercises.length > 3 && <li><span>+{routine.exercises.length - 3} more</span></li>}
             </ul>
-            <button className="primary-button" type="button" onClick={() => startWorkout(routine)}>START WORKOUT <ArrowRight size={17} /></button>
+            <button className="secondary-action card-action" type="button" onClick={() => startWorkout(routine)}>Start workout <ArrowRight size={16} aria-hidden="true" /></button>
           </article>
         ))}
       </div>

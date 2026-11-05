@@ -15,7 +15,6 @@ interface PremiumFeature {
   title: string
   description: string
   Icon: LucideIcon
-  tone: 'violet' | 'pink' | 'amber' | 'green'
 }
 
 const FEATURES: PremiumFeature[] = [
@@ -23,25 +22,21 @@ const FEATURES: PremiumFeature[] = [
     title: 'AI Program Creation',
     description: 'Build full workout plans based on your goals and equipment.',
     Icon: Dumbbell,
-    tone: 'violet',
   },
   {
     title: 'AI Photo Meal Logging',
     description: 'Identify meals and ingredients from photos, fast and accurate.',
     Icon: Camera,
-    tone: 'pink',
   },
   {
     title: 'AI Meal Recommendations',
     description: 'Discover personalized meal ideas with full nutritional data.',
     Icon: BookOpen,
-    tone: 'amber',
   },
   {
     title: 'Advanced Workout Statistics',
     description: 'Dive deep into progression over time with specific data points.',
     Icon: TrendingUp,
-    tone: 'green',
   },
 ]
 
@@ -121,7 +116,6 @@ function Premium() {
   if (purchase || alreadyPremium) {
     return (
       <div className="premium-screen">
-        <div className="premium-glow" aria-hidden="true" />
         <button className="premium-close" type="button" onClick={goBack} aria-label="Close premium screen">
           <X size={19} aria-hidden="true" />
         </button>
@@ -137,21 +131,20 @@ function Premium() {
 
   return (
     <div className="premium-screen">
-      <div className="premium-glow" aria-hidden="true" />
       <button className="premium-close" type="button" onClick={goBack} aria-label="Close premium screen">
         <X size={19} aria-hidden="true" />
       </button>
 
       <header className="premium-heading">
-        <p className="premium-kicker"><Crown size={13} aria-hidden="true" /> SET&PLATE PREMIUM</p>
+        <p className="premium-kicker"><Crown size={13} aria-hidden="true" /> SET&PLATE Premium</p>
         <h1>Unlock your<br />maximum potential</h1>
         <p className="premium-mock-note">Mock checkout — no payment is processed.</p>
       </header>
 
       <ul className="premium-features" aria-label="Premium features">
-        {FEATURES.map(({ title, description, Icon, tone }) => (
+        {FEATURES.map(({ title, description, Icon }) => (
           <li className="premium-feature" key={title}>
-            <span className={`premium-feature-icon tone-${tone}`} aria-hidden="true"><Icon size={21} /></span>
+            <span className="premium-feature-icon" aria-hidden="true"><Icon size={21} /></span>
             <div>
               <h3>{title}</h3>
               <p>{description}</p>

@@ -71,8 +71,7 @@ function ExerciseArtwork({ name, images }: { name: string; images?: string[] }) 
   if (!image || imageFailed) {
     return <div className="active-exercise-artwork active-exercise-artwork-fallback" role="img" aria-label={`${name} image unavailable`}>
       <Dumbbell size={25} aria-hidden="true" />
-      <span>EXERCISE</span>
-    </div>
+          </div>
   }
 
   return <img className="active-exercise-artwork" src={image} alt={`${name} demonstration`} onError={() => setImageFailed(true)} />
@@ -846,7 +845,7 @@ function ActiveWorkout() {
               </div>
             </div>
             <div className="set-table">
-              <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
+              <div className="set-row set-heading" aria-hidden="true"><span>Set</span><span>Last</span><span>Kg</span><span>Reps</span><span>RPE</span><span /></div>
               {exercise.sets.map((set, setIndex) => {
                 const setKey = `${exerciseIndex}:${set.set_number}`
                 const kind = session.setKinds[setKey] ?? 'normal'
@@ -894,7 +893,7 @@ function ActiveWorkout() {
                     </div>
                   </SwipeToDeleteRow>
                   {missingReps === setKey && <p className="set-row-hint" role="status">Enter your reps to complete this set.</p>}
-                  {hasHighWeightWarning && <p className="high-weight-warning" role="status">⚠ This weight is extremely high. Check that you entered it correctly.</p>}
+                  {hasHighWeightWarning && <p className="high-weight-warning" role="status">This weight is extremely high. Check that you entered it correctly.</p>}
                 </div>
               })}
             </div>
@@ -999,7 +998,7 @@ function ActiveWorkout() {
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>Keep training</button>
               <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? 'Tap again to discard' : session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0)}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0)}>{isSaving ? 'Saving...' : session?.editWorkoutId ? 'Save changes' : 'Save workout'}</button>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
-import { ArrowLeft, Clock3, Dumbbell, PieChart, TrendingUp } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { CSSProperties } from 'react'
+import { ArrowLeft, Dumbbell, PieChart, TrendingUp } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MuscleGroupDistributionChart from '../components/workout/MuscleGroupDistributionChart'
 import VolumeProgressionChart from '../components/workout/VolumeProgressionChart'
@@ -17,16 +18,14 @@ import {
 import '../styles/workout-statistics.css'
 
 interface MetricCardProps {
-  icon: ReactNode
   label: string
   value: string
   note: string
 }
 
-function MetricCard({ icon, label, value, note }: MetricCardProps) {
+function MetricCard({ label, value, note }: MetricCardProps) {
   return (
     <article className="card stats-metric-card">
-      <span className="stats-metric-icon" aria-hidden="true">{icon}</span>
       <p className="stats-metric-label">{label}</p>
       <p className="stats-metric-value">{value}</p>
       <p className="stats-metric-note">{note}</p>
@@ -140,8 +139,7 @@ function WorkoutStatisticsPage() {
           <ArrowLeft size={21} aria-hidden="true" />
         </button>
         <div>
-          <p className="eyebrow">Training insights</p>
-          <h1>Workout Statistics</h1>
+          <h1>Statistics</h1>
         </div>
       </header>
 
@@ -152,7 +150,8 @@ function WorkoutStatisticsPage() {
             <p className="stats-range-caption">{formatStatisticsDateRange(data.start_date, data.end_date)}</p>
           )}
         </div>
-        <div className="stats-range" role="group" aria-label="Statistics date range">
+        <div className="stats-range" role="group" aria-label="Statistics date range" style={{ '--range-index': Math.max(0, STATISTICS_RANGES.findIndex((option) => option.value === range)) } as CSSProperties}>
+          <span className="stats-range-pill" aria-hidden="true" />
           {STATISTICS_RANGES.map((option) => (
             <button
               className="stats-range-button"
@@ -190,19 +189,16 @@ function WorkoutStatisticsPage() {
         <div className="stats-content">
           <div className="stats-metrics" aria-live="polite">
             <MetricCard
-              icon={<Dumbbell size={18} />}
               label="Total workouts"
               value={formatWorkoutCount(data.total_workouts)}
               note={data.total_workouts === 0 ? 'No completed sessions' : 'Completed sessions'}
             />
             <MetricCard
-              icon={<TrendingUp size={18} />}
               label="Total volume"
               value={`${formatVolumeKg(data.total_volume_kg)} kg`}
               note={data.eligible_set_count === 0 ? 'No eligible weighted sets' : `${data.eligible_set_count} completed weighted sets`}
             />
             <MetricCard
-              icon={<Clock3 size={18} />}
               label="Total time"
               value={durationValue(data)}
               note={durationNote(data)}
@@ -222,10 +218,8 @@ function WorkoutStatisticsPage() {
           <section className="card stats-panel" aria-labelledby="volume-progression-title">
             <div className="stats-panel-heading">
               <div>
-                <h2 id="volume-progression-title"><TrendingUp size={17} aria-hidden="true" /> Volume Progression</h2>
-                <p>Recorded weighted volume in kilograms over time.</p>
+                <h2 id="volume-progression-title">Volume over time</h2>
               </div>
-              {!volumeEmpty && <span className="stats-panel-total">{formatVolumeKg(data.total_volume_kg)} kg</span>}
             </div>
             {volumeEmpty ? (
               <div className="stats-chart-empty" role="status">
@@ -247,8 +241,7 @@ function WorkoutStatisticsPage() {
           <section className="card stats-panel" aria-labelledby="muscle-distribution-title">
             <div className="stats-panel-heading">
               <div>
-                <h2 id="muscle-distribution-title"><PieChart size={17} aria-hidden="true" /> Muscle Group Distribution</h2>
-                <p>Recorded volume attributed to each exercise's primary muscle group.</p>
+                <h2 id="muscle-distribution-title">Volume by muscle group</h2>
               </div>
             </div>
             {distributionEmpty ? (
@@ -262,7 +255,7 @@ function WorkoutStatisticsPage() {
                 </span>
               </div>
             ) : (
-              <MuscleGroupDistributionChart distribution={data.muscle_group_distribution} />
+              <MuscleGroupDistributionChart key={data.range} distribution={data.muscle_group_distribution} />
             )}
             {data.total_volume_kg > 0 && (
               <p className="stats-classification-note">

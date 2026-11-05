@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState, type CSSProperties } from 'react'
 import type { WorkoutStatisticsMuscleGroup } from '../../types/workout'
 import { formatPercentage, formatVolumeKg } from '../../utils/workoutStatistics'
 
@@ -33,6 +33,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 export default function MuscleGroupDistributionChart({ distribution }: MuscleGroupDistributionChartProps) {
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null)
+  const revealId = useId()
   const classifiedTotal = distribution.reduce((sum, item) => sum + item.volume_kg, 0)
   let accumulatedLength = 0
   const segments = distribution.map((item) => {
@@ -65,7 +66,22 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
           viewBox="0 0 200 200"
           role="group"
           aria-label={`Muscle group distribution: ${distribution.length} groups, ${formatVolumeKg(classifiedTotal)} kilograms classified`}
+          data-selected={selectedMuscle !== null || undefined}
         >
+          {/* One mask sweeps the whole ring, so every slice shares a single continuous motion. */}
+          <mask id={revealId} maskUnits="userSpaceOnUse" x="-20" y="-20" width="240" height="240">
+            <circle
+              className="stats-doughnut-reveal"
+              cx="100"
+              cy="100"
+              r={RADIUS}
+              fill="none"
+              stroke="#fff"
+              strokeWidth={STROKE + 24}
+              pathLength={1}
+              transform="rotate(-90 100 100)"
+            />
+          </mask>
           <circle
             className="stats-doughnut-track"
             cx="100"
@@ -74,6 +90,7 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
             fill="none"
             strokeWidth={STROKE}
           />
+          <g mask={`url(#${revealId})`}>
           {segments.map((segment) => (
             <circle
               className="stats-doughnut-segment"
@@ -104,18 +121,22 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
               <title>{`${segment.muscle_group}: ${formatVolumeKg(segment.volume_kg)} kg (${segment.percentage})`}</title>
             </circle>
           ))}
-          <text className="stats-doughnut-value" x="100" y="96" textAnchor="middle">
-            {selectedSegment?.percentage ?? `${formatVolumeKg(classifiedTotal)} kg`}
-          </text>
-          <text className="stats-doughnut-unit" x="100" y="116" textAnchor="middle">
-            {selectedSegment?.muscle_group ?? 'classified'}
-          </text>
+          </g>
+          <g className="stats-doughnut-label" key={selectedMuscle ?? 'total'}>
+            <text className="stats-doughnut-value" x="100" y="96" textAnchor="middle">
+              {selectedSegment?.percentage ?? `${formatVolumeKg(classifiedTotal)} kg`}
+            </text>
+            <text className="stats-doughnut-unit" x="100" y="116" textAnchor="middle">
+              {selectedSegment?.muscle_group ?? 'classified'}
+            </text>
+          </g>
         </svg>
       </div>
 
       <ul className="stats-muscle-list" aria-label="Muscle group volume details">
-        {segments.map((segment) => (
+        {segments.map((segment, index) => (
           <li
+            style={{ '--row': index } as CSSProperties}
             className={`stats-muscle-item${selectedMuscle === segment.muscle_group ? ' stats-muscle-item-selected' : ''}`}
             key={segment.muscle_group}
           >

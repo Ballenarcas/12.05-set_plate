@@ -111,7 +111,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
         display: 'flex',
         alignItems: 'center',      
         justifyContent: 'center',  
-        padding: '24px',           
+        padding: '16px',           
         paddingTop: '15vh',        // POUSSE LA MODALE VERS LE BAS
         boxSizing: 'border-box',
       }}
@@ -122,12 +122,12 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
           position: 'relative',
           width: '100%',
           maxWidth: '360px',
-          backgroundColor: '#1a1a1c',
-          borderRadius: '24px',
-          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.9)',
+          backgroundColor: 'var(--surface)',
+          borderRadius: '16px',
+          boxShadow: '0 12px 32px rgba(0, 0, 0, 0.6)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
           padding: '20px 18px 14px 18px',
-          color: '#ffffff',
+          color: 'var(--text)',
           display: 'flex',
           flexDirection: 'column',
           maxHeight: '65vh',
@@ -138,20 +138,21 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '14px', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0, textAlign: 'center', color: '#f3f3f5' }}>
-            SELECT EXERCISE
+          <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0, textAlign: 'center', color: 'var(--text)' }}>
+            Select exercise
           </h2>
           <button
             onClick={onClose}
             type="button"
+            aria-label="Close"
             style={{
               position: 'absolute',
               right: 0,
               background: 'none',
               border: 'none',
-              color: '#8e8e93',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
-              padding: '4px',
+              padding: '13px', margin: '-13px',
               display: 'flex',
               alignItems: 'center',
             }}
@@ -171,19 +172,19 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
             style={{
               width: '100%',
               padding: '11px 38px 11px 14px',
-              backgroundColor: '#28282a',
+              backgroundColor: 'var(--surface-raised)',
               border: 'none',
               borderRadius: '12px',
-              color: '#ffffff',
-              fontSize: '13.5px',
+              color: 'var(--text)',
+              fontSize: '16px',
               outline: 'none',
               boxSizing: 'border-box',
             }}
           />
-          <Search size={17} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#7c7c80', pointerEvents: 'none' }} />
+          <Search size={17} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
         </div>
 
-        <label style={{ display: 'grid', gap: '6px', marginBottom: '14px', color: '#a1a1a6', fontSize: '12px', fontWeight: 600 }}>
+        <label style={{ display: 'grid', gap: '6px', marginBottom: '14px', color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600 }}>
           Muscle group
           <select
             aria-label="Filter exercises by muscle group"
@@ -192,19 +193,19 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
             style={{
               width: '100%',
               padding: '10px 12px',
-              backgroundColor: '#28282a',
+              backgroundColor: 'var(--surface-raised)',
               border: 'none',
               borderRadius: '12px',
-              color: '#ffffff',
-              fontSize: '13px',
+              color: 'var(--text)',
+              fontSize: '16px',
               boxSizing: 'border-box',
             }}
           >
             <option value="">All muscle groups</option>
             {muscleGroups.map((group) => <option key={group} value={group}>{group}</option>)}
           </select>
-          {muscleGroupError && <span role="alert" style={{ color: '#ff9c9c', fontWeight: 400 }}>{muscleGroupError}</span>}
-          {!muscleGroupsLoaded && <span role="status" style={{ color: '#8e8e93', fontWeight: 400 }}>Loading muscle groups...</span>}
+          {muscleGroupError && <span role="alert" style={{ color: 'var(--negative)', fontWeight: 400 }}>{muscleGroupError}</span>}
+          {!muscleGroupsLoaded && <span role="status" style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Loading muscle groups...</span>}
         </label>
 
         {/* Liste des exercices */}
@@ -219,11 +220,11 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
           }}
         >
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: '#8e8e93', fontSize: '13px' }}>Loading exercises...</div>
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: '13px' }}>Loading exercises...</div>
           ) : loadError ? (
-            <div role="alert" style={{ textAlign: 'center', padding: '32px 0', color: '#ff9c9c', fontSize: '13px' }}>{loadError}</div>
+            <div role="alert" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--negative)', fontSize: '13px' }}>{loadError}</div>
           ) : availableExercises.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: '#8e8e93', fontSize: '13px' }}>No exercises found</div>
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: '13px' }}>No exercises found</div>
           ) : (
             availableExercises.map((ex) => (
               <div
@@ -241,7 +242,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
                   cursor: 'pointer',
                   transition: 'background-color 0.15s ease',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#28282a')}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-raised)')}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
@@ -249,24 +250,24 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
                     <img
                       src={ex.images[0]}
                       alt=""
-                      style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', backgroundColor: '#28282a', flexShrink: 0 }}
+                      style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', backgroundColor: 'var(--surface-raised)', flexShrink: 0 }}
                     />
                   ) : (
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#28282a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a1a1a6', flexShrink: 0 }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', flexShrink: 0 }}>
                       <Dumbbell size={18} />
                     </div>
                   )}
 
                   <div style={{ overflow: 'hidden' }}>
-                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {ex.name}
                     </div>
-                    <div style={{ fontSize: '12px', color: '#8e8e93', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {ex.muscles?.[0] || ex.category || 'General'}
                     </div>
                   </div>
                 </div>
-                <Plus size={16} style={{ color: '#545458', flexShrink: 0, marginLeft: '8px' }} />
+                <Plus size={16} style={{ color: 'var(--text-faint)', flexShrink: 0, marginLeft: '8px' }} />
               </div>
             ))
           )}
@@ -280,7 +281,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
             style={{
               background: 'none',
               border: 'none',
-              color: '#b084e9',
+              color: 'var(--text)',
               fontSize: '12.5px',
               fontWeight: 500,
               textDecoration: 'underline',

@@ -1,4 +1,4 @@
-import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Plus } from 'lucide-react'
+import { Camera, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AiTipCard from '../components/home/AiTipCard'
@@ -109,39 +109,42 @@ function Home() {
     Math.min(100, Math.round(((nutrition.target_kcals - nutrition.remaining_kcals) / nutrition.target_kcals) * 100)),
   )
   const macros = [
-    { label: 'Protein', value: `${formatMacro(nutrition.current_protein)} / ${formatMacro(nutrition.target_protein)}g` },
-    { label: 'Carbs', value: `${formatMacro(nutrition.current_carbs)} / ${formatMacro(nutrition.target_carbs)}g` },
-    { label: 'Fat', value: `${formatMacro(nutrition.current_fat)} / ${formatMacro(nutrition.target_fat)}g` },
+    { label: 'Protein', current: nutrition.current_protein, target: nutrition.target_protein },
+    { label: 'Carbs', current: nutrition.current_carbs, target: nutrition.target_carbs },
+    { label: 'Fat', current: nutrition.current_fat, target: nutrition.target_fat },
   ]
-  const displayName = summary.user_name || [user?.name, user?.surname].filter(Boolean).join(' ')
+  const firstName = (summary.user_name || user?.name || '').split(' ')[0]
 
   return (
     <div className="screen">
       <header className="screen-header">
-        <div className="profile-heading">
-          <div className="avatar" aria-label={`${displayName}'s profile`}><CircleUserRound size={23} aria-hidden="true" /></div>
-          <div>
-            <p className="eyebrow">Good morning</p>
-            <h1>Hello, {displayName}</h1>
-          </div>
+        <div>
+          <p className="eyebrow">{summary.current_date_formatted}</p>
+          <h1>Hello, {firstName}</h1>
         </div>
-        <div className="home-header-actions">
-          <PremiumUpsellButton />
-          <div className="date-badge"><CalendarDays size={16} aria-hidden="true" />{summary.current_date_formatted}</div>
-        </div>
+        <PremiumUpsellButton />
       </header>
 
       <section className="section" aria-labelledby="trainer-insight">
-        <h2 className="section-title" id="trainer-insight">AI Trainer</h2>
+        <h2 className="section-title" id="trainer-insight">AI trainer</h2>
         <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
       </section>
 
       <section className="section" aria-labelledby="nutrition-summary">
-        <h2 className="section-title" id="nutrition-summary"><Apple size={16} aria-hidden="true" /> Nutrition summary</h2>
-        <div className="progress-copy"><strong>{nutrition.remaining_kcals.toLocaleString('de-DE')} kcals remaining today</strong><span>{calorieProgress}% of goal</span></div>
-        <div className="progress-track" role="progressbar" aria-label="Daily calorie progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={calorieProgress}><div className="progress-value" style={{ width: `${calorieProgress}%` }} /></div>
-        <div className="card macro-card">
-          {macros.map((macro) => <div className="macro" key={macro.label}><span className="macro-label">{macro.label}</span><span className="macro-value">{macro.value}</span></div>)}
+        <h2 className="section-title" id="nutrition-summary">Today's plate</h2>
+        <div className="card plate-card">
+          <div className="plate-figure">
+            <strong>{Math.abs(nutrition.remaining_kcals).toLocaleString()}<small>kcal {nutrition.remaining_kcals < 0 ? 'over' : 'left'}</small></strong>
+            <span>of {nutrition.target_kcals.toLocaleString()} kcal</span>
+          </div>
+          <div className="progress-track" role="progressbar" aria-label="Daily calorie progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={calorieProgress}><div className="progress-value" style={{ width: `${calorieProgress}%` }} /></div>
+          <div className="macro-card">
+            {macros.map((macro) => <div className="macro" key={macro.label}>
+              <span className="macro-label">{macro.label}</span>
+              <span className="macro-value">{formatMacro(macro.current)}<small> / {formatMacro(macro.target)} g</small></span>
+              <span className="macro-track" aria-hidden="true"><span style={{ width: `${macro.target > 0 ? Math.min(100, (macro.current / macro.target) * 100) : 0}%` }} /></span>
+            </div>)}
+          </div>
         </div>
         <div className="action-row">
           <button
@@ -149,22 +152,20 @@ function Home() {
             type="button"
             onClick={() => navigate('/log-meals')}
           >
-            <Plus size={17} aria-hidden="true" /> Manual Register
+            <Plus size={17} aria-hidden="true" /> Log meal
           </button>
-          <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">PRO</span></button>
+          <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">Pro</span></button>
         </div>
       </section>
 
       <section className="section" aria-labelledby="programmed-training">
-        <h2 className="section-title" id="programmed-training"><Dumbbell size={16} aria-hidden="true" /> Programmed training</h2>
+        <h2 className="section-title" id="programmed-training">Today's set</h2>
         {completedWorkoutToday ? (
           <div className="card training-card">
             <div className="scheduled-training-heading">
               <h3>Workout completed today</h3>
             </div>
-            <ul className="training-meta">
-              <li>{completedWorkoutToday.name}</li>
-            </ul>
+            <p className="training-meta">{completedWorkoutToday.name}</p>
           </div>
         ) : plan ? (
           plan.is_rest_day ? (
@@ -172,9 +173,7 @@ function Home() {
               <div className="scheduled-training-heading">
                 <h3>Rest day</h3>
               </div>
-              <ul className="training-meta">
-                <li>Recovery recommended by your AI trainer</li>
-              </ul>
+              <p className="training-meta">Recovery recommended by your AI trainer</p>
               {plan.ai_reasoning && (
                 <p className="training-reasoning">{plan.ai_reasoning}</p>
               )}
@@ -187,16 +186,13 @@ function Home() {
                 <span className="ai-adjusted-badge">AI generated</span>
               ) : plan.ai_adjusted && <span className="ai-adjusted-badge">AI adjusted</span>}
             </div>
-            <ul className="training-meta">
-              <li>Today</li>
-              <li>Volume: {plan.exercises.length} exercises</li>
-            </ul>
+            <p className="training-meta">{plan.exercises.length} exercises</p>
             {plan.exercises.length > 0 && (
               <ul className="scheduled-exercises" aria-label="Planned exercises and sets">
                 {plan.exercises.map((exercise) => (
                   <li key={exercise.exercise_id}>
                     <span>{exercise.name}</span>
-                    <span className="scheduled-exercise-sets">{exercise.sets} sets · {exercise.reps} reps</span>
+                    <span className="scheduled-exercise-sets">{exercise.sets} × {exercise.reps}{exercise.previous_weight_kg ? ` · ${exercise.previous_weight_kg} kg` : ''}</span>
                   </li>
                 ))}
               </ul>
@@ -223,7 +219,7 @@ function Home() {
                   is_completed: false,
                 })),
               })),
-            } })}>START WORKOUT</button>
+            } })}>Start workout</button>
           </div>
           )
         ) : (

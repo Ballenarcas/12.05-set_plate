@@ -157,10 +157,6 @@ function CreateRoutine() {
         <PremiumUpsellButton compact />
       </header>
 
-      <section className="routine-builder-intro">
-        <strong>{routineToEdit ? 'Refine your training plan.' : 'Make every session count.'}</strong>
-        <p>{routineToEdit ? 'Change the name, exercises, order, sets, or reps. Your existing routine will be updated.' : 'Name your routine, choose exercises, and set your target volume. You can adjust your plan any time.'}</p>
-      </section>
 
       <div className="card routine-builder-fields">
         <label htmlFor="routine-name">Routine name</label>
@@ -306,7 +302,7 @@ function CreateRoutine() {
             </div>
           </article>
         ))}
-        {selectedExercises.length === 0 && <div className="routine-builder-empty routine-builder-empty-error">Add at least one exercise to start building your routine.</div>}
+        {selectedExercises.length === 0 && <div className="routine-builder-empty">Add at least one exercise to start building your routine.</div>}
       </section>
 
       {error && <p className="routine-builder-error" role="alert">{error}</p>}

@@ -7,7 +7,6 @@ import {
   Search,
   Star,
   Trash2,
-  Utensils,
   X,
   Scale,
   Sparkles,
@@ -491,7 +490,7 @@ export function LogMeals() {
         {/* 3. DAILY SUMMARY CARD */}
         <section className="daily-summary-card" aria-label="Daily Calorie Summary">
           <div className="summary-header-row">
-            <span className="summary-header">TODAY CALORIES</span>
+            <span className="summary-header">Today's plate</span>
             <button type="button" className="summary-tip-btn" onClick={handleOpenTip}>
               <Sparkles size={14} aria-hidden="true" /> AI Tip
             </button>
@@ -541,16 +540,16 @@ export function LogMeals() {
         <section className="new-register-card" aria-label="New Food Register">
           <div className="new-register-header-group">
             <div>
-              <h2 className="card-title">New Register</h2>
-              <p className="card-subtitle">Log what you just ate with automatic calorie and macro calculation.</p>
+              <h2 className="card-title">Add a meal</h2>
+              <p className="card-subtitle">Calories and macros are calculated for you.</p>
             </div>
             <button
               type="button"
-              className="btn-add-register"
+              className="primary-button"
               onClick={handleOpenModal}
             >
               <Plus size={18} aria-hidden="true" />
-              Add Register
+              Log meal
             </button>
           </div>
         </section>
@@ -558,7 +557,7 @@ export function LogMeals() {
         {/* 5. TODAY CONSUMPTION LIST */}
         <section className="consumption-section" aria-label="Today Consumption">
           <div className="consumption-header">
-            <h2 className="consumption-title">Today consumption</h2>
+            <h2 className="consumption-title">Today's meals</h2>
             <button
               type="button"
               className="see-all-link"
@@ -575,7 +574,7 @@ export function LogMeals() {
             </div>
           ) : filteredMeals.length === 0 ? (
             <div className="empty-meals-card">
-              {searchQuery ? 'No meals found matching your search.' : 'No meals logged yet today. Press Add Register above to log your first meal!'}
+              {searchQuery ? 'No meals found matching your search.' : 'No meals logged yet today. Log your first meal above.'}
             </div>
           ) : (
             <div className="consumption-list">
@@ -585,14 +584,10 @@ export function LogMeals() {
                   className="consumption-item-card"
                 >
                   <div className="item-left">
-                    <div className="food-icon-badge" aria-hidden="true">
-                      <Utensils size={18} />
-                    </div>
-
                     <div className="item-text">
                       <span className="meal-name">{meal.meal_name || '-'}</span>
                       <span className="meal-details">
-                        {meal.meal_type || 'Meal'} • {meal.portion_amount || '1'} portion ({meal.weight_g || '100'}g)
+                        {meal.meal_type || 'Meal'} · {meal.portion_amount || '1'} portion ({meal.weight_g || '100'}g)
                       </span>
                     </div>
                   </div>
@@ -818,7 +813,7 @@ export function LogMeals() {
               {/* Modal Submit Button */}
               <button
                 type="submit"
-                className="btn-modal-submit"
+                className="primary-button"
                 disabled={isSubmitting || plateFoods.length === 0}
               >
                 {isSubmitting ? (
@@ -876,7 +871,7 @@ export function LogMeals() {
                 <>
                   <button
                     type="button"
-                    className="btn-modal-submit tip-accept-btn"
+                    className="primary-button tip-accept-btn"
                     onClick={handleConfirmTip}
                     disabled={isDeciding}
                   >
@@ -900,7 +895,7 @@ export function LogMeals() {
               ) : (
                 <button
                   type="button"
-                  className="btn-modal-submit tip-accept-btn"
+                  className="primary-button tip-accept-btn"
                   onClick={handleOpenTip}
                   disabled={!adjustmentError}
                 >

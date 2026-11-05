@@ -11,8 +11,7 @@
   overflow: hidden;
   border-radius: var(--sr-r);
   opacity: 1;
-  transition:
-    grid-template-rows var(--sr-collapse) var(--sr-ease-out),
+  transition: grid-template-rows var(--sr-collapse) var(--sr-ease-out),
     margin-bottom var(--sr-collapse) var(--sr-ease-out),
     opacity var(--sr-collapse) var(--sr-ease-out);
 }
@@ -33,7 +32,7 @@
   margin: 0;
   padding: 0;
   border: 0;
-  color: #fff;
+  color: var(--text);
   background: #d83d43;
   font: inherit;
   cursor: pointer;
@@ -42,7 +41,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .swipe-row__action:disabled { cursor: wait; }
-.swipe-row__glyph { display: grid; justify-items: center; gap: 4px; font-size: 0.62rem; font-weight: 700; line-height: 1; transition: transform 160ms var(--sr-ease-out); }
+.swipe-row__glyph { display: grid; justify-items: center; gap: 4px; font-size: 0.6875rem; font-weight: 700; line-height: 1; transition: transform 160ms var(--sr-ease-out); }
 .swipe-row__action:active .swipe-row__glyph { transform: scale(0.97); }
 .swipe-row__surface {
   position: relative;
@@ -63,7 +62,7 @@
   margin-top: 0;
   padding: 0.05rem;
   border-radius: var(--sr-r);
-  background: var(--set-row-bg, #1d1e1d);
+  background: var(--set-row-bg, var(--surface));
 }
 .swipe-row[data-dragging] .swipe-row__surface { transition: none; }
 .swipe-row__toggle {
@@ -78,7 +77,7 @@
   overflow: hidden;
   clip-path: inset(50%);
   background: transparent;
-  color: #f5f5f5;
+  color: var(--text);
   font: inherit;
   outline: none;
 }
@@ -86,10 +85,10 @@
   width: auto;
   height: 24px;
   padding: 0 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   overflow: visible;
   clip-path: none;
-  background: #343434;
+  background: var(--surface-raised);
   font-size: 12px;
   white-space: nowrap;
   transform: translateY(-50%);

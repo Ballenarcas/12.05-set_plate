@@ -622,8 +622,8 @@ export async function fetchExerciseCategories(): Promise<string[]> {
 export async function fetchExerciseMuscleGroups(): Promise<string[]> {
   const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/muscle-groups`)
   if (!response.ok) throw new Error('Failed to fetch exercise muscle groups')
-  const data = await response.json() as { muscle_groups: string[] }
-  return data.muscle_groups
+  const data = await response.json() as { muscle_groups?: string[] }
+  return data.muscle_groups ?? []
 }
 
 export async function fetchExerciseById(exerciseId: string) {

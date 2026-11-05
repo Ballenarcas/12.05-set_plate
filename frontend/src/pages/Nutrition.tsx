@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog } from '../services/api';
 import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
@@ -127,10 +127,10 @@ export default function Nutrition() {
     yesterday.setDate(yesterday.getDate() - 1);
 
     const options: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
-    const dateString = date.toLocaleDateString('en-US', options).toUpperCase();
+    const dateString = date.toLocaleDateString('en-US', options);
 
-    if (date.toDateString() === today.toDateString()) return `TODAY, ${dateString}`;
-    if (date.toDateString() === yesterday.toDateString()) return `YESTERDAY, ${dateString}`;
+    if (date.toDateString() === today.toDateString()) return `Today, ${dateString}`;
+    if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${dateString}`;
     return dateString;
   };
 
@@ -315,98 +315,73 @@ export default function Nutrition() {
   };
 
   return (
-    <div style={{ backgroundColor: '#121212', minHeight: '100vh', color: '#f3f3f5', padding: '24px 20px', fontFamily: 'system-ui, -apple-system, sans-serif', paddingBottom: '120px' }}>
-      
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
-        <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', color: '#f3f3f5', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
-          <ArrowLeft size={24} strokeWidth={2.5} />
+    <div className="screen">
+      <header className="subpage-header">
+        <button className="subpage-button" type="button" onClick={() => navigate('/')} aria-label="Back to home">
+          <ArrowLeft size={22} aria-hidden="true" />
         </button>
-        <h1 style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '0.05em', margin: 0, textTransform: 'uppercase' }}>SAVED MEAL HISTORY</h1>
-        
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Calendar size={24} style={{ color: '#8e8e93' }} strokeWidth={2} />
-          <input 
-            type="date" 
+        <h1>Meals</h1>
+        <label className="subpage-button">
+          <Calendar size={21} aria-hidden="true" />
+          <input
+            type="date"
             max={new Date().toISOString().split('T')[0]}
             onChange={handleDateChange}
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', colorScheme: 'dark' }}
             aria-label="Select date"
           />
-        </div>
+        </label>
       </header>
 
-      {dateError && (
-        <div style={{ backgroundColor: 'rgba(255, 77, 77, 0.1)', border: '1px solid rgba(255, 77, 77, 0.2)', color: '#ff4d4d', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center', fontSize: '13.5px', fontWeight: 500 }}>
-          {dateError}
-        </div>
-      )}
+      {dateError && <p className="inline-error" role="alert">{dateError}</p>}
 
-      <h2 style={{ color: '#8e8e93', fontSize: '12.5px', marginBottom: '16px', fontWeight: 500, letterSpacing: '0.02em' }}>
+      <h2 className="meal-day">
         {formatDateLabel(selectedDate)}
+        {meals.length > 0 && <strong>{meals.reduce((total, meal) => total + meal.item_calories, 0).toLocaleString()} kcal</strong>}
       </h2>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/log-meals')}
-          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: '1px solid #333', borderRadius: '14px', color: '#f3f3f5', backgroundColor: '#1c1c1e', cursor: 'pointer', fontSize: '14px', fontWeight: 700 }}
-        >
-          <Plus size={20} aria-hidden="true" />
-          Manual Register
+      <div className="action-row">
+        <button className="action-button" type="button" onClick={() => navigate('/log-meals')}>
+          <Plus size={17} aria-hidden="true" /> Log meal
         </button>
-        <button
-          type="button"
-          disabled
-          aria-label="Scan plate, available with Pro"
-          style={{ flex: 1, minWidth: 0, minHeight: '58px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', border: '1px solid #292929', borderRadius: '14px', color: '#969696', backgroundColor: '#191919', cursor: 'not-allowed', fontSize: '14px', fontWeight: 700, opacity: 0.8 }}
-        >
-          <Camera size={18} aria-hidden="true" />
-          <span>Scan plate</span>
-          <span style={{ padding: '3px 7px', borderRadius: '6px', color: '#161616', backgroundColor: '#b99a45', fontSize: '10px', fontWeight: 800 }}>PRO</span>
+        <button className="action-button" type="button" disabled aria-label="Scan plate, available with Pro">
+          <Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">Pro</span>
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="meal-list">
         {isLoading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>Loading your meals...</div>
+          <p className="state-line" role="status">Loading your meals...</p>
         ) : meals.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#8e8e93', fontSize: '14px' }}>No meals recorded for this day.</div>
+          <p className="state-line">No meals recorded for this day.</p>
         ) : (
           meals.map((meal) => (
-            <div key={meal.id} style={{ backgroundColor: '#1c1c1e', borderRadius: '20px', padding: '20px', position: 'relative', border: '1px solid rgba(255,255,255,0.03)' }}>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flex: 1, paddingRight: '12px' }}>
-                  <Utensils size={18} color="#8e8e93" style={{ marginTop: '2px', flexShrink: 0 }} />
-                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, lineHeight: '1.3', letterSpacing: '0.02em', color: '#ffffff' }}>
-                    {meal.meal_type.toUpperCase()}: {meal.meal_name.toUpperCase()}
-                  </h3>
+            <article className="card meal-card" key={meal.id}>
+              <div className="meal-card-heading">
+                <div>
+                  <h3>{meal.meal_name}</h3>
+                  <p>{meal.meal_type} · {formatTime(meal.consumed_at)}</p>
                 </div>
-                <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexShrink: 0 }}>
-                  <span style={{ color: '#8e8e93', fontSize: '13.5px', fontWeight: 500 }}>
-                    {formatTime(meal.consumed_at)}
-                  </span>
-                  <button onClick={() => openEditModal(meal)} aria-label={`Edit ${meal.meal_name}`} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                    <Pencil size={18} strokeWidth={2} />
+                <div className="meal-card-actions">
+                  <button className="subpage-button" type="button" onClick={() => openEditModal(meal)} aria-label={`Edit ${meal.meal_name}`}>
+                    <Pencil size={17} aria-hidden="true" />
                   </button>
-                  <button onClick={() => setDeletingMeal(meal)} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                    <Trash2 size={18} strokeWidth={2} />
+                  <button className="subpage-button" type="button" onClick={() => setDeletingMeal(meal)} aria-label={`Delete ${meal.meal_name}`}>
+                    <Trash2 size={17} aria-hidden="true" />
                   </button>
                 </div>
               </div>
-
-              <ul style={{ listStyleType: 'disc', paddingLeft: '28px', margin: 0, color: '#d1d1d6', fontSize: '14px', lineHeight: '1.8' }}>
-                <li>{meal.item_calories} kcal</li>
-                {meal.proteins_g !== undefined && <li>{meal.proteins_g}g Protein</li>}
-                {meal.carbs_g !== undefined && <li>{meal.carbs_g}g Carbs</li>}
-                {meal.fats_g !== undefined && <li>{meal.fats_g}g Fat</li>}
+              <ul className="meal-macros">
+                <li><strong>{meal.item_calories} kcal</strong></li>
+                {meal.proteins_g !== undefined && <li>{meal.proteins_g} g protein</li>}
+                {meal.carbs_g !== undefined && <li>{meal.carbs_g} g carbs</li>}
+                {meal.fats_g !== undefined && <li>{meal.fats_g} g fat</li>}
               </ul>
               {meal.ingredient_details_saved === false && (
-                <p style={{ margin: '10px 0 0', color: '#d6b85a', fontSize: '12px', lineHeight: 1.4 }}>
+                <p className="meal-note">
                   Saved without ingredient details. Apply the meal ingredients database migration to enable ingredient editing.
                 </p>
               )}
-            </div>
+            </article>
           ))
         )}
       </div>
@@ -534,7 +509,7 @@ export default function Nutrition() {
               </div>
 
               {editError && <div className="inline-alert" role="alert">{editError}</div>}
-              <button className="btn-modal-submit" type="submit" disabled={isSavingEdit || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)}>
+              <button className="primary-button" type="submit" disabled={isSavingEdit || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)}>
                 {isSavingEdit ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save changes'}
               </button>
             </form>
@@ -579,16 +554,15 @@ export default function Nutrition() {
       )}
 
       {deletingMeal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: '#1c1c1e', padding: '24px', borderRadius: '24px', width: '90%', maxWidth: '340px', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '17px', fontWeight: 700, color: '#ffffff' }}>Delete Meal?</h3>
-            <p style={{ margin: 0, color: '#d1d1d6', fontSize: '14px', lineHeight: '1.5' }}>Are you sure you want to remove <strong style={{color: '#fff'}}>{deletingMeal.meal_name}</strong> from this day? This cannot be undone.</p>
-            {deleteError && <p role="alert" style={{ margin: '12px 0 0', color: '#ff8585', fontSize: '13px' }}>{deleteError}</p>}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
-              <button onClick={() => { setDeletingMeal(null); setDeleteError(null) }} disabled={isDeletingMeal} style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer', padding: '10px 16px', fontSize: '14.5px', fontWeight: 600 }}>Cancel</button>
-              <button onClick={confirmDelete} disabled={isDeletingMeal} style={{ backgroundColor: '#ff4d4d', border: 'none', color: '#ffffff', borderRadius: '12px', padding: '10px 24px', cursor: isDeletingMeal ? 'wait' : 'pointer', fontSize: '14.5px', fontWeight: 600 }}>
-                {isDeletingMeal ? 'Deleting...' : 'Delete'}
+        <div className="modal-backdrop">
+          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-meal-title">
+            <h2 id="delete-meal-title">Delete {deletingMeal.meal_name}?</h2>
+            <p>It will be removed from this day. This cannot be undone.</p>
+            {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => { setDeletingMeal(null); setDeleteError(null) }} disabled={isDeletingMeal}>Cancel</button>
+              <button className="danger-action" type="button" onClick={confirmDelete} disabled={isDeletingMeal}>
+                {isDeletingMeal ? 'Deleting...' : 'Delete meal'}
               </button>
             </div>
           </div>

@@ -26,48 +26,45 @@
 .workout-progress-bar {
   position: fixed;
   z-index: 11;
-  right: max(1rem, env(safe-area-inset-right));
+  right: 0.75rem;
   bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.85rem);
-  left: max(1rem, env(safe-area-inset-left));
+  left: 0.75rem;
   display: flex;
-  width: min(26rem, calc(100vw - 2rem));
-  min-height: 4rem;
+  width: min(26.5rem, calc(100vw - 1.5rem));
+  min-height: 3.5rem;
   align-items: center;
   gap: 0.4rem;
   margin-inline: auto;
-  padding: 0.4rem 0.45rem 0.4rem 0.5rem;
-  border: 1px solid rgba(154, 210, 160, 0.34);
-  border-radius: 1rem;
-  color: #fff;
-  background: rgba(24, 32, 25, 0.94);
-  box-shadow: 0 0.65rem 1.8rem rgba(0, 0, 0, 0.35), inset 0 1px rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(18px) saturate(145%);
-  backdrop-filter: blur(18px) saturate(145%);
-  animation: workout-progress-enter 220ms ease-out both;
+  padding: 0.35rem 0.35rem 0.35rem 0.4rem;
+  border-radius: var(--radius-card);
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: workout-progress-enter 200ms ease-out both;
 }
 
 .workout-progress-resume {
   display: grid;
-  width: 3.25rem;
-  height: 3.25rem;
-  flex: 0 0 3.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 2.75rem;
   place-items: center;
   padding: 0;
-  border: 1px solid rgba(145, 211, 151, 0.27);
-  border-radius: 0.8rem;
-  color: #b9efbd;
-  background: rgba(99, 183, 109, 0.13);
+  border: 0;
+  border-radius: 50%;
+  color: var(--on-primary);
+  background: var(--primary);
   cursor: pointer;
 }
 
-.workout-progress-indicator { width: 0.5rem; height: 0.5rem; flex: 0 0 0.5rem; border-radius: 50%; background: var(--green); box-shadow: 0 0 0.7rem rgba(111, 220, 128, 0.7); }
+.workout-progress-indicator { width: 0.5rem; height: 0.5rem; flex: 0 0 0.5rem; border-radius: 50%; background: var(--green); }
 .workout-progress-copy { display: grid; min-width: 0; flex: 1; gap: 0.22rem; }
 .workout-progress-heading { display: flex; min-width: 0; align-items: center; gap: 0.42rem; }
-.workout-progress-heading strong { overflow: hidden; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
-.workout-progress-copy small { color: #aeb9ae; font-size: 0.62rem; }
-.workout-progress-time { color: #d7e8d8; font-size: 0.75rem; font-variant-numeric: tabular-nums; font-weight: 750; }
-.workout-progress-discard { display: grid; width: 2.55rem; height: 2.55rem; flex: 0 0 2.55rem; place-items: center; border: 1px solid rgba(255, 110, 110, 0.24); border-radius: 0.72rem; color: #ff9a9a; background: rgba(255, 85, 85, 0.08); cursor: pointer; }
-.workout-progress-resume:focus-visible, .workout-progress-discard:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.workout-progress-heading strong { overflow: hidden; font-size: 0.875rem; text-overflow: ellipsis; white-space: nowrap; }
+.workout-progress-copy small { color: var(--text-muted); font-size: 0.75rem; }
+.workout-progress-time { color: var(--text); font-size: 0.875rem; font-variant-numeric: tabular-nums; font-weight: 600; }
+.workout-progress-discard { display: grid; width: 2.75rem; height: 2.75rem; flex: 0 0 2.75rem; place-items: center; border: 0; border-radius: var(--radius-control); color: var(--text-muted); background: transparent; cursor: pointer; }
+.workout-progress-resume:focus-visible, .workout-progress-discard:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .workout-progress-resume:active { transform: scale(0.96); }
 
 @keyframes workout-progress-enter {

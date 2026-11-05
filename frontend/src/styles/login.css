@@ -11,10 +11,10 @@
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 3rem;
-  color: #a78bfa;
+  color: var(--text);
   font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-weight: 700;
+  
 }
 
 .login-header {
@@ -32,25 +32,25 @@
 }
 
 .login-back-link {
-  color: #a0a0a0;
+  color: var(--text-muted);
 }
 
 .login-notice {
   margin: 0;
-  color: #d6c5ff;
+  color: var(--text-muted);
   font-size: 0.82rem;
   line-height: 1.5;
 }
 
 .login-create-prompt {
   margin: 2rem 0 0;
-  color: #a0a0a0;
+  color: var(--text-muted);
   font-size: 0.85rem;
   text-align: center;
 }
 
 .login-create-prompt a {
-  color: #c4b5fd;
+  color: var(--text);
   font-weight: 700;
   text-decoration: none;
 }

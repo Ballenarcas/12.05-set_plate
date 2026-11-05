@@ -1,4 +1,4 @@
-import { Apple, Dumbbell, House, Settings } from 'lucide-react'
+import { Apple, CircleUserRound, Dumbbell, House } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import '../../styles/glass-dock.css'
@@ -9,7 +9,7 @@ const items: DockItem[] = [
   { path: '/', label: 'Home', Icon: House },
   { path: '/workouts', label: 'Workouts', Icon: Dumbbell },
   { path: '/nutrition', label: 'Nutrition', Icon: Apple },
-  { path: '/settings', label: 'Settings', Icon: Settings },
+  { path: '/profile', label: 'Profile', Icon: CircleUserRound },
 ]
 
 export default function GlassDock() {

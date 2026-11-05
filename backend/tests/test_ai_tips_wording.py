@@ -30,6 +30,15 @@ SET_TIP = build_candidates(SET_STATE)[0]
 INFO_TIP = build_candidates(_state(meals_count=2, eaten_kcal=1100, protein_eaten=100))[0]
 
 
+RICH_STATE = _state(
+    meals_count=2, eaten_kcal=900, protein_eaten=70, objective="Hypertrophy", local_hour=20, today_rpe=9,
+    last_meal={"name": "Chicken rice", "protein": 45}, yesterday={"kcal": 2100, "protein": 110},
+    week_days_logged=6, week_protein_avg=80, week_days_on_goal=5, days_since_workout=5, last_workout_name="Push day",
+    lift_progress={"exercise": "Bench Press", "before": "60", "after": "65"}, muscle_gap={"muscle": "Legs", "days": 12},
+    streak_days=6,
+)
+
+
 def _wording(message, reasoning="You earned it with today's session."):
     return {"message": message, "reasoning": reasoning}
 
@@ -78,7 +87,7 @@ def test_logging_food_always_outranks_rest_day_and_streak_tips():
     _state(), _state(workouts_done_today=1), _state(meals_count=2, eaten_kcal=1100),
     _state(meals_count=2, eaten_kcal=2200), _state(meals_count=3, eaten_kcal=2600),
     _state(meals_count=2, eaten_kcal=1500, protein_eaten=20), _state(streak_days=5),
-    _state(plan=REST_PLAN), SET_STATE,
+    _state(plan=REST_PLAN), SET_STATE, RICH_STATE,
 ])
 def test_every_template_passes_its_own_safety_check(state):
     for tip in build_candidates(state):
@@ -93,7 +102,7 @@ def test_good_rewording_is_accepted():
 
 @pytest.mark.parametrize("wording", [
     None, "text", {}, {"message": "Hi"}, {"message": 1, "reasoning": "x"}, _wording(""), _wording("Hi", ""),
-    _wording("x" * 121), _wording("Hi", "x" * 261),
+    _wording("x" * 141), _wording("Hi", "x" * 241),
 ])
 def test_malformed_wording_is_rejected(wording):
     assert not is_safe_wording(INFO_TIP, wording)
@@ -134,8 +143,9 @@ def model(monkeypatch):
     """Fake model with the switch on and a Premium user. Tests narrow these to each case."""
     state = SimpleNamespace(calls=[], premium=True, reply=None)
 
-    def phrase(message, reasoning):
+    def phrase(message, reasoning, facts):
         state.calls.append(message)
+        state.facts = facts
         if isinstance(state.reply, Exception):
             raise state.reply
         return state.reply or {"message": f"Friendly: {message}", "reasoning": f"Friendly: {reasoning}"}
@@ -193,16 +203,16 @@ def test_model_failure_falls_back_to_the_template(use_database, model):  # noqa:
     assert response.json()["tip"]["kind"] == "nothing_logged"
 
 
-def test_model_is_limited_to_five_tips_a_day_even_when_answers_are_rejected(use_database, model):  # noqa: F811
+def test_model_is_limited_each_day_even_when_answers_are_rejected(use_database, model):  # noqa: F811
     database = use_database(_database())
     model.reply = {"message": "Unsafe: treat this.", "reasoning": "No."}
-    for _ in range(7):
+    for _ in range(10):
         database.rows["meals"].append(
             {"user_id": USER, "calories": 100, "proteins": 30, "consumed_at": _now().isoformat()},
         )
         assert _current().status_code == 200
-    assert len(model.calls) == 5
-    assert len(database.rows["ai_tips"]) == 7
+    assert len(model.calls) == 8
+    assert len(database.rows["ai_tips"]) == 10
 
 
 def test_model_wording_never_changes_what_accept_does(use_database, model):  # noqa: F811
@@ -216,7 +226,7 @@ def test_model_wording_never_changes_what_accept_does(use_database, model):  # n
 
 def test_streak_comes_from_meals_on_earlier_days(use_database):  # noqa: F811
     meals = [
-        {"user_id": USER, "calories": 500, "proteins": 60, "consumed_at": (_now() - timedelta(days=days)).isoformat()}
+        {"user_id": USER, "calories": 500, "proteins": 120, "consumed_at": (_now() - timedelta(days=days)).isoformat()}
         for days in (1, 2, 3, 4)
     ]
     use_database(_database(meals=meals))

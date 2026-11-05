@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-20b"
+    groq_tips_model: str = "openai/gpt-oss-120b"
     ai_tips_model_enabled: bool = False
     cors_origins: str = "http://localhost:5173"
 

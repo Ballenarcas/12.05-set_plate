@@ -162,7 +162,7 @@ function Workouts() {
   }
 
   function requestEmptyWorkout() {
-    const saved = sessionStorage.getItem('set_plate_active_workout')
+    const saved = localStorage.getItem('set_plate_active_workout')
     if (saved) {
       try {
         const activeWorkout = JSON.parse(saved) as { name?: string; exercises?: unknown[]; startedAt?: string }
@@ -172,14 +172,14 @@ function Workouts() {
           return
         }
       } catch {
-        sessionStorage.removeItem('set_plate_active_workout')
+        localStorage.removeItem('set_plate_active_workout')
       }
     }
     startWorkout()
   }
 
   function discardAndStartEmptyWorkout() {
-    sessionStorage.removeItem('set_plate_active_workout')
+    localStorage.removeItem('set_plate_active_workout')
     sessionStorage.removeItem('set_plate_pending_exercise')
     setShowDiscardActiveWorkout(false)
     startWorkout()

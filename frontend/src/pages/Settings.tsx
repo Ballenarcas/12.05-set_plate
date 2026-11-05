@@ -98,7 +98,7 @@ function Settings() {
   const confirmLogout = () => {
     try {
       clearSession()
-      sessionStorage.removeItem('set_plate_active_workout')
+      localStorage.removeItem('set_plate_active_workout')
       sessionStorage.removeItem('set_plate_pending_exercise')
     } catch {
       // The redirect still signs the user out when storage is unavailable.

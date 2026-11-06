@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
+from app.core.ai_quota import use_ai_call
 from app.core.auth import current_user
 from app.core.local_day import LocalDay, local_day
 from app.schemas.exercise import Exercise, ExerciseListResponse
@@ -40,8 +41,14 @@ async def suggest_live_adjustment(
     last_request = _last_adjustment_request.get(str(user_id))
     if last_request is not None and monotonic() - last_request < _ADJUSTMENT_COOLDOWN_SECONDS:
         raise HTTPException(status_code=429, detail="Wait a moment before asking for another adjustment")
-    suggestions = await workout_facade.suggest_adjustment(payload)
+    use_ai_call(user_id)
+    # Set before the AI call, so parallel requests cannot all pass the check above.
     _last_adjustment_request[str(user_id)] = monotonic()
+    try:
+        suggestions = await workout_facade.suggest_adjustment(payload)
+    except Exception:
+        _last_adjustment_request.pop(str(user_id), None)
+        raise
     return LiveWorkoutAdjustmentResponse(suggestions=[
         LiveWorkoutAdjustmentSuggestion.model_validate(suggestion) for suggestion in suggestions
     ])

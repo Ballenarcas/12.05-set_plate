@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.core.ai_quota import use_ai_call
 from app.core.auth import current_user
 from app.core.local_day import LocalDay, local_day
 from app.schemas.ai import (
@@ -29,6 +30,7 @@ def trainer_insight(
     request: TrainerInsightRequest,
     user_id: UUID = Depends(current_user),
 ) -> TrainerInsightResponse:
+    use_ai_call(user_id)
     try:
         insight = ai_facade.trainer_insight(
             nutrition_summary=request.nutrition_summary,
@@ -62,9 +64,10 @@ def conversational_setup(
     user_id: UUID = Depends(current_user),
 ) -> ConversationalSetupResponse:
     """Talks to the AI bot to set up routines or log meals with grounded DB object recognition."""
+    use_ai_call(user_id)
     reply, detected_intent, matched_entities = ai_facade.conversational_setup(
         message=request.message,
-        conversation_history=request.conversation_history,
+        conversation_history=[message.model_dump() for message in request.conversation_history],
     )
     return ConversationalSetupResponse(
         reply=reply,

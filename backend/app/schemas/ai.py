@@ -72,9 +72,14 @@ class ParseNaturalLanguageResponse(BaseModel):
     meals: list[MatchedEntity] = Field(default_factory=list)
 
 
+class ConversationMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=2000)
+
+
 class ConversationalSetupRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
-    conversation_history: list[dict[str, str]] = Field(default_factory=list)
+    conversation_history: list[ConversationMessage] = Field(default_factory=list, max_length=20)
 
 
 class ConversationalSetupResponse(BaseModel):

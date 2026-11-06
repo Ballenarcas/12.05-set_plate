@@ -27,7 +27,8 @@ def get_nutrition_summary() -> dict[str, list]:
 
 @router.get("/search-foods", response_model=list[FoodSearchItem])
 def search_food_items(
-    q: str = Query("", description="Food name search query"),
+    q: str = Query("", max_length=60, description="Food name search query"),
+    user_id: UUID = Depends(current_user),
 ) -> list[FoodSearchItem]:
     try:
         return nutrition_facade.search_foods(q)

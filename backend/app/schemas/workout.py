@@ -3,12 +3,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class WorkoutSummary(BaseModel):
-    title: str
-    exercise_count: int = Field(ge=0)
-    duration_minutes: int = Field(ge=0)
-
-
 class RoutineExerciseSummary(BaseModel):
     exercise_id: str
     name: str

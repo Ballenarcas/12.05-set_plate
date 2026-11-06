@@ -102,16 +102,6 @@ def delete_workout_history(
     return {"status": "deleted"}
 
 
-@router.get("/")
-def list_workouts() -> dict[str, list]:
-    return {"items": []}
-
-
-@router.get("/programmed")
-def programmed_workout():
-    return workout_facade.programmed_workout()
-
-
 @router.get("/exercises", response_model=ExerciseListResponse)
 def get_exercises(
     response: Response,

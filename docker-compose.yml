@@ -34,7 +34,6 @@ services:
       AUTH_TOKEN_TTL_HOURS: ${AUTH_TOKEN_TTL_HOURS:-12}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
-      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
       GROQ_TIPS_MODEL: ${GROQ_TIPS_MODEL:-openai/gpt-oss-120b}

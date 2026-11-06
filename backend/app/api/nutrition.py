@@ -20,11 +20,6 @@ router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/", response_model=dict[str, list])
-def get_nutrition_summary() -> dict[str, list]:
-    return {"items": []}
-
-
 @router.get("/search-foods", response_model=list[FoodSearchItem])
 def search_food_items(
     q: str = Query("", max_length=60, description="Food name search query"),
@@ -60,7 +55,8 @@ def add_meal(
         payload = payload.model_copy(update={"user_id": str(user_id)})
         return nutrition_facade.create_meal(payload)
     except MealIngredientStorageUnavailable as err:
-        raise HTTPException(status_code=503, detail=str(err)) from err
+        logger.exception("Meal ingredient storage is unavailable")
+        raise HTTPException(status_code=503, detail="Meals can't be saved right now.") from err
     except Exception as err:
         logger.exception("Failed to save meal")
         raise HTTPException(status_code=500, detail="Could not save this meal.") from err
@@ -68,14 +64,15 @@ def add_meal(
 
 @router.put("/meals/{meal_id}", response_model=MealItem)
 def update_meal(
-    meal_id: str,
+    meal_id: UUID,
     payload: MealUpdateRequest,
     user_id: UUID = Depends(current_user),
 ) -> MealItem:
     try:
-        return nutrition_facade.update_meal(str(user_id), meal_id, payload)
+        return nutrition_facade.update_meal(str(user_id), str(meal_id), payload)
     except MealIngredientStorageUnavailable as err:
-        raise HTTPException(status_code=503, detail=str(err)) from err
+        logger.exception("Meal ingredient storage is unavailable")
+        raise HTTPException(status_code=503, detail="Meals can't be saved right now.") from err
     except LookupError as err:
         raise HTTPException(status_code=404, detail="Meal not found.") from err
     except Exception as err:
@@ -85,12 +82,12 @@ def update_meal(
 
 @router.delete("/meals/{meal_id}")
 def remove_meal(
-    meal_id: str,
+    meal_id: UUID,
     user_id: UUID = Depends(current_user),
 ) -> dict[str, str]:
     try:
-        nutrition_facade.delete_meal(str(user_id), meal_id)
-        return {"status": "success", "deleted_id": meal_id}
+        nutrition_facade.delete_meal(str(user_id), str(meal_id))
+        return {"status": "success", "deleted_id": str(meal_id)}
     except LookupError as err:
         raise HTTPException(status_code=404, detail="Meal not found.") from err
     except Exception as err:

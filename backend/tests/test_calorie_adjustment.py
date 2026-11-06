@@ -132,7 +132,7 @@ def _supabase(pending: list[dict], metrics_overrides: dict | None = None) -> Mag
     users.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
         data=[{"calorie_goal": 2200, "objective": "lose weight"}]
     )
-    users.update.return_value.eq.return_value.select.return_value.execute.return_value = MagicMock(
+    users.update.return_value.eq.return_value.eq.return_value.select.return_value.execute.return_value = MagicMock(
         data=[{"calorie_goal": 2050}]
     )
     meals = MagicMock()

@@ -14,7 +14,6 @@ from app.db.supabase_client import get_supabase
 from app.schemas.nutrition import (
     DailyNutritionResponse,
     FoodSearchItem,
-    MacroSummary,
     MealCreateRequest,
     MealIngredient,
     MealItem,
@@ -50,10 +49,6 @@ def _meal_ingredient_records(
         }
         for ingredient in ingredients
     ]
-
-
-def get_daily_macros() -> MacroSummary:
-    return MacroSummary(protein_grams=45, carbs_grams=120, fat_grams=30, calories_remaining=1420)
 
 
 def infer_meal_type(timestamp_str: str | None) -> str:
@@ -444,7 +439,7 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
         fats = payload.fats
 
         # Automatically calculate calories and macros if not explicitly provided
-        if cals is None or cals <= 0:
+        if cals is None:
             cals, calc_p, calc_c, calc_f = calculate_meal_nutrition(payload.name, qty)
             if proteins is None or proteins == 0.0:
                 proteins = calc_p

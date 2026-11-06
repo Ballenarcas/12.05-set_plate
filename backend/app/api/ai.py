@@ -38,9 +38,9 @@ def trainer_insight(
             user_goal=request.user_goal,
         )
     except ValueError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        raise HTTPException(status_code=503, detail="The AI trainer is not available right now.") from error
     except Exception as error:
-        raise HTTPException(status_code=502, detail="GroqCloud request failed.") from error
+        raise HTTPException(status_code=502, detail="The AI trainer could not answer. Please try again.") from error
 
     return TrainerInsightResponse(insight=insight, model="configured")
 

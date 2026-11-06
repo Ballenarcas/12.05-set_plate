@@ -18,6 +18,8 @@ def update_settings(
 ):
     try:
         settings_facade.update(str(user_id), settings)
+    except LookupError as err:
+        raise HTTPException(status_code=404, detail="Profile not found.") from err
     except Exception as err:
         logger.exception("Failed to update user settings")
         raise HTTPException(status_code=500, detail="Could not save your settings.") from err

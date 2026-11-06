@@ -45,7 +45,7 @@ class OnboardingFacade:
         try:
             supabase = provider(admin=True)
             if supabase is None:
-                raise HTTPException(status_code=500, detail="Database client is not configured. Please ensure SUPABASE_URL and SUPABASE_KEY are set.")
+                raise HTTPException(status_code=503, detail="Service unavailable. Please try again.")
             existing = (
                 supabase.table("users")
                 .select("id")
@@ -102,10 +102,7 @@ class OnboardingFacade:
         try:
             supabase = (self.supabase_provider or get_supabase)(admin=True)
             if supabase is None:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Database client is not configured. Please ensure SUPABASE_URL and SUPABASE_KEY are set.",
-                )
+                raise HTTPException(status_code=503, detail="Service unavailable. Please try again.")
             # ``*`` keeps the login query independent from the subscription
             # fields, which are read from the separate subscriptions table.
             result = (

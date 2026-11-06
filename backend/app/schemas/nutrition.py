@@ -1,20 +1,13 @@
 from pydantic import BaseModel, Field
 
 
-class MacroSummary(BaseModel):
-    protein_grams: int = Field(ge=0)
-    carbs_grams: int = Field(ge=0)
-    fat_grams: int = Field(ge=0)
-    calories_remaining: int = Field(ge=0)
-
-
 class MealIngredient(BaseModel):
-    name: str = Field(..., min_length=1)
-    quantity_g: float = Field(..., gt=0)
-    calories_per_100g: float = Field(..., ge=0)
-    proteins_per_100g: float = Field(default=0.0, ge=0)
-    carbs_per_100g: float = Field(default=0.0, ge=0)
-    fats_per_100g: float = Field(default=0.0, ge=0)
+    name: str = Field(..., min_length=1, max_length=120)
+    quantity_g: float = Field(..., gt=0, le=10000)
+    calories_per_100g: float = Field(..., ge=0, le=1000)
+    proteins_per_100g: float = Field(default=0.0, ge=0, le=100)
+    carbs_per_100g: float = Field(default=0.0, ge=0, le=100)
+    fats_per_100g: float = Field(default=0.0, ge=0, le=100)
 
 
 class MealItem(BaseModel):
@@ -45,20 +38,20 @@ class FoodSearchItem(BaseModel):
 
 class MealCreateRequest(BaseModel):
     user_id: str
-    name: str = Field(..., min_length=1)
-    calories: int | None = Field(default=None, ge=0)
-    quantity_g: float | None = Field(default=100.0, ge=0)
-    meal_type: str | None = Field(default="Meal")
-    proteins: float | None = Field(default=0.0, ge=0)
-    carbs: float | None = Field(default=0.0, ge=0)
-    fats: float | None = Field(default=0.0, ge=0)
-    ingredients: list[MealIngredient] = Field(default_factory=list)
+    name: str = Field(..., min_length=1, max_length=120)
+    calories: int | None = Field(default=None, ge=0, le=20000)
+    quantity_g: float | None = Field(default=100.0, ge=0, le=10000)
+    meal_type: str | None = Field(default="Meal", max_length=30)
+    proteins: float | None = Field(default=0.0, ge=0, le=2000)
+    carbs: float | None = Field(default=0.0, ge=0, le=2000)
+    fats: float | None = Field(default=0.0, ge=0, le=2000)
+    ingredients: list[MealIngredient] = Field(default_factory=list, max_length=50)
 
 
 class MealUpdateRequest(BaseModel):
-    name: str = Field(..., min_length=1)
-    meal_type: str = Field(..., min_length=1)
-    ingredients: list[MealIngredient] = Field(..., min_length=1)
+    name: str = Field(..., min_length=1, max_length=120)
+    meal_type: str = Field(..., min_length=1, max_length=30)
+    ingredients: list[MealIngredient] = Field(..., min_length=1, max_length=50)
 
 
 class DailyNutritionResponse(BaseModel):

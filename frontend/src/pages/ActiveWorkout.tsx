@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause, Square } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
@@ -504,7 +504,6 @@ function ActiveWorkout() {
 
   const totalSets = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio ? 0 : exercise.sets.length), 0) ?? 0
   const completedSets = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio ? 0 : exercise.sets.filter((set) => set.is_completed).length), 0) ?? 0
-  const totalCardio = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio ? 1 : 0), 0) ?? 0
   const completedCardio = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio && exercise.sets[0]?.is_completed ? 1 : 0), 0) ?? 0
   const volumeKg = session?.exercises.reduce((total, exercise) => (
     total + (exercise.is_cardio ? 0 : exercise.sets.reduce((sum, set) => sum + (set.is_completed ? set.weight_kg * set.reps : 0), 0))
@@ -855,7 +854,7 @@ function ActiveWorkout() {
           }
         }),
       }
-    }).filter((exercise) => exercise.exercise_id)
+    }).filter((exercise) => exercise.exercise_id && !exercise.is_cardio)
     if (!exercises.length) {
       setAiAdjustment({ status: 'error', message: 'Add at least one exercise before asking the AI for adjustments.' })
       return

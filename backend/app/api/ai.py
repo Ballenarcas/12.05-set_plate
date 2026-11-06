@@ -4,7 +4,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import current_user
+from app.core.local_day import LocalDay, local_day
 from app.schemas.ai import (
+    AiTipDecisionRequest,
+    AiTipDecisionResponse,
+    AiTipResponse,
     CalorieAdjustmentDecisionRequest,
     CalorieAdjustmentDecisionResponse,
     CalorieAdjustmentResponse,
@@ -99,3 +103,36 @@ def decide_calorie_adjustment(
         status=str(result["status"]),
         calorie_goal=int(result["calorie_goal"]),
     )
+
+
+@router.get("/tips/current", response_model=AiTipResponse)
+def get_current_tip(user_id: UUID = Depends(current_user), day: LocalDay = Depends(local_day)):
+    try:
+        return AiTipResponse(tip=ai_facade.current_tip(user_id=user_id, day=day))
+    except Exception as error:
+        raise HTTPException(status_code=502, detail="Could not build the tip.") from error
+
+
+@router.post("/tips/{tip_id}/decision", response_model=AiTipDecisionResponse)
+def decide_tip(
+    tip_id: UUID,
+    request: AiTipDecisionRequest,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+):
+    try:
+        return AiTipDecisionResponse(**ai_facade.decide_tip(user_id=user_id, tip_id=tip_id, status=request.status, day=day))
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail="Could not update the tip.") from error
+
+
+@router.post("/tips/{tip_id}/undo", response_model=AiTipDecisionResponse)
+def undo_tip(tip_id: UUID, user_id: UUID = Depends(current_user), day: LocalDay = Depends(local_day)):
+    try:
+        return AiTipDecisionResponse(**ai_facade.undo_tip(user_id=user_id, tip_id=tip_id, day=day))
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail="Could not undo the tip.") from error

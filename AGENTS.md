@@ -17,8 +17,10 @@
 - Find the project's existing build or test command before using it. Do not add or run tests unless the user asks for testing or verification.
 - Report what changed and what was actually verified. Never claim a check passed unless it ran successfully.
 
-## AI Trainer availability
-- AI model calls are temporarily disabled to conserve tokens. Keep the Home AI tip as a static placeholder; do not call or re-enable a model until the user explicitly asks.
+## AI Tips (Home)
+- AI Tips are an active feature, not a placeholder. Rules in `backend/app/services/ai_tips_service.py` choose each tip, its numbers and its Accept action; the UI is `frontend/src/components/home/AiTipCard.tsx`.
+- Tips must stay within the safety limits: never diagnose or treat conditions, never recommend a deficit above 500 kcal/day, and never raise workout load more than 10% per week.
+- A model may personalize tips only for Premium users when `AI_TIPS_MODEL_ENABLED` is on, once per change in the user's data and at most 8 times per user per day; it never chooses actions or invents numbers, and `is_safe_wording` must stay the gate for its output. Every tip must tell the user what to do: an Accept action, or a rule-written `next_step` that the model cannot change. Accepted tips feed later tips and the workout planner, which reads only rule-written notes and must keep its recovery filter.
 
 ## Coordination
 - Delegate only when parallel work materially helps. Assign clear file ownership, coordinate shared contracts, and integrate the results before reporting completion.

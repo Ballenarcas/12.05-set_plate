@@ -21,6 +21,7 @@
 .swipe-row[data-disabled] .swipe-row__action { opacity: 0.55; }
 .swipe-row__clip { position: relative; min-height: 0; overflow: hidden; border-radius: var(--sr-r); }
 .swipe-row__rail { position: absolute; inset: 0; background: #d83d43; }
+.swipe-row:not([data-open], [data-dragging]) .swipe-row__rail { visibility: hidden; }
 .swipe-row__action {
   position: absolute;
   top: 0;
@@ -62,7 +63,7 @@
   margin-top: 0;
   padding: 0.05rem;
   border-radius: var(--sr-r);
-  background: #1d1e1d;
+  background: var(--set-row-bg, #1d1e1d);
 }
 .swipe-row[data-dragging] .swipe-row__surface { transition: none; }
 .swipe-row__toggle {

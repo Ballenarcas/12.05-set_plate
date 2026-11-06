@@ -287,13 +287,14 @@ def test_dashboard_summary_includes_activity(monkeypatch):
         "weight": 80, "height": 180, "age": 30, "gender": "Female", "objective": "Weight Loss",
     }
     monkeypatch.setattr(dashboard_service, "get_supabase", lambda admin=True: object())
+    monkeypatch.setattr(dashboard_service, "kcal_bonus", lambda *args, **kwargs: 0)
     monkeypatch.setattr(dashboard_service, "_query_user", lambda user_id: user)
-    monkeypatch.setattr(dashboard_service, "_query_today_meals", lambda user_id: {
+    monkeypatch.setattr(dashboard_service, "_query_today_meals", lambda *args, **kwargs: {
         "calories": 1200, "protein": 80, "carbs": 100, "fat": 40,
     })
-    monkeypatch.setattr(dashboard_service, "_query_workout", lambda user_id: None)
-    monkeypatch.setattr(dashboard_service, "_query_todays_plan", lambda user_id: None)
-    monkeypatch.setattr(dashboard_service, "_query_completed_workout_today", lambda user_id: None)
+    monkeypatch.setattr(dashboard_service, "_query_workout", lambda *args, **kwargs: None)
+    monkeypatch.setattr(dashboard_service, "_query_todays_plan", lambda *args, **kwargs: None)
+    monkeypatch.setattr(dashboard_service, "_query_completed_workout_today", lambda *args, **kwargs: None)
     monkeypatch.setattr(dashboard_service, "get_activity_summary", lambda *args, **kwargs: activity)
 
     summary = dashboard_service.get_dashboard_summary(UUID(str(USER_ID)))

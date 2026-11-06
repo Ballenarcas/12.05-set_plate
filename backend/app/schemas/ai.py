@@ -85,3 +85,25 @@ class ConversationalSetupResponse(BaseModel):
     detected_intent: str
     matched_entities: ParseNaturalLanguageResponse
 
+
+
+class AiTip(BaseModel):
+    id: str
+    kind: str
+    message: str
+    reasoning: str
+
+
+class AiTipResponse(BaseModel):
+    tip: AiTip | None = None
+
+
+class AiTipDecisionRequest(BaseModel):
+    status: Literal["accepted", "dismissed"]
+
+
+class AiTipDecisionResponse(BaseModel):
+    tip: AiTip | None = None
+    applied: bool
+    notice: str | None = None
+    confirmation: str | None = None

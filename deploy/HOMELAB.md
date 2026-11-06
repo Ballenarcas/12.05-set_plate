@@ -50,7 +50,7 @@ Supabase stays external. There is no database container and no persistent volume
    CORS_ORIGINS=https://zimaos.tailxxxx.ts.net
    APP_PORT=8080
    GROQ_API_KEY=
-   GROQ_MODEL=llama-3.3-70b-versatile
+   GROQ_MODEL=openai/gpt-oss-20b
    WEB_CONCURRENCY=1
    ```
 

@@ -1,10 +1,11 @@
 from uuid import UUID
 
+from app.core.local_day import LocalDay
 from app.schemas.workout import RoutineCreate, RoutineSummary
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 from app.db.supabase_client import get_supabase
-from app.services import workout_service, workout_statistics_service, wger_importer
+from app.services import workout_service, workout_statistics_service
 from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
 from app.schemas.workout import (
     LiveWorkoutAdjustmentRequest,
@@ -14,11 +15,11 @@ from fastapi import HTTPException
 
 
 class WorkoutFacade:
-    async def plan_today(self, user_id: UUID):
+    async def plan_today(self, user_id: UUID, day: LocalDay | None = None):
         supabase = get_supabase(admin=True)
         if supabase is None:
             raise HTTPException(status_code=503, detail="Supabase is not configured")
-        return await plan_daily_workout(user_id, supabase)
+        return await plan_daily_workout(user_id, supabase, day)
 
     async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
         return await suggest_live_adjustment(payload.model_dump(mode="json"))
@@ -76,9 +77,6 @@ class WorkoutFacade:
 
     def get_exercise_by_id(self, exercise_id: str):
         return workout_service.get_exercise_by_id(exercise_id)
-
-    def import_wger(self, **options):
-        return wger_importer.run_import(**options)
 
 
 workout_facade = WorkoutFacade()

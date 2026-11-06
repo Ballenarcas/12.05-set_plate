@@ -48,6 +48,7 @@ class UserLoginResponse(BaseModel):
     premium_plan: str | None = None
     premium_started_at: datetime | None = None
     premium_expires_at: datetime | None = None
+    premium_cancel_at_period_end: bool = False
     age: int | None = None
     gender: str | None = None
     weight: float | None = None

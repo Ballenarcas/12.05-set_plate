@@ -15,7 +15,7 @@ def calculate_calorie_goal(
     tdee = bmr * 1.25
 
     obj = (objective or "").lower()
-    if "lose" in obj:
+    if "lose" in obj or "loss" in obj:  # onboarding saves "Lose Weight", Settings saves "Weight Loss"
         target = tdee - 500
     elif "hypertrophy" in obj:
         target = tdee + 400

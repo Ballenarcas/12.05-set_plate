@@ -13,7 +13,6 @@ export interface WorkoutSummary {
 
 export interface Exercise {
   id: string
-  wger_id?: number | null
   name: string
   muscle_group: string
   name_es?: string | null
@@ -64,6 +63,7 @@ export interface UserProfile {
   premium_plan?: PremiumPlan | string | null
   premium_started_at?: string | null
   premium_expires_at?: string | null
+  premium_cancel_at_period_end?: boolean
   birthDate?: string
   age?: number
   gender?: string

@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, CalendarDays, Clock3, Dumbbell, History, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
+import { ArrowRight, BarChart3, CalendarDays, ChevronDown, Clock3, Dumbbell, History, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
@@ -34,11 +34,24 @@ function createActiveExercises(routine: Routine): ActiveExercise[] {
   }))
 }
 
+const LIST_PREVIEW_SIZE = 3
+
+function SeeMoreButton({ hiddenCount, expanded, onToggle }: { hiddenCount: number; expanded: boolean; onToggle: () => void }) {
+  return (
+    <button className="secondary-action see-more-button" type="button" aria-expanded={expanded} onClick={onToggle}>
+      {expanded ? 'See less' : `See ${hiddenCount} more`}
+      <ChevronDown size={16} aria-hidden="true" />
+    </button>
+  )
+}
+
 function Workouts() {
   const navigate = useNavigate()
   const currentUserId = getCurrentUser()?.id
   const [routines, setRoutines] = useState<Routine[]>([])
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistoryEntry[]>([])
+  const [showAllHistory, setShowAllHistory] = useState(false)
+  const [showAllRoutines, setShowAllRoutines] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isHistoryLoading, setIsHistoryLoading] = useState(() => Boolean(getCurrentUser()?.id))
@@ -162,7 +175,7 @@ function Workouts() {
   }
 
   function requestEmptyWorkout() {
-    const saved = sessionStorage.getItem('set_plate_active_workout')
+    const saved = localStorage.getItem('set_plate_active_workout')
     if (saved) {
       try {
         const activeWorkout = JSON.parse(saved) as { name?: string; exercises?: unknown[]; startedAt?: string }
@@ -172,14 +185,14 @@ function Workouts() {
           return
         }
       } catch {
-        sessionStorage.removeItem('set_plate_active_workout')
+        localStorage.removeItem('set_plate_active_workout')
       }
     }
     startWorkout()
   }
 
   function discardAndStartEmptyWorkout() {
-    sessionStorage.removeItem('set_plate_active_workout')
+    localStorage.removeItem('set_plate_active_workout')
     sessionStorage.removeItem('set_plate_pending_exercise')
     setShowDiscardActiveWorkout(false)
     startWorkout()
@@ -246,7 +259,7 @@ function Workouts() {
         )}
         {!historyError && workoutHistory.length > 0 && (
           <div className="routine-list workout-history-list">
-            {workoutHistory.map((workout) => (
+            {(showAllHistory ? workoutHistory : workoutHistory.slice(0, LIST_PREVIEW_SIZE)).map((workout) => (
               <article className="card workout-history-card" key={workout.id}>
                 <div className="routine-card-heading workout-history-heading">
                   <div><p className="eyebrow">Completed workout</p><h2>{workout.name}</h2></div>
@@ -294,6 +307,13 @@ function Workouts() {
             ))}
           </div>
         )}
+        {!historyError && workoutHistory.length > LIST_PREVIEW_SIZE && (
+          <SeeMoreButton
+            hiddenCount={workoutHistory.length - LIST_PREVIEW_SIZE}
+            expanded={showAllHistory}
+            onToggle={() => setShowAllHistory((current) => !current)}
+          />
+        )}
       </section>
 
       <section aria-labelledby="saved-routines-title">
@@ -301,7 +321,7 @@ function Workouts() {
       {!isLoading && !error && routines.length === 0 && <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No saved routines yet.</p></div>}
 
       <div className="routine-list">
-        {routines.map((routine) => (
+        {(showAllRoutines ? routines : routines.slice(0, LIST_PREVIEW_SIZE)).map((routine) => (
           <article className="card routine-card" key={routine.id}>
             <div className="routine-card-heading">
               <div><p className="eyebrow">Saved routine</p><h2>{routine.name}</h2></div>
@@ -324,6 +344,13 @@ function Workouts() {
           </article>
         ))}
       </div>
+      {routines.length > LIST_PREVIEW_SIZE && (
+        <SeeMoreButton
+          hiddenCount={routines.length - LIST_PREVIEW_SIZE}
+          expanded={showAllRoutines}
+          onToggle={() => setShowAllRoutines((current) => !current)}
+        />
+      )}
       </section>
 
       {workoutToDelete && <div className="modal-backdrop">

@@ -36,7 +36,9 @@ services:
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
       ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      GROQ_TIPS_MODEL: ${GROQ_TIPS_MODEL:-openai/gpt-oss-120b}
+      AI_TIPS_MODEL_ENABLED: ${AI_TIPS_MODEL_ENABLED:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     expose:

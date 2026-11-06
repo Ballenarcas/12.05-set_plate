@@ -10,6 +10,12 @@ from fastapi import HTTPException
 from app.services import workout_adjustment_service as service
 
 
+@pytest.fixture(autouse=True)
+def short_routines_are_usable(monkeypatch):
+    """Most tests here use a one-exercise routine; the minimum has its own tests."""
+    monkeypatch.setattr(service, "MIN_PLAN_EXERCISES", 1)
+
+
 class FakeQuery:
     def __init__(self, database, table):
         self.database = database
@@ -19,6 +25,7 @@ class FakeQuery:
         self.filters = {}
         self.in_filters = {}
         self.range_bounds = None
+        self.date_checks = []
 
     def select(self, columns):
         self.columns = columns
@@ -37,13 +44,16 @@ class FakeQuery:
         self.filters[column] = value
         return self
 
-    def gte(self, *_):
+    def gte(self, column, value):
+        self.date_checks.append(lambda row: str(row[column]) >= value if row.get(column) else True)
         return self
 
-    def lte(self, *_):
+    def lte(self, column, value):
+        self.date_checks.append(lambda row: str(row[column]) <= value if row.get(column) else True)
         return self
 
-    def lt(self, *_):
+    def lt(self, column, value):
+        self.date_checks.append(lambda row: str(row[column]) < value if row.get(column) else True)
         return self
 
     def order(self, *_):
@@ -91,6 +101,7 @@ class FakeQuery:
         for column, values in self.in_filters.items():
             allowed = {str(value) for value in values}
             rows = [row for row in rows if str(row.get(column)) in allowed]
+        rows = [row for row in rows if all(check(row) for check in self.date_checks)]
         if self.table_name == "workout_sets" and self.filters.get("is_done") is True:
             rows = [row for row in rows if row.get("is_done")]
         elif self.table_name == "workout_sets" and self.columns != "id":
@@ -187,6 +198,8 @@ async def test_daily_plan_uses_health_connect_activity(monkeypatch):
         }
         for offset in range(7)
     ]
+    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    database.rows["meals"][0]["consumed_at"] = (day_start - timedelta(hours=12)).isoformat()
     prompts = []
     recommendation = {
         "routine_id": database.routine_id,
@@ -381,6 +394,28 @@ async def test_daily_plan_keeps_a_routine_that_avoids_recent_muscles(monkeypatch
     assert [row["id"] for row in prompt_data["available_routines"]] == [database.routine_id]
     assert prompt_data["available_exercises"] == []
     assert prompt_data["recent_muscle_groups"] == ["Legs"]
+
+
+@pytest.mark.asyncio
+async def test_daily_plan_receives_accepted_training_tips(monkeypatch):
+    database = FakeDatabase()
+    set_routine_muscle_group(database, "Chest")
+    database.rows["ai_tips"] = [{"kind": "muscle_gap", "action": {"type": "focus_muscle", "muscle": "Legs"}, "status": "accepted"}]
+    prompts = []
+
+    async def recommend(prompt, _schema):
+        prompts.append(prompt)
+        return {
+            "routine_id": database.routine_id, "workout_name": "Routine", "rest_day": False, "adjusted": False,
+            "reasoning": "Fresh.", "exercises": [{"exercise_id": database.exercise_id, "sets": 2, "reps": 8}],
+        }
+
+    monkeypatch.setattr(service, "_request_json", recommend)
+    await service.plan_daily_workout(UUID(database.rows["users"][0]["id"]), database)
+
+    commitments = json.loads(prompts[0])["user_commitments"]
+    assert commitments["notes"] == ["Agreed to train Legs next: prefer it if it is available."]
+    assert "never override recovery" in commitments["instruction"]
 
 
 def test_exercise_pool_skips_blocked_muscles_and_recent_exercises():

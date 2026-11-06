@@ -16,3 +16,9 @@ class PremiumPurchaseResponse(BaseModel):
     plan: PremiumPlan
     started_at: datetime
     expires_at: datetime
+
+
+class PremiumCancelResponse(BaseModel):
+    status: str
+    cancel_at_period_end: bool
+    expires_at: datetime

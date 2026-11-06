@@ -6,7 +6,7 @@ type ActiveWorkoutSummary = { name: string; startedAt: string }
 
 function readActiveWorkout(): ActiveWorkoutSummary | null {
   try {
-    const stored = sessionStorage.getItem('set_plate_active_workout')
+    const stored = localStorage.getItem('set_plate_active_workout')
     if (!stored) return null
     const session = JSON.parse(stored) as Partial<ActiveWorkoutSummary>
     if (typeof session.startedAt !== 'string') return null
@@ -47,7 +47,7 @@ export default function WorkoutInProgressBar() {
   if (!workout || pathname.startsWith('/workouts/active')) return null
 
   function discardWorkout() {
-    sessionStorage.removeItem('set_plate_active_workout')
+    localStorage.removeItem('set_plate_active_workout')
     sessionStorage.removeItem('set_plate_pending_exercise')
     setWorkout(null)
     setIsDiscardOpen(false)

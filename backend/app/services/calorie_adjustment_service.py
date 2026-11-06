@@ -16,6 +16,7 @@ from uuid import UUID
 from app.db.supabase_client import get_supabase
 from app.schemas.health import HealthActivitySummary
 from app.services.health_service import get_activity_summary
+from app.services.user_profile_service import calculate_calorie_goal
 
 ADJUSTMENTS_TABLE = "ai_calorie_adjustments"
 EVALUATION_DAYS = 7
@@ -28,6 +29,7 @@ MUSCLE_GAIN_STEP = 200
 MIN_STEP = 100
 MIN_GOAL = 1200
 MAX_GOAL = 5000
+MAX_DAILY_DEFICIT = 500
 
 # Health Connect activity is a safety and context input, not a second calorie
 # target: only a quarter of the active burn can raise a goal, capped at 200 kcal.
@@ -176,13 +178,14 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
                     f"so keeping the {goal} kcal target is safer than cutting it."
                 ),
             }
-        reduction = min(FAT_LOSS_STEP, goal - MIN_GOAL)
+        floor = max(MIN_GOAL, int(metrics.get("deficit_floor") or 0))
+        reduction = min(FAT_LOSS_STEP, goal - floor)
         if reduction < MIN_STEP:
             return {
                 "has_change": False,
                 "proposed_goal": goal,
                 "reason": (
-                    f"Your goal is already at the {MIN_GOAL} kcal safety floor, so it stays there."
+                    f"Your goal is already at the {floor} kcal safety floor, so it stays there."
                 ),
             }
         proposed = goal - reduction
@@ -290,11 +293,15 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
     volume_start = window_start - timedelta(days=EVALUATION_DAYS)
 
     users = _rows(
-        session.table("users").select("calorie_goal,objective")
+        session.table("users").select("calorie_goal,objective,weight,height,age,gender")
         .eq("id", str(user_id)).limit(1).execute()
     )
     user = users[0] if users else {}
     goal = int(user.get("calorie_goal") or 0)
+    deficit_floor = 0
+    if user.get("weight") and user.get("height") and user.get("age"):
+        maintenance = calculate_calorie_goal(user["weight"], user["height"], user["age"], user.get("gender"), None)
+        deficit_floor = maintenance - MAX_DAILY_DEFICIT
 
     meals = _rows(
         session.table("meals").select("calories,consumed_at")
@@ -341,6 +348,7 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
     total_calories = sum(daily.values())
     return {
         "goal": goal,
+        "deficit_floor": deficit_floor,
         "objective": user.get("objective"),
         "avg_intake": round(total_calories / EVALUATION_DAYS),
         "days_logged": len(daily),

@@ -40,6 +40,7 @@ export interface PlanExercise {
   name: string
   sets: number
   reps: number
+  previous_weight_kg?: number | null
 }
 
 export interface WorkoutPlanSummary {
@@ -153,7 +154,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
   const inflight = dashboardRequests.get(userId)
   if (inflight) return inflight
 
-  const request = apiFetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}`, {
+  const request = apiFetch(`${API_URL}/api/v1/dashboard/summary?user_id=${encodeURIComponent(userId)}&${localDayQuery()}`, {
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
     .then(async (response) => {
@@ -175,7 +176,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
 }
 
 export async function planTodaysWorkout(userId: string): Promise<void> {
-  const response = await apiFetch(`${API_URL}/api/v1/workouts/plan-today?user_id=${encodeURIComponent(userId)}`, {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/plan-today?user_id=${encodeURIComponent(userId)}&${localDayQuery()}`, {
     method: 'POST',
     signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
   })
@@ -313,6 +314,7 @@ export async function saveWorkoutLog(userId: string, payload: WorkoutLogCreate):
     throw new Error("We couldn't save your workout. Please try again.")
   }
   invalidateWorkoutStatisticsCache(userId)
+  clearDashboardCache()
   return response.json() as Promise<{ id: string; status: string }>
 }
 
@@ -383,6 +385,7 @@ export async function updateWorkoutHistoryEntry(
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update this workout. Please try again.")
   }
+  clearDashboardCache()
   return response.json()
 }
 
@@ -396,6 +399,7 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
     throw new Error("We couldn't remove that workout. Please try again.")
   }
   invalidateWorkoutStatisticsCache(userId)
+  clearDashboardCache()
 }
 
 function invalidateWorkoutStatisticsCache(userId: string): void {
@@ -708,15 +712,6 @@ export async function fetchExerciseById(exerciseId: string) {
   return response.json()
 }
 
-export async function triggerWgerImport(maxItems?: number) {
-  const url = maxItems
-    ? `${API_URL}/api/v1/workouts/exercises/import-wger?max_items=${maxItems}`
-    : `${API_URL}/api/v1/workouts/exercises/import-wger`
-  const response = await apiFetch(url, { method: 'POST' })
-  if (!response.ok) throw new Error("We couldn't import exercises right now. Please try again.")
-  return response.json()
-}
-
 export function calculateAgeFromBirthDate(birthDate: string): number | undefined {
   if (!birthDate) return undefined
   const birth = new Date(birthDate)
@@ -845,6 +840,7 @@ export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus>
     premium_plan: status.plan,
     premium_started_at: status.started_at,
     premium_expires_at: status.expires_at,
+    premium_cancel_at_period_end: false,
   }
 
   try {
@@ -855,6 +851,32 @@ export async function purchasePremium(plan: PremiumPlan): Promise<PremiumStatus>
   clearDashboardCache()
   window.dispatchEvent(new Event(PREMIUM_UPDATED_EVENT))
   return status
+}
+
+export async function cancelPremium(): Promise<void> {
+  const response = await apiFetch(`${API_URL}/api/v1/premium/cancel`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't cancel your subscription. Please try again.")
+  }
+
+  const status = await response.json() as { expires_at: string }
+  const user = getCurrentUser()
+  if (user) {
+    try {
+      localStorage.setItem('set_plate_user', JSON.stringify({
+        ...user,
+        premium_expires_at: status.expires_at,
+        premium_cancel_at_period_end: true,
+      }))
+    } catch {
+      // The server response is still authoritative when browser storage is unavailable.
+    }
+  }
+  window.dispatchEvent(new Event(PREMIUM_UPDATED_EVENT))
 }
 
 export async function updateUserSettings(
@@ -939,6 +961,12 @@ export function localDayWindow(dateString?: string): { today_start: string; toda
   const end = new Date(start)
   end.setDate(end.getDate() + 1)
   return { today_start: start.toISOString(), today_end: end.toISOString() }
+}
+
+function localDayQuery(): string {
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return new URLSearchParams({ today, ...localDayWindow() }).toString()
 }
 
 function nutritionCacheKey(userId: string, windowStart: string): string {
@@ -1038,6 +1066,60 @@ export async function decideCalorieAdjustment(
     throw new Error("We couldn't update your goal. Please try again.")
   }
   return response.json()
+}
+
+export interface AiTip {
+  id: string
+  kind: string
+  message: string
+  reasoning: string
+}
+
+export interface AiTipDecision {
+  tip: AiTip | null
+  applied: boolean
+  notice: string | null
+  confirmation: string | null
+}
+
+function clearGoalCaches(): void {
+  clearDashboardCache()
+  nutritionRequests.clear()
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith(NUTRITION_CACHE_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key))
+  } catch {
+    // The next nutrition request remains authoritative if browser storage is unavailable.
+  }
+}
+
+export async function fetchCurrentTip(): Promise<AiTip | null> {
+  const response = await apiFetch(`${API_URL}/api/v1/ai/tips/current?${localDayQuery()}`, { signal: AbortSignal.timeout(LLM_TIMEOUT_MS) })
+  if (!response.ok) throw new Error("We couldn't load your tip.")
+  return ((await response.json()) as { tip: AiTip | null }).tip
+}
+
+export async function decideTip(tipId: string, status: 'accepted' | 'dismissed'): Promise<AiTipDecision> {
+  const response = await apiFetch(`${API_URL}/api/v1/ai/tips/${encodeURIComponent(tipId)}/decision?${localDayQuery()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) throw new Error("We couldn't update this tip. Please try again.")
+  if (status === 'accepted') clearGoalCaches()
+  return response.json() as Promise<AiTipDecision>
+}
+
+export async function undoTip(tipId: string): Promise<AiTipDecision> {
+  const response = await apiFetch(`${API_URL}/api/v1/ai/tips/${encodeURIComponent(tipId)}/undo?${localDayQuery()}`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) throw new Error("We couldn't undo that change. Please try again.")
+  clearGoalCaches()
+  return response.json() as Promise<AiTipDecision>
 }
 
 export interface FoodSearchItem {

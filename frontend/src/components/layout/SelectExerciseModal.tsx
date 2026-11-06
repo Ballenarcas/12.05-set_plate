@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Plus, Dumbbell } from 'lucide-react';
 import { fetchExerciseMuscleGroups, fetchExercises } from '../../services/api';
+import MediaCredit from '../workout/MediaCredit';
 import type { Exercise } from '../../types';
 
 interface SelectExerciseModalProps {
@@ -271,6 +272,8 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
             ))
           )}
         </div>
+
+        <MediaCredit />
 
         {/* Pied de page */}
         {onCreateCustom && <div style={{ marginTop: '10px', paddingTop: '10px', textAlign: 'right', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>

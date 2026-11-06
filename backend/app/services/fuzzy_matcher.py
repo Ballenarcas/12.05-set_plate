@@ -327,7 +327,7 @@ class FuzzyEntityMatcher:
         ]
 
         try:
-            from app.services.wger_importer import load_cached_exercises
+            from app.services.exercise_catalog import load_cached_exercises
 
             existing_ids = {item.id for item in items}
             for ex in load_cached_exercises():
@@ -341,7 +341,6 @@ class FuzzyEntityMatcher:
                             metadata={
                                 "primary_muscle": ex.muscles[0] if ex.muscles else ex.category,
                                 "equipment": ex.equipment[0] if ex.equipment else "bodyweight",
-                                "wger_id": ex.wger_id,
                             },
                         )
                     )

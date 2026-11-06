@@ -632,15 +632,6 @@ export async function fetchExerciseById(exerciseId: string) {
   return response.json()
 }
 
-export async function triggerWgerImport(maxItems?: number) {
-  const url = maxItems
-    ? `${API_URL}/api/v1/workouts/exercises/import-wger?max_items=${maxItems}`
-    : `${API_URL}/api/v1/workouts/exercises/import-wger`
-  const response = await apiFetch(url, { method: 'POST' })
-  if (!response.ok) throw new Error("We couldn't import exercises right now. Please try again.")
-  return response.json()
-}
-
 export function calculateAgeFromBirthDate(birthDate: string): number | undefined {
   if (!birthDate) return undefined
   const birth = new Date(birthDate)

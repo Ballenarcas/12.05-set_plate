@@ -16,7 +16,7 @@ from app.schemas.workout_log import (
     WorkoutLogResponse,
     WorkoutLogUpdate,
 )
-from app.services.wger_importer import (
+from app.services.exercise_catalog import (
     get_cached_exercise,
     load_cached_exercises,
     muscle_group_for,
@@ -88,7 +88,7 @@ def list_exercises(
 
 
 def get_exercise_by_id(exercise_id: str) -> Exercise | None:
-    """Find an exercise by ID or wger_id using the in-memory catalog index."""
+    """Find an exercise by ID using the in-memory catalog index."""
     return get_cached_exercise(exercise_id)
 
 

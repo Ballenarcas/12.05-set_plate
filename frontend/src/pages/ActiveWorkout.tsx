@@ -19,6 +19,7 @@ import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
 import SwipeToDeleteRow from '../components/workout/SwipeToDeleteRow'
+import MediaCredit from '../components/workout/MediaCredit'
 
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
@@ -906,6 +907,7 @@ function ActiveWorkout() {
           </article>
         })}
       </div>
+      <MediaCredit />
 
       <section className="add-exercise-section">
         <button 

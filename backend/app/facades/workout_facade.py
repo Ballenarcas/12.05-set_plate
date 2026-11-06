@@ -5,7 +5,7 @@ from app.schemas.workout import RoutineCreate, RoutineSummary
 from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
 from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 from app.db.supabase_client import get_supabase
-from app.services import workout_service, workout_statistics_service, wger_importer
+from app.services import workout_service, workout_statistics_service
 from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
 from app.schemas.workout import (
     LiveWorkoutAdjustmentRequest,
@@ -77,9 +77,6 @@ class WorkoutFacade:
 
     def get_exercise_by_id(self, exercise_id: str):
         return workout_service.get_exercise_by_id(exercise_id)
-
-    def import_wger(self, **options):
-        return wger_importer.run_import(**options)
 
 
 workout_facade = WorkoutFacade()

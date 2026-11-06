@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchExercises } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import MediaCredit from '../components/workout/MediaCredit'
 import type { Exercise } from '../types'
 
 const PAGE_SIZE = 30
@@ -99,6 +100,7 @@ function ExercisePicker() {
           </button>
         ))}
       </div>
+      <MediaCredit />
 
       {!isLoading && !error && pageCount > 1 && (
         <nav className="exercise-pagination" aria-label="Exercise pages">

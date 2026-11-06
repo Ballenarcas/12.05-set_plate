@@ -5,6 +5,8 @@ import logging
 from typing import Any
 
 import httpx
+from app.core.local_day import LocalDay
+from app.services.ai_tips_service import kcal_bonus
 from app.services.nutrition_math import compute_macro_targets
 from app.services.user_profile_service import calculate_calorie_goal
 from app.db.supabase_client import get_supabase
@@ -77,7 +79,17 @@ def _utc_day_start(now: datetime | None = None) -> datetime:
     )
 
 
-def _load_user_target(supabase: Any, user_id: str) -> tuple[int | None, float | None]:
+def _load_user_target(
+    supabase: Any, user_id: str, window_start: datetime, window_end: datetime,
+) -> tuple[int | None, float | None]:
+    """Saved goal plus calories accepted from that day's AI tip, and weight."""
+    goal, weight = _load_saved_target(supabase, user_id)
+    if goal is not None:
+        goal += kcal_bonus(user_id, LocalDay(window_start.date(), window_start, window_end), supabase)
+    return goal, weight
+
+
+def _load_saved_target(supabase: Any, user_id: str) -> tuple[int | None, float | None]:
     """Read the saved goal and weight. Returns (None, None) when it cannot be read."""
     try:
         user_res = (
@@ -230,7 +242,7 @@ def get_user_nutrition_today(
         )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        user_future = executor.submit(_load_user_target, supabase, user_id)
+        user_future = executor.submit(_load_user_target, supabase, user_id, window_start, window_end)
         meals_future = executor.submit(_load_today_meals, supabase, user_id, window_start, window_end)
         loaded_goal, user_weight_kg = user_future.result()
         meals_data, total_calories, total_proteins, total_carbs, total_fats = meals_future.result()

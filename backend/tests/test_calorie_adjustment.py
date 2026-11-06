@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from main import app
 
 from app.services.calorie_adjustment_service import classify_objective, propose_adjustment
+from app.services.user_profile_service import calculate_calorie_goal
 from tests.auth_helpers import auth_headers
 
 client = TestClient(app)
@@ -48,8 +49,25 @@ def _metrics(**overrides) -> dict:
     return {**base, **overrides}
 
 
+def test_both_weight_loss_labels_get_the_same_deficit():
+    profile = (80, 175, 30, "male")
+    maintenance = calculate_calorie_goal(*profile, "Maintenance")
+    assert calculate_calorie_goal(*profile, "Weight Loss") == maintenance - 500
+    assert calculate_calorie_goal(*profile, "Lose Weight") == maintenance - 500
+
+
+def test_goal_is_never_lowered_past_a_500_kcal_deficit():
+    at_limit = propose_adjustment(_metrics(goal=2200, deficit_floor=2200))
+    assert at_limit["has_change"] is False
+    assert "2200 kcal safety floor" in at_limit["reason"]
+    assert propose_adjustment(_metrics(goal=2200, deficit_floor=2100))["proposed_goal"] == 2100
+    assert propose_adjustment(_metrics(goal=2200, deficit_floor=2150))["has_change"] is False  # step under 100
+    assert propose_adjustment(_metrics(goal=2000, deficit_floor=2100))["has_change"] is False  # already past it
+
+
 def test_objectives_map_to_the_three_rule_branches():
     assert classify_objective("lose weight") == "fat_loss"
+    assert classify_objective("Weight Loss") == "fat_loss"
     assert classify_objective("Hypertrophy") == "muscle_gain"
     assert classify_objective("strength") == "muscle_gain"
     assert classify_objective("maintain") == "maintenance"

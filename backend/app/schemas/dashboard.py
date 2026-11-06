@@ -25,6 +25,7 @@ class PlanExercise(BaseModel):
     name: str
     sets: int = Field(ge=0)
     reps: int = Field(ge=0)
+    previous_weight_kg: float | None = None
 
 
 class WorkoutPlanSummary(BaseModel):

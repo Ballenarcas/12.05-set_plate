@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app.services.wger_importer import load_cached_exercises, supabase_uuid_for
+from app.services.exercise_catalog import load_cached_exercises, supabase_uuid_for
 
 STAPLES_PATH = Path(__file__).resolve().parent.parent / "data" / "exercise_staples.json"
 
@@ -44,40 +44,6 @@ TEMPLATE_LABELS = {
     "legs": "Leg day",
 }
 
-# Preferred pick order per movement pattern (1 = first choice). Names match the
-# curated allowlist; the same priority means equally valid picks that rotate by day.
-STAPLE_PRIORITY: dict[str, int] = {
-    "Barbell Full Squat": 1, "Leg Press": 1, "Front Squats": 2, "Hack Squats": 2,
-    "Dumbbell Goblet Squat": 3, "Squats": 4,
-    "Romanian Deadlift": 1, "Deadlifts": 1, "Sumo Deadlift": 2,
-    "Dumbbell Romanian Deadlift": 3, "Good Morning": 4, "Kettlebell deadlifts": 5,
-    "Bulgarian Squat with Dumbbells": 1, "Barbell Lunges Walking": 1,
-    "Dumbbell Split Squat": 2, "Reverse lunges": 3, "Dumbbell Lunges Walking": 4,
-    "Bench Press": 1, "Incline Bench Press - Barbell": 2, "Incline Bench Press - Dumbbell": 2,
-    "Machine Chest Press": 3, "Dips": 4, "Push-Up": 5,
-    "Shoulder Press, Barbell": 1, "Shoulder Press, Dumbbells": 1, "Shoulder Press, on Machine": 2,
-    "Barbell Row (Overhand)": 1, "Bent Over Rowing": 1, "Seated Cable Row": 2,
-    "One-Arm Dumbbell Row": 2, "T-Bar row": 3, "Inverted Rows": 4,
-    "Pull-ups": 1, "Wide-grip Pulldown": 1, "Neutral Grip Lat Pulldown": 2,
-    "Chin Up": 2, "Machine Lat Pulldown": 3,
-    "Pec Deck": 1, "Fly With Dumbbells": 2, "Incline Dumbbell Fly": 2,
-    "Dumbbell Lateral Raise": 1, "Lateral Raises": 1,
-    "Machine Lateral Raise": 2, "High-Cable Lateral Raise": 2,
-    "Cable Rear Delt Fly": 1, "Dumbbell Bent-Over Reverse Fly": 1, "Rear Delt Raises": 2,
-    "Biceps Curls With Barbell": 1, "Hammer Curls": 1, "Cable Curls": 2,
-    "Dumbbell Incline Curl": 2, "Preacher Curls": 3, "Biceps Curls With Dumbbell": 3,
-    "Tricep Pushdown on Cable": 1, "Triceps Extensions on Cable": 1,
-    "Skullcrusher Dumbbells": 2, "Barbell Triceps Extension": 2,
-    "Machine Dip or Triceps Extension": 3, "Triceps Dips (Assisted)": 3,
-    "Leg Curls (laying)": 1, "Machine Seated Leg Curl": 1, "Leg Curl": 2, "Nordic Curl": 3,
-    "Leg Extension": 1,
-    "Hip Thrust": 1, "Dumbbell Hip Thrust": 2, "Glute Bridge": 3,
-    "Standing Calf Raises": 1, "Sitting Calf Raises": 2, "Machine Seated Calf Raise": 2,
-    "Plank": 1, "Ab wheel": 1, "Hanging Leg Raises": 2, "Leg Raises, Lying": 2,
-    "Reverse crunch": 3, "Crunches": 3, "Side Plank": 4,
-    "Shrugs, Barbells": 1, "Shrugs, Dumbbells": 1,
-}
-
 # Accessories used to reach the target size when a template has fewer slots.
 FILL_ORDER = [
     "core", "calves", "lateral_raise", "biceps", "triceps", "rear_delt",
@@ -95,8 +61,8 @@ _COMPOUND_MOVEMENTS = frozenset({
 
 
 @lru_cache(maxsize=1)
-def load_staples() -> dict[int, dict[str, Any]]:
-    """Return the vetted exercise allowlist keyed by wger id."""
+def load_staples() -> dict[str, dict[str, Any]]:
+    """Return the vetted exercise allowlist keyed by catalog id."""
     try:
         data = json.loads(STAPLES_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -104,15 +70,7 @@ def load_staples() -> dict[int, dict[str, Any]]:
     exercises = data.get("exercises") if isinstance(data, dict) else None
     if not isinstance(exercises, list):
         return {}
-    staples: dict[int, dict[str, Any]] = {}
-    for item in exercises:
-        if not isinstance(item, dict) or item.get("wger_id") is None:
-            continue
-        try:
-            staples[int(item["wger_id"])] = item
-        except (TypeError, ValueError):
-            continue
-    return staples
+    return {str(item["exercise_id"]): item for item in exercises if isinstance(item, dict) and item.get("exercise_id")}
 
 
 def _staple_index_by_supabase_id() -> dict[str, dict[str, Any]]:
@@ -122,14 +80,14 @@ def _staple_index_by_supabase_id() -> dict[str, dict[str, Any]]:
         return {}
     index: dict[str, dict[str, Any]] = {}
     for exercise in load_cached_exercises():
-        staple = staples.get(exercise.wger_id) if exercise.wger_id is not None else None
+        staple = staples.get(exercise.id)
         if staple is None:
             continue
         index[supabase_uuid_for(exercise)] = {
             "movement": str(staple.get("movement") or "other"),
             "tier": str(staple.get("tier") or "B"),
             "compound": bool(staple.get("compound")),
-            "priority": STAPLE_PRIORITY.get(str(staple.get("name") or ""), 50),
+            "priority": int(staple.get("priority") or 50),
         }
     return index
 
@@ -160,7 +118,7 @@ def objective_guidance(objective: str | None) -> dict[str, Any]:
             "min_reps": 3, "max_reps": 6, "rest_seconds": 150,
             "summary": "heavy compounds, low reps, long rest",
         }
-    if any(key in text for key in ("weight loss", "fat", "grasa", "cut", "deficit", "déficit")):
+    if any(key in text for key in ("weight loss", "lose", "fat", "grasa", "cut", "deficit", "déficit")):
         return {
             "branch": "fat_loss", "min_sets": 2, "max_sets": 4,
             "min_reps": 8, "max_reps": 15, "rest_seconds": 75,

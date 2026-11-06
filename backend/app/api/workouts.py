@@ -3,8 +3,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from app.core.auth import current_admin, current_user
-from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
+from app.core.auth import current_user
+from app.core.local_day import LocalDay, local_day
+from app.schemas.exercise import Exercise, ExerciseListResponse
 from app.facades.workout_facade import workout_facade
 from app.schemas.workout import (
     LiveWorkoutAdjustmentRequest,
@@ -23,8 +24,9 @@ _last_adjustment_request: dict[str, float] = {}
 @router.post("/plan-today")
 async def plan_todays_workout(
     user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
 ) -> dict:
-    return await workout_facade.plan_today(user_id)
+    return await workout_facade.plan_today(user_id, day)
 
 
 @router.post("/adjust", response_model=LiveWorkoutAdjustmentResponse)
@@ -131,7 +133,6 @@ def get_exercises(
                 update={
                     "description": None,
                     "aliases": [],
-                    "muscle_images": [],
                     "images": item.images[:1],
                 }
             )
@@ -155,19 +156,8 @@ def get_muscle_groups() -> dict[str, list[str]]:
 
 @router.get("/exercises/{exercise_id}", response_model=Exercise)
 def get_exercise(exercise_id: str) -> Exercise:
-    """Retrieve a single exercise by ID or wger_id."""
+    """Retrieve a single exercise by ID."""
     exercise = workout_facade.get_exercise_by_id(exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail=f"Exercise '{exercise_id}' not found")
     return exercise
-
-
-@router.post("/exercises/import-wger", response_model=WgerImportResponse)
-def trigger_wger_import(
-    max_items: int | None = Query(None, ge=1, le=2000, description="Optional cap on number of exercises to import"),
-    sync_supabase: bool = Query(False, description="Sync imported exercises to Supabase if configured"),
-    _admin: UUID = Depends(current_admin),
-) -> WgerImportResponse:
-    """Import or refresh exercises from the wger REST API (admin only)."""
-    result = workout_facade.import_wger(max_items=max_items, sync_supabase=sync_supabase)
-    return WgerImportResponse(**result)

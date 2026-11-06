@@ -1,16 +1,21 @@
 import threading
 from functools import lru_cache
 
+import httpx
+
 try:
-    from supabase import Client, create_client
+    from supabase import Client, ClientOptions, create_client
 except ImportError:
     Client = None
+    ClientOptions = None
     create_client = None
 
 from app.core.config import get_settings
 
 
 from typing import Any
+
+REQUEST_TIMEOUT_SECONDS = 120  # the Supabase client's own default
 
 
 @lru_cache
@@ -23,7 +28,10 @@ def get_supabase(admin: bool = False) -> Any | None:
     key = (settings.supabase_service_role_key or settings.supabase_key) if admin else settings.supabase_key
     if not key:
         return None
-    return create_client(settings.supabase_url, key)
+    # The default HTTP/2 shares one connection between our parallel reads, and when the server
+    # closes it they all fail with "Server disconnected". HTTP/1.1 was as fast and never dropped.
+    http_client = httpx.Client(http2=False, timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True)
+    return create_client(settings.supabase_url, key, options=ClientOptions(httpx_client=http_client))
 
 
 def _warm_client(admin: bool) -> None:

@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     supabase_key: str = ""
     supabase_service_role_key: str = ""
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-20b"
+    groq_tips_model: str = "openai/gpt-oss-120b"
+    ai_tips_model_enabled: bool = False
     cors_origins: str = "http://localhost:5173"
 
     # Session signing. Falls back to the Supabase service-role key when no

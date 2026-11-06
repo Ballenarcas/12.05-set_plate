@@ -1,7 +1,6 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
@@ -15,13 +14,17 @@ import type {
   WorkoutLogCreate,
   WorkoutSet,
 } from '../types/workout'
+import { useDialogBehavior } from '../utils/useDialogBehavior'
 import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
 import SwipeToDeleteRow from '../components/workout/SwipeToDeleteRow'
+import MediaCredit from '../components/workout/MediaCredit'
 
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
+const REST_STEP_SECONDS = 15
+const ACTIVE_WORKOUT_KEY = 'set_plate_active_workout'
 const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
   reduce_load: 'Reduce the load',
   reduce_reps: 'Reduce the reps',
@@ -93,6 +96,62 @@ function formatRest(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`
 }
 
+function elapsedSeconds(startedAt: string): number {
+  return Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000))
+}
+
+// Its own component so the clock ticking does not re-render every set row each second.
+function ElapsedTime({ startedAt, format }: { startedAt: string; format: (seconds: number) => string }) {
+  const [seconds, setSeconds] = useState(() => elapsedSeconds(startedAt))
+  useEffect(() => {
+    const timer = window.setInterval(() => setSeconds(elapsedSeconds(startedAt)), 1000)
+    return () => window.clearInterval(timer)
+  }, [startedAt])
+  return <>{format(seconds)}</>
+}
+
+function formatPrevious({ previous_weight_kg: weight, previous_reps: reps }: ActiveExercise): string {
+  if (weight === null || weight === undefined) return '–'
+  return reps ? `${weight}×${reps}` : `${weight}`
+}
+
+function repsInputId(exerciseIndex: number, setNumber: number): string {
+  return `reps-${exerciseIndex}-${setNumber}`
+}
+
+type SetNumberInputProps = {
+  id?: string
+  label: string
+  value: number
+  decimal?: boolean
+  invalid?: boolean
+  onChange: (value: number) => void
+}
+
+// A text field keeps "0" and "0." while typing, accepts a decimal comma, and cannot produce
+// the negative or fractional values the API rejects when the workout is saved.
+function SetNumberInput({ id, label, value, decimal = false, invalid = false, onChange }: SetNumberInputProps) {
+  const [draft, setDraft] = useState<string | null>(null)
+  return <input
+    id={id}
+    className={invalid ? 'is-missing' : undefined}
+    aria-label={label}
+    aria-invalid={invalid || undefined}
+    type="text"
+    inputMode={decimal ? 'decimal' : 'numeric'}
+    autoComplete="off"
+    value={draft ?? (value ? String(value) : '')}
+    onFocus={(event) => event.target.select()}
+    onBlur={() => setDraft(null)}
+    onChange={(event) => {
+      const text = event.target.value.replace(',', '.')
+      if (!(decimal ? /^\d*\.?\d*$/ : /^\d*$/).test(text)) return
+      setDraft(text)
+      onChange(Number(text) || 0)
+    }}
+  />
+}
+
 function swapKeyedMapIndexes<T>(map: Record<string, T>, firstIndex: number, secondIndex: number): Record<string, T> {
   const next: Record<string, T> = {}
   for (const [key, value] of Object.entries(map)) {
@@ -156,50 +215,58 @@ function safeSetKind(value: unknown): SetKind {
   return value === 'warmup' || value === 'drop' || value === 'failure' ? value : 'normal'
 }
 
-function useDialogBehavior(open: boolean, onClose: () => void) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const closeRef = useRef(onClose)
-  useEffect(() => {
-    closeRef.current = onClose
-  }, [onClose])
-  useEffect(() => {
-    if (!open) return
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    dialogRef.current?.focus()
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeRef.current()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      previouslyFocused?.focus()
-    }
-  }, [open])
-  return dialogRef
-}
-
 function getSession(state: unknown): ActiveSession | null {
   if (!state || typeof state !== 'object' || !('name' in state) || !('exercises' in state)) return null
   const parsed = state as Partial<ActiveSession>
   return { ...parsed, setKinds: parsed.setKinds ?? {} } as ActiveSession
 }
 
+// Rests are long enough for a phone to lock. The browser drops the lock when the app is hidden.
+function useScreenAwake() {
+  useEffect(() => {
+    let lock: WakeLockSentinel | null = null
+    let isActive = true
+    const requestLock = () => {
+      if (document.visibilityState !== 'visible') return
+      navigator.wakeLock?.request('screen')
+        .then((sentinel) => {
+          if (isActive) lock = sentinel
+          else sentinel.release()
+        })
+        .catch(() => undefined)
+    }
+    requestLock()
+    document.addEventListener('visibilitychange', requestLock)
+    return () => {
+      isActive = false
+      document.removeEventListener('visibilitychange', requestLock)
+      lock?.release().catch(() => undefined)
+    }
+  }, [])
+}
+
+function readSavedSession(): ActiveSession | null {
+  try {
+    return getSession(JSON.parse(localStorage.getItem(ACTIVE_WORKOUT_KEY) ?? 'null'))
+  } catch {
+    return null
+  }
+}
+
 function ActiveWorkout() {
   const navigate = useNavigate()
   const location = useLocation()
+  useScreenAwake()
   const routeSession = getSession(location.state)
-  const [session, setSession] = useState<ActiveSession | null>(() => {
-    if (routeSession) return routeSession
-    const saved = sessionStorage.getItem('set_plate_active_workout')
-    return saved ? getSession(JSON.parse(saved)) : null
-  })
+  const [session, setSession] = useState<ActiveSession | null>(() => routeSession ?? readSavedSession())
   const [workoutName, setWorkoutName] = useState(() => session?.name ?? '')
-  const [now, setNow] = useState(() => Date.now())
   const [showFinish, setShowFinish] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [showAiAdjustment, setShowAiAdjustment] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [rpeValues, setRpeValues] = useState<Record<string, number>>({})
+  const [rpeValues, setRpeValues] = useState<Record<string, number>>(() => session?.rpeValues ?? {})
+  const [missingReps, setMissingReps] = useState<string | null>(null)
   const [restRemaining, setRestRemaining] = useState<Record<number, number>>({})
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
   const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
@@ -215,11 +282,37 @@ function ActiveWorkout() {
   const lastAdjustmentSetCount = useRef<number | null>(null)
   const imageLookups = useRef(new Set<string>())
   const sessionRef = useRef(session)
+  const restRef = useRef(restRemaining)
+
+  // History keeps route state, so without this a reload or Back would restart from the empty plan.
+  useEffect(() => {
+    if (location.state) navigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.pathname, navigate])
 
   useEffect(() => {
     sessionRef.current = session
-    if (session) sessionStorage.setItem('set_plate_active_workout', JSON.stringify(session))
-  }, [session])
+    if (session) localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ ...session, rpeValues }))
+  }, [session, rpeValues])
+
+  useEffect(() => {
+    restRef.current = restRemaining
+  }, [restRemaining])
+
+  useEffect(() => {
+    if (menuOpen === null) return
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.exercise-menu, .exercise-menu-trigger')) setMenuOpen(null)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(null)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePress)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [menuOpen])
 
   useEffect(() => () => {
     if (removeSetTimer.current !== null) window.clearTimeout(removeSetTimer.current)
@@ -227,20 +320,26 @@ function ActiveWorkout() {
   }, [])
 
   const aiAdjustmentDialogRef = useDialogBehavior(showAiAdjustment, () => setShowAiAdjustment(false))
-  const finishDialogRef = useDialogBehavior(showFinish, () => setShowFinish(false))
+  const closeFinish = () => {
+    setShowFinish(false)
+    setConfirmDiscard(false)
+  }
+  const finishDialogRef = useDialogBehavior(showFinish, closeFinish)
 
   useEffect(() => {
+    let lastTick = Date.now()
     const timer = window.setInterval(() => {
-      setNow(Date.now())
+      // Counted from the clock: a locked phone pauses this interval, but rest time keeps passing.
+      const passed = Math.floor((Date.now() - lastTick) / 1000)
+      if (passed < 1) return
+      lastTick += passed * 1000
+      if (Object.values(restRef.current).some((value) => value <= passed)) navigator.vibrate?.([200, 100, 200])
       setRestRemaining((current) => {
-        let changed = false
         const next: Record<number, number> = {}
         for (const [key, value] of Object.entries(current)) {
-          const remaining = value > 0 ? value - 1 : 0
-          if (remaining !== value) changed = true
-          if (remaining > 0) next[Number(key)] = remaining
+          if (value > passed) next[Number(key)] = value - passed
         }
-        return changed ? next : current
+        return Object.keys(current).length ? next : current
       })
     }, 1000)
     return () => window.clearInterval(timer)
@@ -296,7 +395,7 @@ function ActiveWorkout() {
     }
   }, [])
 
-  const durationSeconds = useMemo(() => session ? Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 1000)) : 0, [now, session])
+  const totalSets = session?.exercises.reduce((total, exercise) => total + exercise.sets.length, 0) ?? 0
   const completedSets = session?.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => set.is_completed).length, 0) ?? 0
   const volumeKg = session?.exercises.reduce((total, exercise) => (
     total + exercise.sets.reduce((sum, set) => sum + (set.is_completed ? set.weight_kg * set.reps : 0), 0)
@@ -424,6 +523,7 @@ function ActiveWorkout() {
   function moveExercise(exerciseIndex: number, direction: -1 | 1) {
     const targetIndex = exerciseIndex + direction
     if (!session || targetIndex < 0 || targetIndex >= session.exercises.length) return
+    if (removeSetTimer.current !== null) undoSetRemoval()
     setMenuOpen(null)
     setSession((current) => {
       if (!current || targetIndex >= current.exercises.length) return current
@@ -453,25 +553,55 @@ function ActiveWorkout() {
     setRpeValues((current) => ({ ...current, [key]: rpe }))
   }
 
+  function clearRpe(exerciseIndex: number, setIndex: number, setNumber: number) {
+    updateSet(exerciseIndex, setIndex, { rpe: null })
+    setRpeValues((current) => {
+      const next = { ...current }
+      delete next[`${exerciseIndex}:${setNumber}`]
+      return next
+    })
+  }
+
+  function stopRest(exerciseIndex: number) {
+    setRestRemaining((current) => {
+      if (!(exerciseIndex in current)) return current
+      const next = { ...current }
+      delete next[exerciseIndex]
+      return next
+    })
+  }
+
+  function changeRunningRest(exerciseIndex: number, seconds: number) {
+    const remaining = (restRemaining[exerciseIndex] ?? 0) + seconds
+    if (remaining <= 0) stopRest(exerciseIndex)
+    else setRestRemaining((current) => ({ ...current, [exerciseIndex]: remaining }))
+  }
+
   function toggleRest(exerciseIndex: number) {
     const exercise = session?.exercises[exerciseIndex]
     if (!exercise) return
     const enable = !exercise.rest_enabled
     updateExercise(exerciseIndex, { rest_enabled: enable })
-    if (!enable) {
-      setRestRemaining((current) => {
-        if (!(exerciseIndex in current)) return current
-        const next = { ...current }
-        delete next[exerciseIndex]
-        return next
-      })
-    }
+    if (!enable) stopRest(exerciseIndex)
   }
 
   function toggleSetComplete(exerciseIndex: number, setIndex: number, isCompleted: boolean) {
-    updateSet(exerciseIndex, setIndex, { is_completed: isCompleted })
     const exercise = session?.exercises[exerciseIndex]
-    if (isCompleted && exercise?.rest_enabled) {
+    const set = exercise?.sets[setIndex]
+    if (!exercise || !set) return
+    if (isCompleted && !set.reps) {
+      setMissingReps(`${exerciseIndex}:${set.set_number}`)
+      document.getElementById(repsInputId(exerciseIndex, set.set_number))?.focus()
+      return
+    }
+    setMissingReps(null)
+    updateSet(exerciseIndex, setIndex, { is_completed: isCompleted })
+    if (!isCompleted) {
+      stopRest(exerciseIndex)
+      return
+    }
+    navigator.vibrate?.(15)
+    if (exercise.rest_enabled) {
       setRestRemaining((current) => ({ ...current, [exerciseIndex]: exercise.rest_seconds ?? DEFAULT_REST_SECONDS }))
     }
   }
@@ -484,14 +614,18 @@ function ActiveWorkout() {
   async function finishWorkout() {
     const user = getCurrentUser()
     const currentSession = session
-    if (!user?.id || !currentSession) return
+    if (!currentSession) return
+    if (!user?.id) {
+      setSaveError('Sign in again to save this workout.')
+      return
+    }
     setIsSaving(true)
     setSaveError(null)
     const payload: WorkoutLogCreate = {
       plan_id: currentSession.planId,
       routine_id: currentSession.routineId,
       name: workoutName.trim() || currentSession.name,
-      duration_seconds: durationSeconds,
+      duration_seconds: elapsedSeconds(currentSession.startedAt),
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
       exercises: currentSession.exercises.map(({ exercise_id, sets }, exerciseIndex) => ({
@@ -511,7 +645,7 @@ function ActiveWorkout() {
       } else {
         await saveWorkoutLog(user.id, payload)
       }
-      sessionStorage.removeItem('set_plate_active_workout')
+      localStorage.removeItem(ACTIVE_WORKOUT_KEY)
       navigate('/workouts')
     } catch (error) {
       setSaveError(describeError(error, "We couldn't save your workout. Please try again."))
@@ -562,9 +696,10 @@ function ActiveWorkout() {
       return
     }
     setAiAdjustment({ status: 'loading' })
+    const durationSeconds = elapsedSeconds(currentSession.startedAt)
     const payload: LiveWorkoutAdjustmentRequest = {
       name: typeof currentSession.name === 'string' && currentSession.name.trim() ? currentSession.name : 'Workout',
-      duration_seconds: Number.isFinite(durationSeconds) ? Math.max(0, Math.floor(durationSeconds)) : 0,
+      duration_seconds: Number.isFinite(durationSeconds) ? durationSeconds : 0,
       user_goal: typeof user.objective === 'string' ? user.objective : null,
       exercises,
     }
@@ -633,20 +768,29 @@ function ActiveWorkout() {
   }
 
   function discardWorkout() {
-    sessionStorage.removeItem('set_plate_active_workout')
+    if (!confirmDiscard) {
+      setConfirmDiscard(true)
+      return
+    }
+    localStorage.removeItem(ACTIVE_WORKOUT_KEY)
     navigate('/workouts')
   }
 
   const isEditingWorkout = Boolean(session?.editWorkoutId)
+  const volumeLabel = `${Math.round(volumeKg).toLocaleString()} kg`
+  const nextExerciseIndex = session.exercises.findIndex((exercise) => exercise.sets.some((set) => !set.is_completed))
+  const nextSetIndex = session.exercises[nextExerciseIndex]?.sets.findIndex((set) => !set.is_completed) ?? -1
+  const runningRests = Object.entries(restRemaining).sort(([, first], [, second]) => first - second)
+  const runningRestIndex = runningRests.length ? Number(runningRests[0][0]) : null
 
   return (
-    <div className="screen active-workout-screen">
+    <div className={`screen active-workout-screen${runningRestIndex !== null ? ' is-resting' : ''}`}>
       <header className={`active-workout-header${isEditingWorkout ? ' is-editing' : ''}`}>
         <button className="icon-button" type="button" onClick={() => navigate('/workouts')} aria-label="Back to workouts"><ChevronLeft size={22} /></button>
-        <h1>{isEditingWorkout ? 'Edit Workout' : 'Log Workout'}</h1>
-        {!isEditingWorkout && (
-          <span className="header-clock" aria-label="Elapsed time"><Clock3 size={16} aria-hidden="true" /><span className="header-clock-label">{formatClock(durationSeconds)}</span></span>
-        )}
+        <div className="workout-title">
+          <h1>{isEditingWorkout ? 'Edit Workout' : session.name}</h1>
+          {!isEditingWorkout && <span className="header-clock" aria-label="Elapsed time"><ElapsedTime startedAt={session.startedAt} format={formatClock} /></span>}
+        </div>
         {!isEditingWorkout && (
           <button
             className="ai-adjust-trigger"
@@ -660,19 +804,22 @@ function ActiveWorkout() {
             AI
           </button>
         )}
-        <PremiumUpsellButton compact />
         <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
+        <div className="session-progress" aria-label="Workout progress">
+          <div className="session-progress-track" role="progressbar" aria-label="Completed sets" aria-valuemin={0} aria-valuemax={totalSets} aria-valuenow={completedSets}>
+            <div className="session-progress-value" style={{ width: `${totalSets ? (completedSets / totalSets) * 100 : 0}%` }} />
+          </div>
+          <strong>{completedSets}/{totalSets} sets</strong>
+          <span>{volumeLabel}</span>
+        </div>
       </header>
 
-      <section className="session-stats" aria-label="Workout stats">
-        <div><span>Duration</span><strong>{formatDuration(durationSeconds)}</strong></div>
-        <div><span>Volume</span><strong>{Math.round(volumeKg).toLocaleString()} kg</strong></div>
-        <div><span>Sets</span><strong>{completedSets}</strong></div>
-      </section>
-
       <div className="active-exercise-list">
-        {session.exercises.map((exercise, exerciseIndex) => (
-          <article className="card exercise-card" key={`${exercise.exercise_id}-${exerciseIndex}`}>
+        {session.exercises.map((exercise, exerciseIndex) => {
+          const doneSets = exercise.sets.filter((set) => set.is_completed).length
+          const isExerciseDone = exercise.sets.length > 0 && doneSets === exercise.sets.length
+          const restSeconds = exercise.rest_seconds ?? DEFAULT_REST_SECONDS
+          return <article className={`card exercise-card${isExerciseDone ? ' is-complete' : ''}`} key={`${exercise.exercise_id}-${exerciseIndex}`}>
             <button className="icon-button ghost exercise-menu-trigger" type="button" aria-label={`Exercise options for ${exercise.name}`} aria-expanded={menuOpen === exerciseIndex} onClick={() => setMenuOpen(menuOpen === exerciseIndex ? null : exerciseIndex)}>
               <MoreVertical size={19} aria-hidden="true" />
             </button>
@@ -683,29 +830,21 @@ function ActiveWorkout() {
               <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />Remove exercise</button>
             </div>}
             <div className="exercise-card-header">
-              <div className="exercise-heading-main"><ExerciseArtwork name={exercise.name} images={exercise.images} /><h2>{exercise.name}</h2></div>
-            </div>
-            <div className="rest-controls">
-              <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} onClick={() => toggleRest(exerciseIndex)}>
-                <Clock3 size={15} aria-hidden="true" />
-                {restRemaining[exerciseIndex] ? `Rest ${formatRest(restRemaining[exerciseIndex])}` : `Rest timer ${exercise.rest_enabled ? 'on' : 'off'}`}
-              </button>
-              <label className="rest-duration-field">
-                <span>seconds</span>
-                <input
-                  className="rest-duration-input"
-                  type="number"
-                  min={1}
-                  step={1}
-                  inputMode="numeric"
-                  aria-label={`Rest duration in seconds for ${exercise.name}`}
-                  value={exercise.rest_seconds ?? DEFAULT_REST_SECONDS}
-                  onChange={(event) => {
-                    const seconds = Number(event.target.value)
-                    if (Number.isInteger(seconds) && seconds > 0) updateRestDuration(exerciseIndex, seconds)
-                  }}
-                />
-              </label>
+              <ExerciseArtwork name={exercise.name} images={exercise.images} />
+              <div className="exercise-heading-copy">
+                <h2>{exercise.name}</h2>
+                <div className="exercise-meta">
+                  <span className="exercise-progress">{isExerciseDone && <Check size={13} aria-hidden="true" />}{doneSets}/{exercise.sets.length}</span>
+                  <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} aria-label={`Rest timer for ${exercise.name}`} onClick={() => toggleRest(exerciseIndex)}>
+                    <Clock3 size={14} aria-hidden="true" />
+                    {exercise.rest_enabled ? formatRest(restSeconds) : 'Rest off'}
+                  </button>
+                  {exercise.rest_enabled && <>
+                    <button className="rest-step" type="button" aria-label={`Shorter rest for ${exercise.name}`} disabled={restSeconds <= REST_STEP_SECONDS} onClick={() => updateRestDuration(exerciseIndex, restSeconds - REST_STEP_SECONDS)}><Minus size={14} aria-hidden="true" /></button>
+                    <button className="rest-step" type="button" aria-label={`Longer rest for ${exercise.name}`} onClick={() => updateRestDuration(exerciseIndex, restSeconds + REST_STEP_SECONDS)}><Plus size={14} aria-hidden="true" /></button>
+                  </>}
+                </div>
+              </div>
             </div>
             <div className="set-table">
               <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
@@ -713,6 +852,7 @@ function ActiveWorkout() {
                 const setKey = `${exerciseIndex}:${set.set_number}`
                 const kind = session.setKinds[setKey] ?? 'normal'
                 const hasHighWeightWarning = set.weight_kg > EXTREME_WEIGHT_WARNING_KG
+                const isNextSet = exerciseIndex === nextExerciseIndex && setIndex === nextSetIndex
                 return <div className="set-row-entry" key={set.set_number}>
                   <SwipeToDeleteRow
                     className="swipe-row--set"
@@ -721,30 +861,40 @@ function ActiveWorkout() {
                     disabled={pendingSetRemoval !== null}
                     onDelete={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })}
                   >
-                    <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}`}>
-                      <select className={`set-kind-select set-kind-${kind}`} value={kind} onChange={(event) => {
-                        updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
-                      }} aria-label={`Set ${set.set_number} type`} title="Set type">
-                        <option value="normal">{set.set_number} — Normal set</option>
-                        <option value="warmup">W — Warm-up: prepare for heavier sets</option>
-                        <option value="drop">D — Drop set: lower weight, keep going</option>
-                        <option value="failure">F — Failure: no more good-form reps</option>
-                      </select>
-                      <span className="previous-cell">{exercise.previous_weight_kg !== null ? `${exercise.previous_weight_kg}kg x ${exercise.previous_reps}` : '-'}</span>
-                      <input aria-label={`${exercise.name} set ${set.set_number} weight`} type="number" min="0" step="0.5" value={set.weight_kg || ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { weight_kg: Number(event.target.value) })} />
-                      <input aria-label={`${exercise.name} set ${set.set_number} reps`} type="number" min="0" step="1" value={set.reps || ''} onChange={(event) => updateSet(exerciseIndex, setIndex, { reps: Number(event.target.value) })} />
-                      <select className="rpe-select" aria-label={`Set ${set.set_number} RPE`} value={rpeValues[setKey] ?? ''} onChange={(event) => {
+                    <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}${isNextSet ? ' set-row-next' : ''}`}>
+                      <span className={`set-kind-cell set-kind-${kind}`}>
+                        {kind === 'normal' ? set.set_number : kind[0].toUpperCase()}
+                        <select className="set-kind-select" value={kind} onChange={(event) => {
+                          updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
+                        }} aria-label={`Set ${set.set_number} type`} title="Set type">
+                          <option value="normal">{set.set_number} — Normal set</option>
+                          <option value="warmup">W — Warm-up: prepare for heavier sets</option>
+                          <option value="drop">D — Drop set: lower weight, keep going</option>
+                          <option value="failure">F — Failure: no more good-form reps</option>
+                        </select>
+                      </span>
+                      <span className="previous-cell">{formatPrevious(exercise)}</span>
+                      <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />
+                      <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
+                        updateSet(exerciseIndex, setIndex, { reps })
+                        setMissingReps(null)
+                      }} />
+                      <select className="rpe-select" aria-label={`Set ${set.set_number} RPE`} value={rpeValues[setKey] ?? set.rpe ?? ''} onChange={(event) => {
                         const rpe = Number(event.target.value)
-                        if (!rpe) return
+                        if (!rpe) {
+                          clearRpe(exerciseIndex, setIndex, set.set_number)
+                          return
+                        }
                         updateRpe(exerciseIndex, set.set_number, rpe)
                         if (!set.is_completed) toggleSetComplete(exerciseIndex, setIndex, true)
                       }}>
                         <option value="">—</option>
                         {Array.from({ length: 10 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
                       </select>
-                      <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} /></button>
+                      <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} strokeWidth={3} /></button>
                     </div>
                   </SwipeToDeleteRow>
+                  {missingReps === setKey && <p className="set-row-hint" role="status">Enter your reps to complete this set.</p>}
                   {hasHighWeightWarning && <p className="high-weight-warning" role="status">⚠ This weight is extremely high. Check that you entered it correctly.</p>}
                 </div>
               })}
@@ -755,8 +905,9 @@ function ActiveWorkout() {
             </div>}
             <button className="secondary-action" type="button" onClick={() => addSet(exerciseIndex)}><Plus size={16} /> Add Set</button>
           </article>
-        ))}
+        })}
       </div>
+      <MediaCredit />
 
       <section className="add-exercise-section">
         <button 
@@ -770,6 +921,18 @@ function ActiveWorkout() {
           <Plus size={17} /> Add Exercise
         </button>
       </section>
+
+      {runningRestIndex !== null && (
+        <section className="rest-bar" aria-label="Rest timer">
+          <div className="rest-bar-copy">
+            <strong role="timer">{formatRest(restRemaining[runningRestIndex])}</strong>
+            <span>{session.exercises[runningRestIndex]?.name}</span>
+          </div>
+          <button type="button" aria-label="Rest 15 seconds less" onClick={() => changeRunningRest(runningRestIndex, -REST_STEP_SECONDS)}>−15</button>
+          <button type="button" aria-label="Rest 15 seconds more" onClick={() => changeRunningRest(runningRestIndex, REST_STEP_SECONDS)}>+15</button>
+          <button className="rest-bar-skip" type="button" onClick={() => stopRest(runningRestIndex)}>Skip</button>
+        </section>
+      )}
 
       {showAiAdjustment && (
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAiAdjustment(false) }}>
@@ -814,12 +977,14 @@ function ActiveWorkout() {
       )}
 
       {showFinish && (
-        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowFinish(false) }}>
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeFinish() }}>
           <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="finish-title" tabIndex={-1} ref={finishDialogRef}>
-            <button className="modal-close" type="button" onClick={() => setShowFinish(false)} aria-label="Close"><X size={20} /></button>
+            <button className="modal-close" type="button" onClick={closeFinish} aria-label="Close"><X size={20} /></button>
             <p className="eyebrow">{session?.editWorkoutId ? 'Edit workout history' : 'Session complete'}</p>
             <h2 id="finish-title">{session?.editWorkoutId ? 'Save workout changes?' : 'Finish workout?'}</h2>
-            <p>{session?.editWorkoutId ? 'Your original date and duration will be kept. Changes are saved to this workout only when confirmed.' : `${formatDuration(durationSeconds)} tracked. Save your completed sets or discard this session.`}</p>
+            {isEditingWorkout
+              ? <p>Your original date and duration will be kept. Changes are saved to this workout only when confirmed.</p>
+              : <p>{completedSets ? `${completedSets} of ${totalSets} sets done, ${volumeLabel}` : 'No sets completed yet. Complete at least one to save'} · <ElapsedTime startedAt={session.startedAt} format={formatDuration} /></p>}
             <div className="workout-name-field">
               <label htmlFor="completed-workout-name">Workout name (e.g. Best chest day)</label>
               <input
@@ -834,9 +999,9 @@ function ActiveWorkout() {
             </div>
             {saveError && <p className="form-error">{saveError}</p>}
             <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => setShowFinish(false)} disabled={isSaving}>Keep training</button>
-              <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
+              <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>Keep training</button>
+              <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? 'Tap again to discard' : session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0)}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
             </div>
           </div>
         </div>

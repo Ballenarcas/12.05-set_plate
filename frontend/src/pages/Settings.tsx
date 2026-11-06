@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Loader2, LogOut, Save, User } from 'lucide-react'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { clearDashboardCache, clearSession, getCurrentUser, updateUserSettings } from '../services/api'
+import { cancelPremium, clearDashboardCache, clearSession, getCurrentUser, isPremiumActive, updateUserSettings } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { useDialogBehavior } from '../utils/useDialogBehavior'
 
 type Notice = { kind: 'success' | 'error'; text: string }
 
@@ -19,6 +20,28 @@ function Settings() {
   const [notice, setNotice] = useState<Notice | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isLogoutOpen, setIsLogoutOpen] = useState(false)
+  const [isCancelOpen, setIsCancelOpen] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [isCancelled, setIsCancelled] = useState(Boolean(user?.premium_cancel_at_period_end))
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  const cancelDialogRef = useDialogBehavior(isCancelOpen, () => setIsCancelOpen(false))
+  const premiumEndDate = user?.premium_expires_at ? new Date(user.premium_expires_at).toLocaleDateString() : null
+  const premiumStartDate = user?.premium_started_at ? new Date(user.premium_started_at).toLocaleDateString() : null
+  const premiumPlanLabel = user?.premium_plan === 'annual' ? 'Annual' : user?.premium_plan === 'monthly' ? 'Monthly' : null
+
+  const confirmCancelPremium = async () => {
+    setIsCancelling(true)
+    setCancelError(null)
+    try {
+      await cancelPremium()
+      setIsCancelled(true)
+      setIsCancelOpen(false)
+    } catch (error) {
+      setCancelError(describeError(error, "We couldn't cancel your subscription. Please try again."))
+    } finally {
+      setIsCancelling(false)
+    }
+  }
 
   useEffect(() => {
     if (!notice) return
@@ -75,7 +98,7 @@ function Settings() {
   const confirmLogout = () => {
     try {
       clearSession()
-      sessionStorage.removeItem('set_plate_active_workout')
+      localStorage.removeItem('set_plate_active_workout')
       sessionStorage.removeItem('set_plate_pending_exercise')
     } catch {
       // The redirect still signs the user out when storage is unavailable.
@@ -195,6 +218,29 @@ function Settings() {
           font-size: 1.05rem;
           cursor: pointer;
           transition: all 0.2s ease;
+        }
+        .subscription-title {
+          margin: 0 0 0.25rem;
+          color: #FFFFFF;
+          font-size: 1.1rem;
+          font-weight: 700;
+        }
+        .subscription-value {
+          color: #FFFFFF;
+          font-size: 0.95rem;
+          font-weight: 600;
+        }
+        .subscription-value.is-active {
+          color: #4ADE80;
+        }
+        .subscription-value.is-cancelled {
+          color: #EF4444;
+        }
+        .subscription-note {
+          margin: 0.5rem 0 0;
+          color: #A1A1AA;
+          font-size: 0.9rem;
+          line-height: 1.5;
         }
         .logout-btn:hover {
           background-color: rgba(239, 68, 68, 0.1);
@@ -336,7 +382,61 @@ function Settings() {
           </button>
 
         </div>
+
+        {isPremiumActive(user) && (
+          <div className="premium-card" aria-labelledby="subscription-title" role="region">
+            <h2 className="subscription-title" id="subscription-title">Subscription</h2>
+            <div className="settings-row">
+              <span className="settings-label">Plan</span>
+              <span className="subscription-value">Premium{premiumPlanLabel ? ` · ${premiumPlanLabel}` : ''}</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Status</span>
+              <span className={`subscription-value${isCancelled ? ' is-cancelled' : ' is-active'}`} role="status">
+                {isCancelled ? 'Cancelled' : 'Active'}
+              </span>
+            </div>
+            {premiumStartDate && (
+              <div className="settings-row">
+                <span className="settings-label">Started</span>
+                <span className="subscription-value">{premiumStartDate}</span>
+              </div>
+            )}
+            {premiumEndDate && (
+              <div className="settings-row">
+                <span className="settings-label">{isCancelled ? 'Access ends' : 'Active until'}</span>
+                <span className="subscription-value">{premiumEndDate}</span>
+              </div>
+            )}
+            {isCancelled ? (
+              <p className="subscription-note">You keep every Premium feature until your access ends.</p>
+            ) : (
+              <button type="button" onClick={() => setIsCancelOpen(true)} className="logout-btn">
+                Cancel Premium
+              </button>
+            )}
+          </div>
+        )}
       </section>
+
+      {isCancelOpen && (
+        <div className="modal-backdrop">
+          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="cancel-premium-title" tabIndex={-1} ref={cancelDialogRef}>
+            <p className="eyebrow">Your subscription</p>
+            <h2 id="cancel-premium-title">Cancel Premium?</h2>
+            <p>You keep Premium {premiumEndDate ? `until ${premiumEndDate}` : 'until your paid period ends'}. After that, your account returns to the free plan. Your meals and workouts stay in your account.</p>
+            {cancelError && <p role="alert">{cancelError}</p>}
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" disabled={isCancelling} onClick={() => setIsCancelOpen(false)}>
+                Keep Premium
+              </button>
+              <button className="danger-action" type="button" disabled={isCancelling} onClick={confirmCancelPremium}>
+                {isCancelling ? 'Cancelling...' : 'Cancel Premium'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isLogoutOpen && (
         <div className="modal-backdrop">

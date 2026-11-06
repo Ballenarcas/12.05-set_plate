@@ -55,6 +55,7 @@ export interface ActiveSession {
   startedAt: string
   exercises: ActiveExercise[]
   setKinds: Record<string, SetKind>
+  rpeValues?: Record<string, number>
 }
 
 export interface WorkoutLogCreate {

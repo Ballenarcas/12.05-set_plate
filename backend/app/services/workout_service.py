@@ -16,7 +16,7 @@ from app.schemas.workout_log import (
     WorkoutLogResponse,
     WorkoutLogUpdate,
 )
-from app.services.wger_importer import (
+from app.services.exercise_catalog import (
     get_cached_exercise,
     load_cached_exercises,
     muscle_group_for,
@@ -88,7 +88,7 @@ def list_exercises(
 
 
 def get_exercise_by_id(exercise_id: str) -> Exercise | None:
-    """Find an exercise by ID or wger_id using the in-memory catalog index."""
+    """Find an exercise by ID using the in-memory catalog index."""
     return get_cached_exercise(exercise_id)
 
 
@@ -364,7 +364,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
     set_records = []
-    for exercise in payload.exercises:
+    for position, exercise in enumerate(payload.exercises):
         try:
             resolved_id = resolve_exercise_log_id(exercise.exercise_id)
         except ValueError:
@@ -372,6 +372,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
         set_records.extend(
             {
                 "exercise_id": resolved_id,
+                "exercise_order": position,
                 "set_number": set_item.set_number,
                 "weight": set_item.weight_kg,
                 "reps": set_item.reps,
@@ -449,7 +450,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
         supabase.table("workouts")
         .select(
             "id,routine_id,name,start_time,end_time,routines(name),"
-            "workout_sets(exercise_id,set_number,reps,weight,rpe,is_done,exercises(name))"
+            "workout_sets(exercise_id,exercise_order,set_number,reps,weight,rpe,is_done,exercises(name))"
         )
         .eq("user_id", str(user_id))
         .not_.is_("end_time", "null")
@@ -464,7 +465,7 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
         started_at = datetime.fromisoformat(row["start_time"].replace("Z", "+00:00"))
         completed_at = datetime.fromisoformat(row["end_time"].replace("Z", "+00:00")) if row.get("end_time") else None
         exercises: dict[str, dict] = {}
-        for set_row in row.get("workout_sets") or []:
+        for set_row in sorted(row.get("workout_sets") or [], key=lambda item: item.get("exercise_order") or 0):
             exercise_id = str(set_row["exercise_id"])
             exercise = set_row.get("exercises") or {}
             if isinstance(exercise, list):
@@ -519,7 +520,7 @@ def update_workout_history_entry(
         raise HTTPException(status_code=404, detail="Workout history entry not found")
 
     set_records = []
-    for exercise in payload.exercises:
+    for position, exercise in enumerate(payload.exercises):
         try:
             resolved_id = resolve_exercise_log_id(exercise.exercise_id)
         except ValueError as err:
@@ -528,6 +529,7 @@ def update_workout_history_entry(
             {
                 "workout_id": str(workout_id),
                 "exercise_id": resolved_id,
+                "exercise_order": position,
                 "set_number": set_item.set_number,
                 "weight": set_item.weight_kg,
                 "reps": set_item.reps,
@@ -539,7 +541,7 @@ def update_workout_history_entry(
 
     existing_sets = (
         supabase.table("workout_sets")
-        .select("exercise_id,set_number,reps,weight,rpe,is_done")
+        .select("exercise_id,exercise_order,set_number,reps,weight,rpe,is_done")
         .eq("workout_id", str(workout_id))
         .execute()
         .data or []

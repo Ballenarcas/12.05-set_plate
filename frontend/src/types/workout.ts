@@ -31,6 +31,13 @@ export interface WorkoutSet {
   reps: number
   rpe?: number | null
   is_completed: boolean
+
+  // Cardio fields
+  duration_seconds?: number | null
+  distance_km?: number | null
+  cardio_status?: 'idle' | 'running' | 'paused' | 'finished' | 'manual'
+  cardio_started_at?: string | null
+  cardio_accumulated?: number
 }
 
 export interface ActiveExercise {
@@ -44,6 +51,7 @@ export interface ActiveExercise {
   rest_seconds?: number
   target_sets?: number | null
   target_reps?: number | null
+  is_cardio?: boolean
   sets: WorkoutSet[]
 }
 
@@ -67,6 +75,7 @@ export interface WorkoutLogCreate {
   completed_at: string
   exercises: Array<{
     exercise_id: string
+    is_cardio?: boolean
     sets: WorkoutSet[]
   }>
 }
@@ -81,11 +90,14 @@ export interface WorkoutHistoryEntry {
   exercises: Array<{
     exercise_id: string
     name: string
+    is_cardio?: boolean
     sets: Array<{
       set_number: number
       reps: number
       weight_kg: number
       rpe: number | null
+      duration_seconds?: number | null
+      distance_km?: number | null
       is_completed: boolean
     }>
   }>
@@ -136,6 +148,7 @@ export interface LiveWorkoutAdjustmentRequest {
   exercises: Array<{
     exercise_id: string
     name: string
+    is_cardio?: boolean
     previous_weight_kg: number | null
     previous_reps: number | null
     rest_seconds: number | null
@@ -147,4 +160,4 @@ export interface LiveWorkoutAdjustmentRequest {
 
 export interface LiveWorkoutAdjustmentResponse {
   suggestions: LiveWorkoutAdjustmentSuggestion[]
-}
+};

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause, Square } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
@@ -65,14 +65,14 @@ type PendingSetRemoval = {
   removed: boolean
 }
 
-function ExerciseArtwork({ name, images }: { name: string; images?: string[] }) {
+function ExerciseArtwork({ name, images, isCardio }: { name: string; images?: string[], isCardio?: boolean }) {
   const [imageFailed, setImageFailed] = useState(false)
   const image = images?.find(Boolean)
 
   if (!image || imageFailed) {
     return <div className="active-exercise-artwork active-exercise-artwork-fallback" role="img" aria-label={`${name} image unavailable`}>
       <Dumbbell size={25} aria-hidden="true" />
-      <span>EXERCISE</span>
+      <span>{isCardio ? 'CARDIO' : 'EXERCISE'}</span>
     </div>
   }
 
@@ -96,11 +96,18 @@ function formatRest(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`
 }
 
+function formatPace(seconds: number, km: number | null | undefined): string {
+  if (!km || km <= 0) return '';
+  const secondsPerKm = seconds / km;
+  const mins = Math.floor(secondsPerKm / 60);
+  const secs = Math.floor(secondsPerKm % 60).toString().padStart(2, '0');
+  return `${mins}:${secs} /km`;
+}
+
 function elapsedSeconds(startedAt: string): number {
   return Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000))
 }
 
-// Its own component so the clock ticking does not re-render every set row each second.
 function ElapsedTime({ startedAt, format }: { startedAt: string; format: (seconds: number) => string }) {
   const [seconds, setSeconds] = useState(() => elapsedSeconds(startedAt))
   useEffect(() => {
@@ -108,6 +115,94 @@ function ElapsedTime({ startedAt, format }: { startedAt: string; format: (second
     return () => window.clearInterval(timer)
   }, [startedAt])
   return <>{format(seconds)}</>
+}
+
+// Cardio ticking timer - doesn't re-render entire component tree every second
+function CardioTimerDisplay({ startedAt, accumulated }: { startedAt: string | null, accumulated: number }) {
+  const [seconds, setSeconds] = useState(() => {
+    if (!startedAt) return accumulated;
+    return accumulated + Math.floor((Date.now() - Date.parse(startedAt)) / 1000);
+  })
+
+  useEffect(() => {
+    if (!startedAt) {
+      setSeconds(accumulated);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setSeconds(accumulated + Math.floor((Date.now() - Date.parse(startedAt)) / 1000));
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [startedAt, accumulated])
+
+  return <span style={{ fontSize: '3rem', fontWeight: 700, fontFamily: 'monospace' }}>{formatClock(seconds)}</span>
+}
+
+function CardioManualForm({ 
+  initialMins,
+  initialDist,
+  onSave, 
+  onCancel 
+}: { 
+  initialMins?: number,
+  initialDist?: number,
+  onSave: (mins: number, dist: number | null) => void, 
+  onCancel: () => void 
+}) {
+  const [mins, setMins] = useState<string>(initialMins ? String(initialMins) : '');
+  const [dist, setDist] = useState<string>(initialDist ? String(initialDist) : '');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = () => {
+    const m = Number(mins);
+    const d = dist ? Number(dist) : null;
+    
+    if (!mins || isNaN(m) || m < 1 || m > 1440) {
+      setError('Duration must be between 1 and 1440 minutes.');
+      return;
+    }
+    if (d !== null && (isNaN(d) || d < 0)) {
+      setError('Distance cannot be negative.');
+      return;
+    }
+    
+    setError(null);
+    onSave(m, d);
+  }
+
+  return (
+    <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', marginTop: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        <div>
+          <label style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>DURATION (MINUTES)</label>
+          <input 
+            type="number" 
+            value={mins} 
+            onChange={(e) => setMins(e.target.value)} 
+            placeholder="e.g. 30"
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px' }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>DISTANCE (KM, OPTIONAL)</label>
+          <input 
+            type="number" 
+            value={dist} 
+            onChange={(e) => setDist(e.target.value)} 
+            placeholder="e.g. 5.2"
+            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px' }}
+          />
+        </div>
+      </div>
+      
+      {error && <p style={{ color: '#ff4d4d', fontSize: '13px', margin: '0 0 16px 0' }}>{error}</p>}
+      
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <button className="primary-button" type="button" onClick={handleSave} style={{ flex: 1 }}>Save Cardio</button>
+        <button className="secondary-action" type="button" onClick={onCancel} style={{ flex: 1 }}>Cancel</button>
+      </div>
+    </div>
+  )
 }
 
 function formatPrevious({ previous_weight_kg: weight, previous_reps: reps }: ActiveExercise): string {
@@ -128,8 +223,6 @@ type SetNumberInputProps = {
   onChange: (value: number) => void
 }
 
-// A text field keeps "0" and "0." while typing, accepts a decimal comma, and cannot produce
-// the negative or fractional values the API rejects when the workout is saved.
 function SetNumberInput({ id, label, value, decimal = false, invalid = false, onChange }: SetNumberInputProps) {
   const [draft, setDraft] = useState<string | null>(null)
   return <input
@@ -221,7 +314,6 @@ function getSession(state: unknown): ActiveSession | null {
   return { ...parsed, setKinds: parsed.setKinds ?? {} } as ActiveSession
 }
 
-// Rests are long enough for a phone to lock. The browser drops the lock when the app is hidden.
 function useScreenAwake() {
   useEffect(() => {
     let lock: WakeLockSentinel | null = null
@@ -273,7 +365,6 @@ function ActiveWorkout() {
   const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
   const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
 
-  // Modale SelectExerciseModal
   const [isSelectModalOpen, setIsSelectModalOpen] = useState(false)
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null)
 
@@ -284,7 +375,6 @@ function ActiveWorkout() {
   const sessionRef = useRef(session)
   const restRef = useRef(restRemaining)
 
-  // History keeps route state, so without this a reload or Back would restart from the empty plan.
   useEffect(() => {
     if (location.state) navigate(location.pathname, { replace: true, state: null })
   }, [location.state, location.pathname, navigate])
@@ -329,7 +419,6 @@ function ActiveWorkout() {
   useEffect(() => {
     let lastTick = Date.now()
     const timer = window.setInterval(() => {
-      // Counted from the clock: a locked phone pauses this interval, but rest time keeps passing.
       const passed = Math.floor((Date.now() - lastTick) / 1000)
       if (passed < 1) return
       lastTick += passed * 1000
@@ -347,18 +436,27 @@ function ActiveWorkout() {
 
   useEffect(() => {
     session?.exercises.forEach((exercise) => {
-      if (exercise.images?.length || imageLookups.current.has(exercise.exercise_id)) return
+      if ((exercise.images?.length && exercise.is_cardio !== undefined) || imageLookups.current.has(exercise.exercise_id)) return
       imageLookups.current.add(exercise.exercise_id)
       fetchExerciseById(exercise.exercise_id)
         .catch(() => fetchExercises({ q: exercise.name, limit: 100 }).then((result: { items: Exercise[] }) =>
           result.items.find((item) => item.name.trim().toLowerCase() === exercise.name.trim().toLowerCase()) ?? null))
         .then((catalogExercise: Exercise | null) => {
           if (!catalogExercise) return
-          if (!catalogExercise.images?.length) return
+          
+          const isCardio = !!catalogExercise.category?.toLowerCase().includes('cardio');
+          
           setSession((current) => current ? ({
             ...current,
             exercises: current.exercises.map((item) => item.exercise_id === exercise.exercise_id
-              ? { ...item, images: catalogExercise.images }
+              ? { 
+                  ...item, 
+                  images: catalogExercise.images?.length ? catalogExercise.images : item.images,
+                  is_cardio: item.is_cardio !== undefined ? item.is_cardio : isCardio,
+                  sets: (item.is_cardio !== undefined ? item.is_cardio : isCardio) 
+                        ? item.sets.map(s => ({...s, cardio_status: s.cardio_status || (s.duration_seconds ? 'finished' : 'idle')}))
+                        : item.sets
+                }
               : item),
           }) : current)
         })
@@ -371,6 +469,8 @@ function ActiveWorkout() {
     if (!pending) return
     try {
       const selection = JSON.parse(pending) as Exercise & { replaceExerciseIndex?: number }
+      const isCardio = !!selection.category?.toLowerCase().includes('cardio')
+
       setSession((current) => {
         if (!current) return current
         const replacement = {
@@ -379,37 +479,49 @@ function ActiveWorkout() {
           images: selection.images,
           previous_weight_kg: null,
           previous_reps: null,
+          is_cardio: isCardio
         }
         if (selection.replaceExerciseIndex !== undefined && current.exercises[selection.replaceExerciseIndex]) {
           return {
             ...current,
             exercises: current.exercises.map((exercise, index) => index === selection.replaceExerciseIndex
-              ? { ...exercise, ...replacement }
+              ? { ...exercise, ...replacement, sets: isCardio ? [{ ...createSet(1), cardio_status: 'idle' }] : exercise.sets }
               : exercise),
           }
         }
-        return { ...current, exercises: [...current.exercises, { ...replacement, sets: [createSet(1)] }] }
+        return { 
+          ...current, 
+          exercises: [...current.exercises, { 
+            ...replacement, 
+            sets: isCardio ? [{ ...createSet(1), cardio_status: 'idle' }] : [createSet(1)] 
+          }] 
+        }
       })
     } finally {
       sessionStorage.removeItem('set_plate_pending_exercise')
     }
   }, [])
 
-  const totalSets = session?.exercises.reduce((total, exercise) => total + exercise.sets.length, 0) ?? 0
-  const completedSets = session?.exercises.reduce((total, exercise) => total + exercise.sets.filter((set) => set.is_completed).length, 0) ?? 0
+  const totalSets = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio ? 0 : exercise.sets.length), 0) ?? 0
+  const completedSets = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio ? 0 : exercise.sets.filter((set) => set.is_completed).length), 0) ?? 0
+  const totalCardio = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio ? 1 : 0), 0) ?? 0
+  const completedCardio = session?.exercises.reduce((total, exercise) => total + (exercise.is_cardio && exercise.sets[0]?.is_completed ? 1 : 0), 0) ?? 0
   const volumeKg = session?.exercises.reduce((total, exercise) => (
-    total + exercise.sets.reduce((sum, set) => sum + (set.is_completed ? set.weight_kg * set.reps : 0), 0)
+    total + (exercise.is_cardio ? 0 : exercise.sets.reduce((sum, set) => sum + (set.is_completed ? set.weight_kg * set.reps : 0), 0))
   ), 0) ?? 0
+  const isEditingWorkout = Boolean(session?.editWorkoutId)
 
   if (!session) return <div className="screen state-card" role="alert">No active workout selected.</div>
 
   function handleSelectExercise(selected: any) {
+    const isCardio = !!selected.category?.toLowerCase().includes('cardio');
     const replacement = {
       exercise_id: selected.id,
       name: selected.name,
       images: selected.images || [],
       previous_weight_kg: null,
       previous_reps: null,
+      is_cardio: isCardio
     }
 
     setSession((current) => {
@@ -417,12 +529,17 @@ function ActiveWorkout() {
       if (replaceIndex !== null && current.exercises[replaceIndex]) {
         return {
           ...current,
-          exercises: current.exercises.map((ex, idx) => idx === replaceIndex ? { ...ex, ...replacement } : ex),
+          exercises: current.exercises.map((ex, idx) => idx === replaceIndex 
+            ? { ...ex, ...replacement, sets: isCardio ? [{ ...createSet(1), cardio_status: 'idle' }] : ex.sets } 
+            : ex),
         }
       }
       return {
         ...current,
-        exercises: [...current.exercises, { ...replacement, sets: [createSet(1)] }],
+        exercises: [...current.exercises, { 
+          ...replacement, 
+          sets: isCardio ? [{ ...createSet(1), cardio_status: 'idle' }] : [createSet(1)] 
+        }],
       }
     })
     setIsSelectModalOpen(false)
@@ -446,6 +563,52 @@ function ActiveWorkout() {
     }) : current)
   }
 
+  // --- CARDIO HANDLERS ---
+  function startCardioTimer(exerciseIndex: number) {
+    updateSet(exerciseIndex, 0, { cardio_status: 'running', cardio_started_at: new Date().toISOString(), cardio_accumulated: 0 })
+  }
+
+  function pauseCardioTimer(exerciseIndex: number) {
+    const set = session?.exercises[exerciseIndex]?.sets[0];
+    if (!set || set.cardio_status !== 'running') return;
+    const passed = set.cardio_started_at ? Math.floor((Date.now() - Date.parse(set.cardio_started_at)) / 1000) : 0;
+    updateSet(exerciseIndex, 0, { 
+      cardio_status: 'paused', 
+      cardio_started_at: null, 
+      cardio_accumulated: (set.cardio_accumulated || 0) + passed 
+    });
+  }
+
+  function resumeCardioTimer(exerciseIndex: number) {
+    updateSet(exerciseIndex, 0, { cardio_status: 'running', cardio_started_at: new Date().toISOString() })
+  }
+
+  function finishCardioTimer(exerciseIndex: number) {
+    const set = session?.exercises[exerciseIndex]?.sets[0];
+    if (!set) return;
+    let finalSeconds = set.cardio_accumulated || 0;
+    if (set.cardio_status === 'running' && set.cardio_started_at) {
+      finalSeconds += Math.floor((Date.now() - Date.parse(set.cardio_started_at)) / 1000);
+    }
+    updateSet(exerciseIndex, 0, { 
+      cardio_status: 'finished', 
+      cardio_started_at: null, 
+      cardio_accumulated: finalSeconds,
+      duration_seconds: finalSeconds,
+      is_completed: true
+    });
+  }
+
+  function saveManualCardio(exerciseIndex: number, mins: number, dist: number | null) {
+    updateSet(exerciseIndex, 0, {
+      cardio_status: 'finished',
+      duration_seconds: mins * 60,
+      distance_km: dist,
+      is_completed: true
+    });
+  }
+
+  // --- STANDARD HANDLERS ---
   function addSet(exerciseIndex: number) {
     setSession((current) => current ? ({
       ...current,
@@ -628,8 +791,9 @@ function ActiveWorkout() {
       duration_seconds: elapsedSeconds(currentSession.startedAt),
       started_at: currentSession.startedAt,
       completed_at: new Date().toISOString(),
-      exercises: currentSession.exercises.map(({ exercise_id, sets }, exerciseIndex) => ({
+      exercises: currentSession.exercises.map(({ exercise_id, sets, is_cardio }, exerciseIndex) => ({
         exercise_id,
+        is_cardio,
         sets: sets.map((set) => ({
           ...set,
           rpe: rpeValues[`${exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null,
@@ -663,7 +827,7 @@ function ActiveWorkout() {
     }
     const completedAtRequest = completedSets
     const exercises = (Array.isArray(currentSession.exercises) ? currentSession.exercises : []).map((exercise, exerciseIndex) => {
-      const { exercise_id, name, previous_weight_kg, previous_reps, rest_enabled, rest_seconds, target_sets, target_reps, sets } = exercise
+      const { exercise_id, name, previous_weight_kg, previous_reps, rest_enabled, rest_seconds, target_sets, target_reps, sets, is_cardio } = exercise
       const previousWeight = nullableNumber(previous_weight_kg)
       const previousReps = nullableNumber(previous_reps)
       const rest = nullableNumber(rest_seconds, 1)
@@ -672,6 +836,7 @@ function ActiveWorkout() {
       return {
         exercise_id: exercise_id ? String(exercise_id) : '',
         name: typeof name === 'string' && name.trim() ? name : 'Exercise',
+        is_cardio: !!is_cardio,
         previous_weight_kg: previousWeight,
         previous_reps: previousReps === null ? null : Math.trunc(previousReps),
         rest_seconds: rest_enabled ? (rest === null ? DEFAULT_REST_SECONDS : Math.trunc(rest)) : null,
@@ -776,9 +941,8 @@ function ActiveWorkout() {
     navigate('/workouts')
   }
 
-  const isEditingWorkout = Boolean(session?.editWorkoutId)
   const volumeLabel = `${Math.round(volumeKg).toLocaleString()} kg`
-  const nextExerciseIndex = session.exercises.findIndex((exercise) => exercise.sets.some((set) => !set.is_completed))
+  const nextExerciseIndex = session.exercises.findIndex((exercise) => !exercise.is_cardio && exercise.sets.some((set) => !set.is_completed))
   const nextSetIndex = session.exercises[nextExerciseIndex]?.sets.findIndex((set) => !set.is_completed) ?? -1
   const runningRests = Object.entries(restRemaining).sort(([, first], [, second]) => first - second)
   const runningRestIndex = runningRests.length ? Number(runningRests[0][0]) : null
@@ -817,8 +981,9 @@ function ActiveWorkout() {
       <div className="active-exercise-list">
         {session.exercises.map((exercise, exerciseIndex) => {
           const doneSets = exercise.sets.filter((set) => set.is_completed).length
-          const isExerciseDone = exercise.sets.length > 0 && doneSets === exercise.sets.length
+          const isExerciseDone = exercise.is_cardio ? (exercise.sets[0]?.is_completed) : (exercise.sets.length > 0 && doneSets === exercise.sets.length)
           const restSeconds = exercise.rest_seconds ?? DEFAULT_REST_SECONDS
+          
           return <article className={`card exercise-card${isExerciseDone ? ' is-complete' : ''}`} key={`${exercise.exercise_id}-${exerciseIndex}`}>
             <button className="icon-button ghost exercise-menu-trigger" type="button" aria-label={`Exercise options for ${exercise.name}`} aria-expanded={menuOpen === exerciseIndex} onClick={() => setMenuOpen(menuOpen === exerciseIndex ? null : exerciseIndex)}>
               <MoreVertical size={19} aria-hidden="true" />
@@ -829,81 +994,196 @@ function ActiveWorkout() {
               <button className="replace-exercise-action" type="button" onClick={() => replaceExercise(exerciseIndex)}><Repeat2 size={15} aria-hidden="true" />Replace exercise</button>
               <button type="button" onClick={() => removeExercise(exerciseIndex)}><Trash2 size={15} aria-hidden="true" />Remove exercise</button>
             </div>}
+            
             <div className="exercise-card-header">
-              <ExerciseArtwork name={exercise.name} images={exercise.images} />
+              <ExerciseArtwork name={exercise.name} images={exercise.images} isCardio={exercise.is_cardio} />
               <div className="exercise-heading-copy">
-                <h2>{exercise.name}</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2>{exercise.name}</h2>
+                  {exercise.is_cardio && <span style={{ fontSize: '10px', fontWeight: 800, padding: '3px 6px', borderRadius: '4px', backgroundColor: 'rgba(34, 197, 94, 0.2)', color: '#4ade80', letterSpacing: '0.5px' }}>CARDIO</span>}
+                </div>
+                
                 <div className="exercise-meta">
-                  <span className="exercise-progress">{isExerciseDone && <Check size={13} aria-hidden="true" />}{doneSets}/{exercise.sets.length}</span>
-                  <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} aria-label={`Rest timer for ${exercise.name}`} onClick={() => toggleRest(exerciseIndex)}>
-                    <Clock3 size={14} aria-hidden="true" />
-                    {exercise.rest_enabled ? formatRest(restSeconds) : 'Rest off'}
-                  </button>
-                  {exercise.rest_enabled && <>
+                  {!exercise.is_cardio && (
+                    <span className="exercise-progress">{isExerciseDone && <Check size={13} aria-hidden="true" />}{doneSets}/{exercise.sets.length}</span>
+                  )}
+                  
+                  {!exercise.is_cardio && (
+                    <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} aria-label={`Rest timer for ${exercise.name}`} onClick={() => toggleRest(exerciseIndex)}>
+                      <Clock3 size={14} aria-hidden="true" />
+                      {exercise.rest_enabled ? formatRest(restSeconds) : 'Rest off'}
+                    </button>
+                  )}
+                  
+                  {exercise.rest_enabled && !exercise.is_cardio && <>
                     <button className="rest-step" type="button" aria-label={`Shorter rest for ${exercise.name}`} disabled={restSeconds <= REST_STEP_SECONDS} onClick={() => updateRestDuration(exerciseIndex, restSeconds - REST_STEP_SECONDS)}><Minus size={14} aria-hidden="true" /></button>
                     <button className="rest-step" type="button" aria-label={`Longer rest for ${exercise.name}`} onClick={() => updateRestDuration(exerciseIndex, restSeconds + REST_STEP_SECONDS)}><Plus size={14} aria-hidden="true" /></button>
                   </>}
                 </div>
               </div>
             </div>
-            <div className="set-table">
-              <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
-              {exercise.sets.map((set, setIndex) => {
-                const setKey = `${exerciseIndex}:${set.set_number}`
-                const kind = session.setKinds[setKey] ?? 'normal'
-                const hasHighWeightWarning = set.weight_kg > EXTREME_WEIGHT_WARNING_KG
-                const isNextSet = exerciseIndex === nextExerciseIndex && setIndex === nextSetIndex
-                return <div className="set-row-entry" key={set.set_number}>
-                  <SwipeToDeleteRow
-                    className="swipe-row--set"
-                    actionWidth={64}
-                    label={`set ${set.set_number} of ${exercise.name}`}
-                    disabled={pendingSetRemoval !== null}
-                    onDelete={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })}
-                  >
-                    <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}${isNextSet ? ' set-row-next' : ''}`}>
-                      <span className={`set-kind-cell set-kind-${kind}`}>
-                        {kind === 'normal' ? set.set_number : kind[0].toUpperCase()}
-                        <select className="set-kind-select" value={kind} onChange={(event) => {
-                          updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
-                        }} aria-label={`Set ${set.set_number} type`} title="Set type">
-                          <option value="normal">{set.set_number} — Normal set</option>
-                          <option value="warmup">W — Warm-up: prepare for heavier sets</option>
-                          <option value="drop">D — Drop set: lower weight, keep going</option>
-                          <option value="failure">F — Failure: no more good-form reps</option>
-                        </select>
-                      </span>
-                      <span className="previous-cell">{formatPrevious(exercise)}</span>
-                      <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />
-                      <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
-                        updateSet(exerciseIndex, setIndex, { reps })
-                        setMissingReps(null)
-                      }} />
-                      <select className="rpe-select" aria-label={`Set ${set.set_number} RPE`} value={rpeValues[setKey] ?? set.rpe ?? ''} onChange={(event) => {
-                        const rpe = Number(event.target.value)
-                        if (!rpe) {
-                          clearRpe(exerciseIndex, setIndex, set.set_number)
-                          return
+
+            {exercise.is_cardio ? (
+              <div className="cardio-container" style={{ padding: '0 12px 16px' }}>
+                {(() => {
+                  const set = exercise.sets[0] || createSet(1);
+                  let status = set.cardio_status || 'idle';
+                  
+                  if (isEditingWorkout && status === 'idle') {
+                     status = 'manual';
+                  }
+
+                  if (status === 'manual') {
+                    const initialMins = set.duration_seconds ? Math.round(set.duration_seconds / 60) : undefined;
+                    return <CardioManualForm 
+                      initialMins={initialMins}
+                      initialDist={set.distance_km || undefined}
+                      onSave={(m, d) => saveManualCardio(exerciseIndex, m, d)} 
+                      onCancel={() => {
+                        if (!isEditingWorkout) {
+                           updateSet(exerciseIndex, 0, { cardio_status: 'idle' })
                         }
-                        updateRpe(exerciseIndex, set.set_number, rpe)
-                        if (!set.is_completed) toggleSetComplete(exerciseIndex, setIndex, true)
-                      }}>
-                        <option value="">—</option>
-                        {Array.from({ length: 10 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
-                      </select>
-                      <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} strokeWidth={3} /></button>
+                      }} 
+                    />
+                  }
+
+                  if (status === 'finished') {
+                    return (
+                      <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', marginTop: '12px', display: 'flex', gap: '24px' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, marginBottom: '4px' }}>TIME</div>
+                          <div style={{ fontSize: '18px', fontWeight: 600 }}>{formatDuration(set.duration_seconds || 0)}</div>
+                        </div>
+                        {set.distance_km && (
+                          <div>
+                            <div style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, marginBottom: '4px' }}>DISTANCE</div>
+                            <div style={{ fontSize: '18px', fontWeight: 600 }}>{set.distance_km} km</div>
+                          </div>
+                        )}
+                        {set.distance_km && set.duration_seconds && (
+                          <div>
+                            <div style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, marginBottom: '4px' }}>PACE</div>
+                            <div style={{ fontSize: '18px', fontWeight: 600 }}>{formatPace(set.duration_seconds, set.distance_km)}</div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)', padding: '24px 16px', borderRadius: '16px', marginTop: '8px' }}>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+                        {status === 'idle' ? (
+                          <span style={{ fontSize: '3rem', fontWeight: 700, fontFamily: 'monospace' }}>00:00</span>
+                        ) : (
+                          <CardioTimerDisplay 
+                            startedAt={status === 'running' ? set.cardio_started_at! : null} 
+                            accumulated={set.cardio_accumulated || 0} 
+                          />
+                        )}
+                      </div>
+
+                      {(status === 'running' || status === 'paused') && (
+                        <div style={{ width: '100%', marginBottom: '24px', position: 'relative' }}>
+                          <input
+                            type="number"
+                            placeholder="Distance (km, optional)"
+                            value={set.distance_km || ''}
+                            onChange={e => updateSet(exerciseIndex, 0, { distance_km: e.target.value ? Number(e.target.value) : null })}
+                            style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px', textAlign: 'center' }}
+                          />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', width: '100%', gap: '12px' }}>
+                        {status === 'idle' && (
+                          <>
+                            <button className="primary-button" type="button" onClick={() => startCardioTimer(exerciseIndex)} style={{ flex: 1 }}>Start timer</button>
+                            <button className="secondary-action" type="button" onClick={() => updateSet(exerciseIndex, 0, { cardio_status: 'manual' })} style={{ flex: 1 }}>Enter manually</button>
+                          </>
+                        )}
+                        {status === 'running' && (
+                          <>
+                            <button className="secondary-action" type="button" onClick={() => pauseCardioTimer(exerciseIndex)} style={{ flex: 1 }}><Pause size={18} style={{marginRight: '6px'}}/> Pause</button>
+                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)} style={{ flex: 1 }}>Finish block</button>
+                          </>
+                        )}
+                        {status === 'paused' && (
+                          <>
+                            <button className="secondary-action" type="button" onClick={() => resumeCardioTimer(exerciseIndex)} style={{ flex: 1 }}><Play size={18} style={{marginRight: '6px'}}/> Resume</button>
+                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)} style={{ flex: 1 }}>Finish block</button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </SwipeToDeleteRow>
-                  {missingReps === setKey && <p className="set-row-hint" role="status">Enter your reps to complete this set.</p>}
-                  {hasHighWeightWarning && <p className="high-weight-warning" role="status">⚠ This weight is extremely high. Check that you entered it correctly.</p>}
-                </div>
-              })}
-            </div>
+                  )
+                })()}
+              </div>
+            ) : (
+              <div className="set-table">
+                <div className="set-row set-heading" aria-hidden="true"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span>RPE</span><span /></div>
+                {exercise.sets.map((set, setIndex) => {
+                  const setKey = `${exerciseIndex}:${set.set_number}`
+                  const kind = session.setKinds[setKey] ?? 'normal'
+                  const hasHighWeightWarning = set.weight_kg > EXTREME_WEIGHT_WARNING_KG
+                  const isNextSet = exerciseIndex === nextExerciseIndex && setIndex === nextSetIndex
+                  return <div className="set-row-entry" key={set.set_number}>
+                    <SwipeToDeleteRow
+                      className="swipe-row--set"
+                      actionWidth={64}
+                      label={`set ${set.set_number} of ${exercise.name}`}
+                      disabled={pendingSetRemoval !== null}
+                      onDelete={() => scheduleSetRemoval({ exerciseIndex, setIndex, setNumber: set.set_number, key: setKey, set: { ...set }, kind: session.setKinds[setKey], rpe: rpeValues[setKey], removed: false })}
+                    >
+                      <div className={`set-row${set.is_completed ? ' set-row-complete' : ''}${isNextSet ? ' set-row-next' : ''}`}>
+                        <span className={`set-kind-cell set-kind-${kind}`}>
+                          {kind === 'normal' ? set.set_number : kind[0].toUpperCase()}
+                          <select className="set-kind-select" value={kind} onChange={(event) => {
+                            updateSetKind(exerciseIndex, set.set_number, event.target.value as SetKind)
+                          }} aria-label={`Set ${set.set_number} type`} title="Set type">
+                            <option value="normal">{set.set_number} — Normal set</option>
+                            <option value="warmup">W — Warm-up: prepare for heavier sets</option>
+                            <option value="drop">D — Drop set: lower weight, keep going</option>
+                            <option value="failure">F — Failure: no more good-form reps</option>
+                          </select>
+                        </span>
+                        <span className="previous-cell">{formatPrevious(exercise)}</span>
+                        <SetNumberInput label={`${exercise.name} set ${set.set_number} weight`} decimal value={set.weight_kg} onChange={(weight_kg) => updateSet(exerciseIndex, setIndex, { weight_kg })} />
+                        <SetNumberInput id={repsInputId(exerciseIndex, set.set_number)} label={`${exercise.name} set ${set.set_number} reps`} value={set.reps} invalid={missingReps === setKey} onChange={(reps) => {
+                          updateSet(exerciseIndex, setIndex, { reps })
+                          setMissingReps(null)
+                        }} />
+                        <select className="rpe-select" aria-label={`Set ${set.set_number} RPE`} value={rpeValues[setKey] ?? set.rpe ?? ''} onChange={(event) => {
+                          const rpe = Number(event.target.value)
+                          if (!rpe) {
+                            clearRpe(exerciseIndex, setIndex, set.set_number)
+                            return
+                          }
+                          updateRpe(exerciseIndex, set.set_number, rpe)
+                          if (!set.is_completed) toggleSetComplete(exerciseIndex, setIndex, true)
+                        }}>
+                          <option value="">—</option>
+                          {Array.from({ length: 10 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+                        </select>
+                        <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} strokeWidth={3} /></button>
+                      </div>
+                    </SwipeToDeleteRow>
+                    {missingReps === setKey && <p className="set-row-hint" role="status">Enter your reps to complete this set.</p>}
+                    {hasHighWeightWarning && <p className="high-weight-warning" role="status">⚠ This weight is extremely high. Check that you entered it correctly.</p>}
+                  </div>
+                })}
+              </div>
+            )}
+            
             {pendingSetRemoval?.exerciseIndex === exerciseIndex && <div className="set-removal-undo" role="status">
               <span>Set {pendingSetRemoval.setNumber} deleted</span>
               <button type="button" onClick={undoSetRemoval}>Undo</button>
             </div>}
-            <button className="secondary-action" type="button" onClick={() => addSet(exerciseIndex)}><Plus size={16} /> Add Set</button>
+            
+            {!exercise.is_cardio && (
+              <button className="secondary-action" type="button" onClick={() => addSet(exerciseIndex)}><Plus size={16} /> Add Set</button>
+            )}
           </article>
         })}
       </div>
@@ -945,22 +1225,22 @@ function ActiveWorkout() {
             {aiAdjustment.status === 'ready' && (aiAdjustment.suggestions.length === 0
               ? <div className="ai-adjust-feedback"><p className="ai-adjust-result-none" role="status">No modifications suggested. Your current plan looks on track for the rest of the session.</p></div>
               : <div className="ai-adjust-result">
-                  <ul>
-                    {aiAdjustment.suggestions.map((suggestion, index) => {
-                      const isApplied = aiAdjustment.applied.includes(index)
-                      const exerciseName = session.exercises.find((exercise) => exercise.exercise_id === suggestion.exercise_id)?.name
-                      return <li key={`${suggestion.exercise_id}:${suggestion.action}`} className={isApplied ? 'is-applied' : undefined}>
-                        <span>{exerciseName ?? 'Exercise'}</span>
-                        <p><strong>{describeAdjustment(suggestion)}.</strong> {suggestion.reason}</p>
-                        {isApplied
-                          ? <p className="ai-adjust-applied">Applied</p>
-                          : <button className="ai-adjust-accept" type="button" onClick={() => applyOneAdjustment(index)}>Accept</button>}
-                      </li>
-                    })}
-                  </ul>
-                  {aiAdjustment.applied.length < aiAdjustment.suggestions.length
-                    && <button className="ai-adjust-accept-all" type="button" onClick={applyAllAdjustments}>Accept all suggestions</button>}
-                </div>)}
+                <ul>
+                  {aiAdjustment.suggestions.map((suggestion, index) => {
+                    const isApplied = aiAdjustment.applied.includes(index)
+                    const exerciseName = session.exercises.find((exercise) => exercise.exercise_id === suggestion.exercise_id)?.name
+                    return <li key={`${suggestion.exercise_id}:${suggestion.action}`} className={isApplied ? 'is-applied' : undefined}>
+                      <span>{exerciseName ?? 'Exercise'}</span>
+                      <p><strong>{describeAdjustment(suggestion)}.</strong> {suggestion.reason}</p>
+                      {isApplied
+                        ? <p className="ai-adjust-applied">Applied</p>
+                        : <button className="ai-adjust-accept" type="button" onClick={() => applyOneAdjustment(index)}>Accept</button>}
+                    </li>
+                  })}
+                </ul>
+                {aiAdjustment.applied.length < aiAdjustment.suggestions.length
+                  && <button className="ai-adjust-accept-all" type="button" onClick={applyAllAdjustments}>Accept all suggestions</button>}
+              </div>)}
             {aiAdjustment.status === 'error' && <div className="ai-adjust-feedback">
               <p className="ai-adjust-error" role="alert">{aiAdjustment.message}</p>
               <button className="secondary-action" type="button" onClick={requestAiAdjustment}>Try again</button>
@@ -984,7 +1264,7 @@ function ActiveWorkout() {
             <h2 id="finish-title">{session?.editWorkoutId ? 'Save workout changes?' : 'Finish workout?'}</h2>
             {isEditingWorkout
               ? <p>Your original date and duration will be kept. Changes are saved to this workout only when confirmed.</p>
-              : <p>{completedSets ? `${completedSets} of ${totalSets} sets done, ${volumeLabel}` : 'No sets completed yet. Complete at least one to save'} · <ElapsedTime startedAt={session.startedAt} format={formatDuration} /></p>}
+              : <p>{(completedSets || completedCardio) ? `${completedSets} of ${totalSets} strength sets, ${completedCardio} cardio blocks done.` : 'No sets completed yet. Complete at least one to save.'} · <ElapsedTime startedAt={session.startedAt} format={formatDuration} /></p>}
             <div className="workout-name-field">
               <label htmlFor="completed-workout-name">Workout name (e.g. Best chest day)</label>
               <input
@@ -1001,7 +1281,7 @@ function ActiveWorkout() {
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>Keep training</button>
               <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? 'Tap again to discard' : session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0)}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'SAVING...' : session?.editWorkoutId ? 'SAVE CHANGES' : 'SAVE WORKOUT'}</button>
             </div>
           </div>
         </div>
@@ -1024,4 +1304,4 @@ function ActiveWorkout() {
   )
 }
 
-export default ActiveWorkout;
+export default ActiveWorkout;;

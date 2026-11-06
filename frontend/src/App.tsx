@@ -13,6 +13,7 @@ const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Premium = lazy(() => import('./pages/Premium'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Faq = lazy(() => import('./pages/Faq')) // <-- Ajout de l'import FAQ
 const Welcome = lazy(() => import('./pages/Welcome'))
 const Workouts = lazy(() => import('./pages/Workouts'))
 const WorkoutStatistics = lazy(() => import('./pages/WorkoutStatistics'))
@@ -40,6 +41,7 @@ function App() {
             <Route path="/nutrition" element={<Nutrition />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/faq" element={<Faq />} /> {/* <-- Ajout de la route FAQ */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -48,4 +50,4 @@ function App() {
   )
 }
 
-export default App;
+export default App;;

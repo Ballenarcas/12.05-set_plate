@@ -44,7 +44,10 @@ def trainer_insight(
 
 
 @router.post("/parse-intent", response_model=ParseNaturalLanguageResponse)
-def parse_natural_language(request: ParseNaturalLanguageRequest) -> ParseNaturalLanguageResponse:
+def parse_natural_language(
+    request: ParseNaturalLanguageRequest,
+    user_id: UUID = Depends(current_user),
+) -> ParseNaturalLanguageResponse:
     """Fuzzy matches natural language user input against database exercises, routines, foods, and meals."""
     return ai_facade.parse_intent(
         text=request.text,

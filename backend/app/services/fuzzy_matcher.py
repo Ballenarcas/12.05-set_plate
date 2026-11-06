@@ -1,6 +1,6 @@
 import re
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, NamedTuple
 
 from app.schemas.ai import EntityType, MatchedEntity, ParseNaturalLanguageResponse
 
@@ -14,19 +14,45 @@ def normalize_text(text: str) -> str:
 STOP_WORDS = {"and", "or", "of", "for", "with", "in", "to", "a", "an", "the", "my", "some", "i", "want", "do"}
 
 
+# Matching compares every word group with every catalog name, so its cost grows with the text.
+MAX_MATCH_TEXT_LENGTH = 300
+
+
+class PreparedText(NamedTuple):
+    text: str
+    words: list[str]
+    sorted_text: str
+
+
+def prepare_text(text: str) -> PreparedText:
+    normalized = normalize_text(text)
+    words = normalized.split()
+    return PreparedText(normalized, words, " ".join(sorted(words)))
+
+
+def _ratio(first: str, second: str, floor: float) -> float:
+    """SequenceMatcher ratio, or 0.0 as soon as it provably cannot reach floor."""
+    if 2 * min(len(first), len(second)) / (len(first) + len(second)) < floor:
+        return 0.0
+    matcher = SequenceMatcher(None, first, second)
+    return matcher.ratio() if matcher.quick_ratio() >= floor else 0.0
+
+
 def calculate_similarity(candidate: str, target: str) -> float:
     """Calculate fuzzy similarity between a candidate text and a target entity name."""
-    cand = normalize_text(candidate)
-    tgt = normalize_text(target)
+    return _similarity(prepare_text(candidate), prepare_text(target))
+
+
+def _similarity(candidate: PreparedText, target: PreparedText, floor: float = 0.0) -> float:
+    """Score two prepared texts. A score below floor may be returned as 0.0."""
+    cand, cand_words, cand_sorted = candidate
+    tgt, tgt_words, tgt_sorted = target
 
     if not cand or not tgt:
         return 0.0
 
     if cand == tgt:
         return 1.0
-
-    cand_words = cand.split()
-    tgt_words = tgt.split()
 
     # Avoid matching a multi-word phrase to a single-word target (e.g. "pres and" -> "pescado")
     if len(cand_words) > 1 and len(tgt_words) == 1:
@@ -42,15 +68,10 @@ def calculate_similarity(candidate: str, target: str) -> float:
     if len(cand_words) == 1 and len(tgt_words) == 1:
         if abs(len(cand) - len(tgt)) > 3:
             return 0.0
-        return SequenceMatcher(None, cand, tgt).ratio()
+        return _ratio(cand, tgt, floor)
 
     # Multi-word comparisons: direct and token sort ratio
-    direct_ratio = SequenceMatcher(None, cand, tgt).ratio()
-    cand_sorted = " ".join(sorted(cand_words))
-    tgt_sorted = " ".join(sorted(tgt_words))
-    token_ratio = SequenceMatcher(None, cand_sorted, tgt_sorted).ratio()
-
-    return max(direct_ratio, token_ratio)
+    return max(_ratio(cand, tgt, floor), _ratio(cand_sorted, tgt_sorted, floor))
 
 
 
@@ -68,6 +89,7 @@ class CatalogItem:
         self.category = category
         self.aliases = aliases or []
         self.metadata = metadata or {}
+        self.prepared_terms = [(term, prepare_text(term)) for term in self.all_search_terms]
 
     @property
     def all_search_terms(self) -> list[str]:
@@ -392,23 +414,25 @@ class FuzzyEntityMatcher:
         limit_per_category: int = 5,
     ) -> ParseNaturalLanguageResponse:
         """Extract recognized database objects from conversational text."""
-        ngrams = self._extract_ngrams(text)
+        scanned_text = text[:MAX_MATCH_TEXT_LENGTH]
+        prepared_text = prepare_text(scanned_text)
+        ngrams = [(ngram, prepare_text(ngram)) for ngram in dict.fromkeys(self._extract_ngrams(scanned_text))]
         matches_by_id: dict[str, tuple[CatalogItem, float, str]] = {}
 
         for item in self.catalog:
             best_score = 0.0
             best_term = ""
 
-            for term in item.all_search_terms:
+            for term, prepared_term in item.prepared_terms:
                 # Direct check on entire input text first
-                full_sim = calculate_similarity(text, term)
+                full_sim = _similarity(prepared_text, prepared_term, max(best_score, threshold))
                 if full_sim > best_score:
                     best_score = full_sim
                     best_term = term
 
                 # N-gram checking for phrases within longer sentences
-                for ngram in ngrams:
-                    score = calculate_similarity(ngram, term)
+                for ngram, prepared_ngram in ngrams:
+                    score = _similarity(prepared_ngram, prepared_term, max(best_score, threshold))
                     if score > best_score:
                         best_score = score
                         best_term = ngram

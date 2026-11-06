@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from uuid import uuid4
 
 from app.schemas.ai import EntityType
-from app.services.fuzzy_matcher import FuzzyEntityMatcher, calculate_similarity, normalize_text
+from app.services.fuzzy_matcher import MAX_MATCH_TEXT_LENGTH, FuzzyEntityMatcher, calculate_similarity, normalize_text
 from main import app
 from tests.auth_helpers import auth_headers
 
@@ -67,6 +67,7 @@ def test_parse_intent_api_endpoint():
     response = client.post(
         "/api/v1/ai/parse-intent",
         json={"text": "Add 3 sets of bench press and 1 scoop of whey protein"},
+        headers=auth_headers(uuid4()),
     )
     assert response.status_code == 200
     data = response.json()
@@ -74,6 +75,18 @@ def test_parse_intent_api_endpoint():
     assert "foods" in data
     assert any(e["id"] == "ex_bench_press" for e in data["exercises"])
     assert any(f["id"] == "food_whey_protein" for f in data["foods"])
+
+
+def test_parse_intent_requires_login():
+    response = client.post("/api/v1/ai/parse-intent", json={"text": "bench press"})
+    assert response.status_code == 401
+
+
+def test_match_scans_only_the_start_of_long_text():
+    matcher = FuzzyEntityMatcher()
+    filler = "x" * MAX_MATCH_TEXT_LENGTH
+    assert matcher.match("bench press " + filler).exercises
+    assert not matcher.match(filler + " bench press").exercises
 
 
 def test_conversational_setup_api_endpoint():

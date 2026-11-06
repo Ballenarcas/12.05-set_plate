@@ -99,14 +99,14 @@ def test_password_hash_is_never_returned_to_the_client():
     assert _inserted_record(supabase)["password"] not in body
 
 
-def test_omitted_password_writes_no_password_column():
+def test_sign_up_without_a_password_is_rejected():
     payload = {k: v for k, v in PAYLOAD.items() if k != "password"}
     supabase = _mock_supabase()
     with patch("app.facades.onboarding_facade.get_supabase", return_value=supabase):
         response = client.post("/api/v1/users/onboarding", json=payload)
 
-    assert response.status_code == 200
-    assert "password" not in _inserted_record(supabase)
+    assert response.status_code == 422
+    supabase.table.return_value.insert.assert_not_called()
 
 
 def test_short_password_is_rejected_by_schema():

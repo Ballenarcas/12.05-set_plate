@@ -88,6 +88,21 @@ def test_login_user_rejects_incorrect_password(monkeypatch) -> None:
     assert response.status_code == 401
 
 
+def test_login_rejects_the_fake_hash_phrase_on_an_account_without_a_password(monkeypatch) -> None:
+    monkeypatch.setattr(
+        users.onboarding_facade,
+        "supabase_provider",
+        lambda admin: FakeSupabase([{"id": "11111111-1111-1111-1111-111111111111", "email": "user@example.com", "password": None}]),
+    )
+
+    response = client.post(
+        "/api/v1/users/login",
+        json={"email": "user@example.com", "password": "set-and-plate-timing-equalizer"},
+    )
+
+    assert response.status_code == 401
+
+
 def test_login_user_rejects_unknown_email(monkeypatch) -> None:
     monkeypatch.setattr(users.onboarding_facade, "supabase_provider", lambda admin: FakeSupabase([]))
 

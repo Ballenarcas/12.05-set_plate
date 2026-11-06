@@ -59,7 +59,7 @@ class MatchedEntity(BaseModel):
 
 class ParseNaturalLanguageRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
-    threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    threshold: float = Field(default=0.65, ge=0.5, le=1.0)
     limit_per_category: int = Field(default=5, ge=1, le=20)
 
 

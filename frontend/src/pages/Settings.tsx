@@ -6,6 +6,7 @@ import {
   Flame,
   Footprints,
   HeartPulse,
+  HelpCircle,
   Loader2,
   LogOut,
   RefreshCw,
@@ -363,6 +364,32 @@ function Settings() {
           cursor: pointer;
           transition: all 0.2s ease;
         }
+        .logout-btn:hover {
+          background-color: rgba(239, 68, 68, 0.1);
+        }
+        
+        .faq-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          width: 100%;
+          margin-top: 2rem;
+          background-color: transparent;
+          color: #D4D4D8;
+          border: 1px solid #3F3F46;
+          padding: 1rem;
+          border-radius: 12px;
+          font-weight: 600;
+          font-size: 1.05rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .faq-btn:hover {
+          background-color: rgba(255, 255, 255, 0.05);
+          border-color: #52525B;
+        }
+
         .subscription-title {
           margin: 0 0 0.25rem;
           color: #FFFFFF;
@@ -386,9 +413,7 @@ function Settings() {
           font-size: 0.9rem;
           line-height: 1.5;
         }
-        .logout-btn:hover {
-          background-color: rgba(239, 68, 68, 0.1);
-        }
+        
         .avatar-container {
           display: flex;
           align-items: center;
@@ -700,6 +725,11 @@ function Settings() {
             </button>
           </form>
 
+          <button onClick={() => navigate('/faq')} className="faq-btn">
+            <HelpCircle size={20} />
+            FAQ &amp; Support
+          </button>
+
         </div>
 
         {isPremiumActive(user) && (
@@ -928,4 +958,4 @@ function Settings() {
   )
 }
 
-export default Settings
+export default Settings;

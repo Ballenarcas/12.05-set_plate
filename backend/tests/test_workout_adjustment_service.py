@@ -471,7 +471,7 @@ async def test_live_adjustment_strips_values_from_actions_that_take_none(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_groq_request_uses_example_model_and_unwraps_suggestion_array(monkeypatch):
+async def test_ai_request_uses_example_model_and_unwraps_suggestion_array(monkeypatch):
     calls = {}
 
     class FakeCompletions:
@@ -482,16 +482,17 @@ async def test_groq_request_uses_example_model_and_unwraps_suggestion_array(monk
             ))])
 
     class FakeClient:
-        def __init__(self, api_key):
+        def __init__(self, api_key, base_url):
             calls["api_key"] = api_key
+            calls["base_url"] = base_url
             self.chat = SimpleNamespace(completions=FakeCompletions())
 
         async def close(self):
             calls["closed"] = True
 
-    monkeypatch.setattr(service, "AsyncGroq", FakeClient)
+    monkeypatch.setattr(service, "AsyncOpenAI", FakeClient)
     monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(
-        groq_api_key="test-key", groq_model="llama-3.3-70b-versatile",
+        ai_api_key="test-key", ai_model="llama-3.3-70b-versatile", ai_base_url="https://example.test/v1",
     ))
 
     result = await service._request_json("context", {
@@ -500,6 +501,7 @@ async def test_groq_request_uses_example_model_and_unwraps_suggestion_array(monk
 
     assert result == [{"action": "drop_set", "exercise_id": "ex-1", "reason": "High RPE."}]
     assert calls["api_key"] == "test-key"
+    assert calls["base_url"] == "https://example.test/v1"
     assert calls["model"] == "llama-3.3-70b-versatile"
     assert calls["response_format"] == {"type": "json_object"}
     assert calls["closed"] is True

@@ -61,7 +61,7 @@ jobs:
       SUPABASE_URL: ""
       SUPABASE_KEY: ""
       SUPABASE_SERVICE_ROLE_KEY: ""
-      GROQ_API_KEY: ""
+      AI_API_KEY: ""
       AUTH_SECRET_KEY: ""
     steps:
       - name: Checkout repository

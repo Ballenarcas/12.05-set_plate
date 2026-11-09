@@ -24,7 +24,7 @@ def test_conversational_facade_offline_fallback(monkeypatch):
         def match(self, message):
             return matched
 
-    monkeypatch.setattr(ai_module, "get_settings", lambda: SimpleNamespace(groq_api_key=None))
+    monkeypatch.setattr(ai_module, "get_settings", lambda: SimpleNamespace(ai_api_key=None))
     reply, intent, entities = ai_module.AIFacade(matcher=Matcher()).conversational_setup("hello")
     assert "No database entities recognized" in reply
     assert intent == "general"

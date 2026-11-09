@@ -34,9 +34,11 @@ services:
       AUTH_TOKEN_TTL_HOURS: ${AUTH_TOKEN_TTL_HOURS:-12}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
-      GROQ_TIPS_MODEL: ${GROQ_TIPS_MODEL:-openai/gpt-oss-120b}
+      # Any OpenAI-compatible API. The GROQ_* values still work when the AI_* ones are not set.
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.groq.com/openai/v1}
+      AI_API_KEY: ${AI_API_KEY:-${GROQ_API_KEY:-}}
+      AI_MODEL: ${AI_MODEL:-${GROQ_MODEL:-openai/gpt-oss-20b}}
+      AI_TIPS_MODEL: ${AI_TIPS_MODEL:-${GROQ_TIPS_MODEL:-openai/gpt-oss-120b}}
       AI_TIPS_MODEL_ENABLED: ${AI_TIPS_MODEL_ENABLED:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}

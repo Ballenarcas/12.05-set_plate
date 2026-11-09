@@ -65,7 +65,7 @@ def purchase_premium_db(user_id: str, plan: PremiumPlan) -> PremiumPurchaseRespo
             .execute()
         )
     except Exception as err:
-        raise RuntimeError("Could not read the user profile from the database") from err
+        raise RuntimeError("Could not read your profile. Please try again.") from err
 
     if not user_result.data:
         raise LookupError("User profile was not found")
@@ -80,11 +80,7 @@ def purchase_premium_db(user_id: str, plan: PremiumPlan) -> PremiumPurchaseRespo
         )
     except Exception as err:
         logger.exception("Could not read the subscription table")
-        raise RuntimeError(
-            "Could not read the subscription from the database. The backend role needs access to "
-            "the subscriptions table; run backend/app/db/migrations/grant_subscriptions_access.sql "
-            "in the Supabase SQL editor."
-        ) from err
+        raise RuntimeError("Could not read your subscription. Please try again.") from err
 
     existing = subscription_result.data[0] if subscription_result.data else None
     current_end = _parse_timestamp(existing.get("current_period_end")) if existing else None
@@ -124,10 +120,7 @@ def purchase_premium_db(user_id: str, plan: PremiumPlan) -> PremiumPurchaseRespo
         client.table(USERS_TABLE_NAME).update({"is_premium": True}).eq("id", user_id).execute()
     except Exception as err:
         logger.exception("Could not persist the premium subscription")
-        raise RuntimeError(
-            "Could not activate premium. The backend role needs write access to the subscriptions "
-            "table; run backend/app/db/migrations/grant_subscriptions_access.sql in the Supabase SQL editor."
-        ) from err
+        raise RuntimeError("Could not activate premium. Please try again.") from err
 
     return PremiumPurchaseResponse(
         status="success",
@@ -171,7 +164,7 @@ def cancel_premium_db(user_id: str) -> PremiumCancelResponse:
         )
     except Exception as err:
         logger.exception("Could not read the subscription table")
-        raise RuntimeError("Could not read the subscription from the database") from err
+        raise RuntimeError("Could not read your subscription. Please try again.") from err
 
     existing = result.data[0] if result.data else None
     period_end = _parse_timestamp(existing.get("current_period_end")) if existing else None

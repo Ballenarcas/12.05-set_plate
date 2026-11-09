@@ -258,6 +258,10 @@ function Profile() {
             <span className="settings-label">Email</span>
             <span className="profile-email">{user?.email || '–'}</span>
           </div>
+          <button type="button" onClick={() => navigate('/faq')} className="profile-row-button">
+            <span className="settings-label">FAQ & support</span>
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
           <button type="button" onClick={() => setIsLogoutOpen(true)} className="profile-row-button is-danger">
             <LogOut size={17} aria-hidden="true" />
             Log out

@@ -1,102 +1,622 @@
 {
-  "version": 1,
-  "notes": "Vetted strength-training staples. Only exercises from this list may be used when the AI builds a workout from scratch. wger_id refers to backend/app/data/exercises_catalog.json.",
-  "exercises": [
-    { "wger_id": 1801, "name": "Barbell Full Squat", "movement": "squat", "tier": "A", "compound": true },
-    { "wger_id": 257, "name": "Front Squats", "movement": "squat", "tier": "A", "compound": true },
-    { "wger_id": 371, "name": "Leg Press", "movement": "squat", "tier": "A", "compound": true },
-    { "wger_id": 1414, "name": "Hack Squats", "movement": "squat", "tier": "B", "compound": true },
-    { "wger_id": 203, "name": "Dumbbell Goblet Squat", "movement": "squat", "tier": "A", "compound": true },
-    { "wger_id": 615, "name": "Squats", "movement": "squat", "tier": "B", "compound": true },
-
-    { "wger_id": 184, "name": "Deadlifts", "movement": "hinge", "tier": "A", "compound": true },
-    { "wger_id": 507, "name": "Romanian Deadlift", "movement": "hinge", "tier": "A", "compound": true },
-    { "wger_id": 630, "name": "Sumo Deadlift", "movement": "hinge", "tier": "A", "compound": true },
-    { "wger_id": 1652, "name": "Dumbbell Romanian Deadlift", "movement": "hinge", "tier": "B", "compound": true },
-    { "wger_id": 1003, "name": "Kettlebell deadlifts", "movement": "hinge", "tier": "B", "compound": true },
-    { "wger_id": 1392, "name": "Good Morning", "movement": "hinge", "tier": "B", "compound": true },
-
-    { "wger_id": 802, "name": "Barbell Lunges Walking", "movement": "lunge", "tier": "A", "compound": true },
-    { "wger_id": 206, "name": "Dumbbell Lunges Walking", "movement": "lunge", "tier": "A", "compound": true },
-    { "wger_id": 1366, "name": "Dumbbell Split Squat", "movement": "lunge", "tier": "A", "compound": true },
-    { "wger_id": 999, "name": "Reverse lunges", "movement": "lunge", "tier": "B", "compound": true },
-    { "wger_id": 1706, "name": "Bulgarian Squat with Dumbbells", "movement": "lunge", "tier": "A", "compound": true },
-
-    { "wger_id": 73, "name": "Bench Press", "movement": "horizontal_push", "tier": "A", "compound": true },
-    { "wger_id": 538, "name": "Incline Bench Press - Barbell", "movement": "horizontal_push", "tier": "A", "compound": true },
-    { "wger_id": 537, "name": "Incline Bench Press - Dumbbell", "movement": "horizontal_push", "tier": "A", "compound": true },
-    { "wger_id": 1551, "name": "Push-Up", "movement": "horizontal_push", "tier": "A", "compound": true },
-    { "wger_id": 194, "name": "Dips", "movement": "horizontal_push", "tier": "A", "compound": true },
-    { "wger_id": 2627, "name": "Machine Chest Press", "movement": "horizontal_push", "tier": "B", "compound": true },
-
-    { "wger_id": 566, "name": "Shoulder Press, Barbell", "movement": "vertical_push", "tier": "A", "compound": true },
-    { "wger_id": 567, "name": "Shoulder Press, Dumbbells", "movement": "vertical_push", "tier": "A", "compound": true },
-    { "wger_id": 543, "name": "Shoulder Press, on Machine", "movement": "vertical_push", "tier": "B", "compound": true },
-
-    { "wger_id": 83, "name": "Bent Over Rowing", "movement": "horizontal_pull", "tier": "A", "compound": true },
-    { "wger_id": 1698, "name": "Barbell Row (Overhand)", "movement": "horizontal_pull", "tier": "A", "compound": true },
-    { "wger_id": 2642, "name": "One-Arm Dumbbell Row", "movement": "horizontal_pull", "tier": "A", "compound": true },
-    { "wger_id": 1117, "name": "Seated Cable Row", "movement": "horizontal_pull", "tier": "A", "compound": true },
-    { "wger_id": 919, "name": "T-Bar row", "movement": "horizontal_pull", "tier": "B", "compound": true },
-    { "wger_id": 1198, "name": "Inverted Rows", "movement": "horizontal_pull", "tier": "B", "compound": true },
-
-    { "wger_id": 475, "name": "Pull-ups", "movement": "vertical_pull", "tier": "A", "compound": true },
-    { "wger_id": 152, "name": "Chin Up", "movement": "vertical_pull", "tier": "A", "compound": true },
-    { "wger_id": 723, "name": "Wide-grip Pulldown", "movement": "vertical_pull", "tier": "A", "compound": true },
-    { "wger_id": 1510, "name": "Neutral Grip Lat Pulldown", "movement": "vertical_pull", "tier": "A", "compound": true },
-    { "wger_id": 2631, "name": "Machine Lat Pulldown", "movement": "vertical_pull", "tier": "B", "compound": true },
-
-    { "wger_id": 238, "name": "Fly With Dumbbells", "movement": "chest_fly", "tier": "B", "compound": false },
-    { "wger_id": 1904, "name": "Pec Deck", "movement": "chest_fly", "tier": "B", "compound": false },
-    { "wger_id": 308, "name": "Incline Dumbbell Fly", "movement": "chest_fly", "tier": "B", "compound": false },
-
-    { "wger_id": 348, "name": "Lateral Raises", "movement": "lateral_raise", "tier": "A", "compound": false },
-    { "wger_id": 2658, "name": "Dumbbell Lateral Raise", "movement": "lateral_raise", "tier": "A", "compound": false },
-    { "wger_id": 1882, "name": "High-Cable Lateral Raise", "movement": "lateral_raise", "tier": "B", "compound": false },
-    { "wger_id": 1654, "name": "Machine Lateral Raise", "movement": "lateral_raise", "tier": "B", "compound": false },
-
-    { "wger_id": 487, "name": "Rear Delt Raises", "movement": "rear_delt", "tier": "B", "compound": false },
-    { "wger_id": 822, "name": "Cable Rear Delt Fly", "movement": "rear_delt", "tier": "B", "compound": false },
-    { "wger_id": 2643, "name": "Dumbbell Bent-Over Reverse Fly", "movement": "rear_delt", "tier": "B", "compound": false },
-
-    { "wger_id": 91, "name": "Biceps Curls With Barbell", "movement": "biceps", "tier": "B", "compound": false },
-    { "wger_id": 92, "name": "Biceps Curls With Dumbbell", "movement": "biceps", "tier": "B", "compound": false },
-    { "wger_id": 272, "name": "Hammer Curls", "movement": "biceps", "tier": "B", "compound": false },
-    { "wger_id": 1531, "name": "Cable Curls", "movement": "biceps", "tier": "B", "compound": false },
-    { "wger_id": 465, "name": "Preacher Curls", "movement": "biceps", "tier": "B", "compound": false },
-    { "wger_id": 204, "name": "Dumbbell Incline Curl", "movement": "biceps", "tier": "B", "compound": false },
-
-    { "wger_id": 50, "name": "Barbell Triceps Extension", "movement": "triceps", "tier": "B", "compound": false },
-    { "wger_id": 659, "name": "Triceps Extensions on Cable", "movement": "triceps", "tier": "B", "compound": false },
-    { "wger_id": 805, "name": "Tricep Pushdown on Cable", "movement": "triceps", "tier": "B", "compound": false },
-    { "wger_id": 245, "name": "Skullcrusher Dumbbells", "movement": "triceps", "tier": "B", "compound": false },
-    { "wger_id": 1372, "name": "Triceps Dips (Assisted)", "movement": "triceps", "tier": "B", "compound": false },
-    { "wger_id": 2634, "name": "Machine Dip or Triceps Extension", "movement": "triceps", "tier": "B", "compound": false },
-
-    { "wger_id": 364, "name": "Leg Curl", "movement": "leg_curl", "tier": "A", "compound": false },
-    { "wger_id": 365, "name": "Leg Curls (laying)", "movement": "leg_curl", "tier": "A", "compound": false },
-    { "wger_id": 2626, "name": "Machine Seated Leg Curl", "movement": "leg_curl", "tier": "A", "compound": false },
-    { "wger_id": 910, "name": "Nordic Curl", "movement": "leg_curl", "tier": "B", "compound": false },
-
-    { "wger_id": 369, "name": "Leg Extension", "movement": "leg_extension", "tier": "A", "compound": false },
-
-    { "wger_id": 294, "name": "Hip Thrust", "movement": "hip_thrust", "tier": "A", "compound": true },
-    { "wger_id": 1642, "name": "Dumbbell Hip Thrust", "movement": "hip_thrust", "tier": "B", "compound": true },
-    { "wger_id": 265, "name": "Glute Bridge", "movement": "hip_thrust", "tier": "B", "compound": true },
-
-    { "wger_id": 622, "name": "Standing Calf Raises", "movement": "calves", "tier": "A", "compound": false },
-    { "wger_id": 590, "name": "Sitting Calf Raises", "movement": "calves", "tier": "A", "compound": false },
-    { "wger_id": 2628, "name": "Machine Seated Calf Raise", "movement": "calves", "tier": "B", "compound": false },
-
-    { "wger_id": 458, "name": "Plank", "movement": "core", "tier": "A", "compound": false },
-    { "wger_id": 580, "name": "Side Plank", "movement": "core", "tier": "B", "compound": false },
-    { "wger_id": 1573, "name": "Ab wheel", "movement": "core", "tier": "A", "compound": false },
-    { "wger_id": 283, "name": "Hanging Leg Raises", "movement": "core", "tier": "B", "compound": false },
-    { "wger_id": 377, "name": "Leg Raises, Lying", "movement": "core", "tier": "B", "compound": false },
-    { "wger_id": 167, "name": "Crunches", "movement": "core", "tier": "B", "compound": false },
-    { "wger_id": 1772, "name": "Reverse crunch", "movement": "core", "tier": "B", "compound": false },
-
-    { "wger_id": 571, "name": "Shrugs, Barbells", "movement": "shrug", "tier": "B", "compound": false },
-    { "wger_id": 572, "name": "Shrugs, Dumbbells", "movement": "shrug", "tier": "B", "compound": false }
-  ]
+ "version": 2,
+ "notes": "Vetted strength-training staples. Only exercises from this list may be used when the AI builds a workout from scratch. exercise_id refers to backend/app/data/exercises_catalog.json. priority is the pick order per movement (1 = first choice); equal priorities rotate by day.",
+ "exercises": [
+  {
+   "exercise_id": "0043",
+   "name": "Barbell Full Squat",
+   "movement": "squat",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0739",
+   "name": "Sled 45° Leg Press",
+   "movement": "squat",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0042",
+   "name": "Barbell Front Squat",
+   "movement": "squat",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0743",
+   "name": "Sled Hack Squat",
+   "movement": "squat",
+   "tier": "B",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "1760",
+   "name": "Dumbbell Goblet Squat",
+   "movement": "squat",
+   "tier": "A",
+   "compound": true,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0413",
+   "name": "Dumbbell Squat",
+   "movement": "squat",
+   "tier": "B",
+   "compound": true,
+   "priority": 4
+  },
+  {
+   "exercise_id": "0085",
+   "name": "Barbell Romanian Deadlift",
+   "movement": "hinge",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0032",
+   "name": "Barbell Deadlift",
+   "movement": "hinge",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0117",
+   "name": "Barbell Sumo Deadlift",
+   "movement": "hinge",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "1459",
+   "name": "Dumbbell Romanian Deadlift",
+   "movement": "hinge",
+   "tier": "B",
+   "compound": true,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0044",
+   "name": "Barbell Good Morning",
+   "movement": "hinge",
+   "tier": "B",
+   "compound": true,
+   "priority": 4
+  },
+  {
+   "exercise_id": "0410",
+   "name": "Dumbbell Single Leg Split Squat",
+   "movement": "lunge",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0054",
+   "name": "Barbell Lunge",
+   "movement": "lunge",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "2368",
+   "name": "Split Squats",
+   "movement": "lunge",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0381",
+   "name": "Dumbbell Rear Lunge",
+   "movement": "lunge",
+   "tier": "B",
+   "compound": true,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0336",
+   "name": "Dumbbell Lunge",
+   "movement": "lunge",
+   "tier": "A",
+   "compound": true,
+   "priority": 4
+  },
+  {
+   "exercise_id": "0025",
+   "name": "Barbell Bench Press",
+   "movement": "horizontal_push",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0047",
+   "name": "Barbell Incline Bench Press",
+   "movement": "horizontal_push",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0314",
+   "name": "Dumbbell Incline Bench Press",
+   "movement": "horizontal_push",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0577",
+   "name": "Lever Chest Press",
+   "movement": "horizontal_push",
+   "tier": "B",
+   "compound": true,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0251",
+   "name": "Chest Dip",
+   "movement": "horizontal_push",
+   "tier": "A",
+   "compound": true,
+   "priority": 4
+  },
+  {
+   "exercise_id": "0662",
+   "name": "Push-Up",
+   "movement": "horizontal_push",
+   "tier": "A",
+   "compound": true,
+   "priority": 5
+  },
+  {
+   "exercise_id": "0091",
+   "name": "Barbell Seated Overhead Press",
+   "movement": "vertical_push",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0405",
+   "name": "Dumbbell Seated Shoulder Press",
+   "movement": "vertical_push",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0603",
+   "name": "Lever Shoulder Press",
+   "movement": "vertical_push",
+   "tier": "B",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "3017",
+   "name": "Barbell Pendlay Row",
+   "movement": "horizontal_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0027",
+   "name": "Barbell Bent Over Row",
+   "movement": "horizontal_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0861",
+   "name": "Cable Seated Row",
+   "movement": "horizontal_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0292",
+   "name": "Dumbbell One Arm Bent-Over Row",
+   "movement": "horizontal_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0606",
+   "name": "Lever T Bar Row",
+   "movement": "horizontal_pull",
+   "tier": "B",
+   "compound": true,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0499",
+   "name": "Inverted Row",
+   "movement": "horizontal_pull",
+   "tier": "B",
+   "compound": true,
+   "priority": 4
+  },
+  {
+   "exercise_id": "0652",
+   "name": "Pull-Up",
+   "movement": "vertical_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0150",
+   "name": "Cable Bar Lateral Pulldown",
+   "movement": "vertical_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0818",
+   "name": "Twin Handle Parallel Grip Lat Pulldown",
+   "movement": "vertical_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "1326",
+   "name": "Chin-Up",
+   "movement": "vertical_pull",
+   "tier": "A",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0579",
+   "name": "Lever Front Pulldown",
+   "movement": "vertical_pull",
+   "tier": "B",
+   "compound": true,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0596",
+   "name": "Lever Seated Fly",
+   "movement": "chest_fly",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0308",
+   "name": "Dumbbell Fly",
+   "movement": "chest_fly",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0319",
+   "name": "Dumbbell Incline Fly",
+   "movement": "chest_fly",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0334",
+   "name": "Dumbbell Lateral Raise",
+   "movement": "lateral_raise",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0178",
+   "name": "Cable Lateral Raise",
+   "movement": "lateral_raise",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0584",
+   "name": "Lever Lateral Raise",
+   "movement": "lateral_raise",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0192",
+   "name": "Cable One Arm Lateral Raise",
+   "movement": "lateral_raise",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0154",
+   "name": "Cable Cross-Over Revers Fly",
+   "movement": "rear_delt",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0383",
+   "name": "Dumbbell Reverse Fly",
+   "movement": "rear_delt",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0380",
+   "name": "Dumbbell Rear Lateral Raise",
+   "movement": "rear_delt",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0031",
+   "name": "Barbell Curl",
+   "movement": "biceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0313",
+   "name": "Dumbbell Hammer Curl",
+   "movement": "biceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0868",
+   "name": "Cable Curl",
+   "movement": "biceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0318",
+   "name": "Dumbbell Incline Curl",
+   "movement": "biceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0372",
+   "name": "Dumbbell Preacher Curl",
+   "movement": "biceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0294",
+   "name": "Dumbbell Biceps Curl",
+   "movement": "biceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0241",
+   "name": "Cable Triceps Pushdown (V-Bar)",
+   "movement": "triceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0194",
+   "name": "Cable Overhead Triceps Extension (Rope Attachment)",
+   "movement": "triceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0351",
+   "name": "Dumbbell Lying Triceps Extension",
+   "movement": "triceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0061",
+   "name": "Barbell Lying Triceps Extension",
+   "movement": "triceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0607",
+   "name": "Lever Triceps Extension",
+   "movement": "triceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0814",
+   "name": "Triceps Dip",
+   "movement": "triceps",
+   "tier": "B",
+   "compound": false,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0586",
+   "name": "Lever Lying Leg Curl",
+   "movement": "leg_curl",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0599",
+   "name": "Lever Seated Leg Curl",
+   "movement": "leg_curl",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0496",
+   "name": "Inverse Leg Curl (Bench Support)",
+   "movement": "leg_curl",
+   "tier": "B",
+   "compound": false,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0585",
+   "name": "Lever Leg Extension",
+   "movement": "leg_extension",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "1409",
+   "name": "Barbell Glute Bridge",
+   "movement": "hip_thrust",
+   "tier": "A",
+   "compound": true,
+   "priority": 1
+  },
+  {
+   "exercise_id": "3523",
+   "name": "Glute Bridge Two Legs On Bench (Male)",
+   "movement": "hip_thrust",
+   "tier": "B",
+   "compound": true,
+   "priority": 2
+  },
+  {
+   "exercise_id": "3013",
+   "name": "Low Glute Bridge On Floor",
+   "movement": "hip_thrust",
+   "tier": "B",
+   "compound": true,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0605",
+   "name": "Lever Standing Calf Raise",
+   "movement": "calves",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0594",
+   "name": "Lever Seated Calf Raise",
+   "movement": "calves",
+   "tier": "A",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "1391",
+   "name": "Sled Calf Press On Leg Press",
+   "movement": "calves",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "2135",
+   "name": "Weighted Front Plank",
+   "movement": "core",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0857",
+   "name": "Wheel Rollerout",
+   "movement": "core",
+   "tier": "A",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0472",
+   "name": "Hanging Leg Raise",
+   "movement": "core",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0620",
+   "name": "Lying Leg Raise Flat Bench",
+   "movement": "core",
+   "tier": "B",
+   "compound": false,
+   "priority": 2
+  },
+  {
+   "exercise_id": "0872",
+   "name": "Reverse Crunch",
+   "movement": "core",
+   "tier": "B",
+   "compound": false,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0274",
+   "name": "Crunch Floor",
+   "movement": "core",
+   "tier": "B",
+   "compound": false,
+   "priority": 3
+  },
+  {
+   "exercise_id": "0705",
+   "name": "Side Bridge V. 2",
+   "movement": "core",
+   "tier": "B",
+   "compound": false,
+   "priority": 4
+  },
+  {
+   "exercise_id": "0095",
+   "name": "Barbell Shrug",
+   "movement": "shrug",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  },
+  {
+   "exercise_id": "0406",
+   "name": "Dumbbell Shrug",
+   "movement": "shrug",
+   "tier": "B",
+   "compound": false,
+   "priority": 1
+  }
+ ]
 }

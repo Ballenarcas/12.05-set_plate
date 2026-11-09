@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
-from groq import AsyncGroq, BadRequestError
+from openai import AsyncOpenAI, BadRequestError
 
 from app.core.config import get_settings
 from app.core.local_day import LocalDay
@@ -48,7 +48,7 @@ def _parse_json(content: str | None) -> Any:
             text = text[4:]
         text = text.strip()
     if not text:
-        raise ValueError("Groq returned an empty response")
+        raise ValueError("The AI returned an empty response")
     return json.loads(text)
 
 
@@ -60,8 +60,8 @@ def _is_retryable_json_error(error: Exception) -> bool:
 
 async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
     settings = get_settings()
-    if not settings.groq_api_key:
-        raise HTTPException(status_code=503, detail="Groq is not configured")
+    if not settings.ai_api_key:
+        raise HTTPException(status_code=503, detail="AI is not configured")
 
     is_array = schema.get("type") == "array"
     response_schema = (
@@ -74,9 +74,9 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
         "with no markdown fences and no extra text: "
         f"{json.dumps(response_schema)}"
     )
-    structured = _is_gpt_oss(settings.groq_model)
+    structured = _is_gpt_oss(settings.ai_model)
     request: dict[str, Any] = {
-        "model": settings.groq_model,
+        "model": settings.ai_model,
         "temperature": 0.6 if structured else 0.2,
         "messages": (
             [{"role": "user", "content": f"{instruction}\n\nData:\n{prompt}"}]
@@ -101,7 +101,7 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
         request["max_tokens"] = 2048
         request["response_format"] = {"type": "json_object"}
 
-    client = AsyncGroq(api_key=settings.groq_api_key)
+    client = AsyncOpenAI(api_key=settings.ai_api_key, base_url=settings.ai_base_url)
     try:
         for attempt in range(2):
             try:
@@ -119,9 +119,9 @@ async def _request_json(prompt: str, schema: dict[str, Any]) -> Any:
                 return value
             except Exception as err:
                 if attempt == 0 and _is_retryable_json_error(err):
-                    logger.warning("Groq returned invalid JSON; retrying once: %s", err)
+                    logger.warning("The AI returned invalid JSON; retrying once: %s", err)
                     continue
-                logger.exception("Groq workout adjustment request failed")
+                logger.exception("AI workout adjustment request failed")
                 raise HTTPException(status_code=502, detail="Could not generate workout adjustment") from err
     finally:
         await client.close()
@@ -603,7 +603,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         or not isinstance(result.get("exercises"), list)
         or any(not isinstance(item, dict) or not isinstance(item.get("exercise_id"), str) for item in result["exercises"])
     ):
-        raise HTTPException(status_code=502, detail="Groq returned an invalid workout plan")
+        raise HTTPException(status_code=502, detail="The AI returned an invalid workout plan")
 
     if result["rest_day"] and from_history and calorie_status != "severe_deficit":
         # These muscles are already known to be recovered, so nothing justifies a rest day.
@@ -617,7 +617,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     if safe_routines:
         selected_routine = next((row for row in safe_routines if str(row["id"]) == selected_routine_id), None)
         if selected_routine is None and not from_history:
-            raise HTTPException(status_code=502, detail="Groq selected an unavailable routine")
+            raise HTTPException(status_code=502, detail="The AI selected an unavailable routine")
         selected_routine = selected_routine or safe_routines[0]
         routine_exercises = selected_routine["exercises"]
         workout_name = selected_routine["name"]
@@ -625,7 +625,7 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         catalog_by_id = {row["exercise_id"]: row for row in available_exercises}
         generated_exercises = result.get("exercises") or []
         if not isinstance(generated_exercises, list) or any(not isinstance(item, dict) for item in generated_exercises):
-            raise HTTPException(status_code=502, detail="Groq returned an invalid generated workout")
+            raise HTTPException(status_code=502, detail="The AI returned an invalid generated workout")
         generated_ids = [str(item.get("exercise_id")) for item in generated_exercises]
         if (
             selected_routine_id is not None
@@ -634,13 +634,13 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
             or len(set(generated_ids)) != len(generated_ids)
             or any(exercise_id not in catalog_by_id for exercise_id in generated_ids)
         ):
-            raise HTTPException(status_code=502, detail="Groq returned exercises outside the available catalog")
+            raise HTTPException(status_code=502, detail="The AI returned exercises outside the available catalog")
         if any(
             not isinstance(item.get("sets"), int) or item["sets"] < 1
             or not isinstance(item.get("reps"), int) or item["reps"] < 1
             for item in generated_exercises
         ):
-            raise HTTPException(status_code=502, detail="Groq returned invalid generated set targets")
+            raise HTTPException(status_code=502, detail="The AI returned invalid generated set targets")
         if session:
             generated_exercises = await _quality_checked_exercises(
                 result, prompt_data, schema, catalog_by_id, session, guidance,
@@ -651,14 +651,14 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
         ]
         workout_name = result.get("workout_name")
         if not isinstance(workout_name, str) or not workout_name.strip():
-            raise HTTPException(status_code=502, detail="Groq returned a workout without a name")
+            raise HTTPException(status_code=502, detail="The AI returned a workout without a name")
         workout_name = workout_name.strip()
         result["adjusted"] = True
 
     by_id = {str(row.get("exercise_id")): row for row in routine_exercises}
     recommendations = {item["exercise_id"]: item for item in result["exercises"]}
     if set(recommendations) != set(by_id) and not from_history:
-        raise HTTPException(status_code=502, detail="Groq returned an invalid exercise plan")
+        raise HTTPException(status_code=502, detail="The AI returned an invalid exercise plan")
 
     plan_exercises = []
     for exercise_id, source in by_id.items():
@@ -752,7 +752,7 @@ async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, Any
             or item.get("action") not in _SET_ACTIONS
             or not isinstance(item.get("reason"), str)
         ):
-            raise HTTPException(status_code=502, detail="Groq returned invalid workout adjustments")
+            raise HTTPException(status_code=502, detail="The AI returned invalid workout adjustments")
         exercise = by_id[item["exercise_id"]]
         if not _remaining_sets(exercise):
             continue
@@ -763,7 +763,7 @@ async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, Any
                 not isinstance(new_weight, (int, float)) or isinstance(new_weight, bool)
                 or new_weight <= 0 or (reference is not None and new_weight >= reference)
             ):
-                raise HTTPException(status_code=502, detail="Groq suggested a load that is not a reduction")
+                raise HTTPException(status_code=502, detail="The AI suggested a load that is not a reduction")
         elif item["action"] == "reduce_reps":
             new_reps = item.get("new_reps")
             reference = _heaviest_value(exercise, "reps")
@@ -771,7 +771,7 @@ async def suggest_live_adjustment(workout: dict[str, Any]) -> list[dict[str, Any
                 not isinstance(new_reps, int) or isinstance(new_reps, bool)
                 or new_reps < 1 or (reference is not None and new_reps >= reference)
             ):
-                raise HTTPException(status_code=502, detail="Groq suggested reps that are not a reduction")
+                raise HTTPException(status_code=502, detail="The AI suggested reps that are not a reduction")
         else:
             item = {key: value for key, value in item.items() if key not in ("new_weight_kg", "new_reps")}
         suggestions.append(item)

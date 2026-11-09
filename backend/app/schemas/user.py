@@ -7,7 +7,7 @@ class UserOnboardingRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=15, description="First name")
     surname: str = Field(..., min_length=1, max_length=25, description="Last name")
     email: str = Field(..., min_length=3, max_length=255, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$", description="Email address")
-    password: str | None = Field(default=None, min_length=12, max_length=128)
+    password: str = Field(..., min_length=12, max_length=128)
     age: int | None = Field(default=None, ge=12, le=120)
     gender: str | None = None
     weight: float | None = Field(default=None, ge=20.0, le=350.0)

@@ -45,7 +45,7 @@ class OnboardingFacade:
         try:
             supabase = provider(admin=True)
             if supabase is None:
-                raise HTTPException(status_code=500, detail="Database client is not configured. Please ensure SUPABASE_URL and SUPABASE_KEY are set.")
+                raise HTTPException(status_code=503, detail="Service unavailable. Please try again.")
             existing = (
                 supabase.table("users")
                 .select("id")
@@ -68,9 +68,8 @@ class OnboardingFacade:
                 "age": int(payload.age) if payload.age is not None else None,
                 "gender": payload.gender, "objective": payload.objective,
                 "calorie_goal": calorie_goal,
+                "password": hash_password(payload.password),
             }
-            if payload.password:
-                record["password"] = hash_password(payload.password)
             result = supabase.table("users").insert(record).execute()
             saved_id = result.data[0].get("id") if result.data else None
             if saved_id:
@@ -103,10 +102,7 @@ class OnboardingFacade:
         try:
             supabase = (self.supabase_provider or get_supabase)(admin=True)
             if supabase is None:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Database client is not configured. Please ensure SUPABASE_URL and SUPABASE_KEY are set.",
-                )
+                raise HTTPException(status_code=503, detail="Service unavailable. Please try again.")
             # ``*`` keeps the login query independent from the subscription
             # fields, which are read from the separate subscriptions table.
             result = (
@@ -123,8 +119,8 @@ class OnboardingFacade:
             raise HTTPException(status_code=500, detail="Could not sign in") from err
 
         user = result.data[0] if result.data else None
-        stored_hash = (user or {}).get("password") or _DUMMY_HASH
-        if not verify_password(payload.password, stored_hash) or user is None:
+        stored_hash = (user or {}).get("password")
+        if not verify_password(payload.password, stored_hash or _DUMMY_HASH) or not stored_hash:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         is_premium = bool(user.get("is_premium"))

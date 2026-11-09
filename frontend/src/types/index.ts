@@ -13,7 +13,6 @@ export interface WorkoutSummary {
 
 export interface Exercise {
   id: string
-  wger_id?: number | null
   name: string
   muscle_group: string
   name_es?: string | null

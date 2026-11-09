@@ -12,7 +12,7 @@ Supabase stays external. There is no database container and no persistent volume
 - **Use a demo Supabase project if possible.** The backend uses `SUPABASE_SERVICE_ROLE_KEY`, which bypasses Row Level Security. If you reuse your real project, take a backup first and keep the demo limited to people you trust.
 - **Do not port-forward this stack directly to the internet.** Every API endpoint requires a bearer token, logins are rate limited by nginx, and the compose port is bound to `127.0.0.1`, but TLS termination and the public edge still belong to Tailscale Funnel or Cloudflare Tunnel.
 - **Never put the service-role key in a `VITE_` variable.** It must only reach the backend container.
-- **AI:** leave `GROQ_API_KEY` empty for a zero-cost demo. The AI workout adjustment will return a readable "Groq is not configured" error; the rest of the app works. Set the key only if you accept the API cost.
+- **AI:** leave `AI_API_KEY` empty for a zero-cost demo. The AI workout adjustment will return a readable "AI is not configured" error; the rest of the app works. Set the key only if you accept the API cost.
 - **The images come from GHCR**, built by CI on every push to `master`. The NAS only pulls them; it never builds. Nothing is compiled on the NAS, so a deploy takes about a minute.
 
 ## Files
@@ -46,11 +46,11 @@ Supabase stays external. There is no database container and no persistent volume
    AUTH_TOKEN_TTL_HOURS=168
    ENVIRONMENT=production
    ALLOWED_HOSTS=127.0.0.1,localhost,zimaos.tailxxxx.ts.net
-   ADMIN_USER_IDS=
    CORS_ORIGINS=https://zimaos.tailxxxx.ts.net
    APP_PORT=8080
-   GROQ_API_KEY=
-   GROQ_MODEL=openai/gpt-oss-20b
+   AI_BASE_URL=https://api.groq.com/openai/v1
+   AI_API_KEY=
+   AI_MODEL=openai/gpt-oss-20b
    WEB_CONCURRENCY=1
    ```
 
@@ -226,7 +226,7 @@ Avoid it for this demo. If you must use it, put a reverse proxy with authenticat
 | Deploy fails with `HTTP 404` | `PORTAINER_STACK_ID` or `PORTAINER_ENDPOINT_ID` is wrong. Both are in the stack URL and in `GET /api/stacks`. |
 | Deploy succeeds but the old page is still served | `docker inspect --format '{{.Config.Image}}' set_plate-frontend-1` must show the `ghcr.io` image. If it shows a local tag, the stack still has a `build:`/local `image:`; if the pull failed, the deploy log says so. |
 | First load is slow | The first image pull and the first Supabase request are the slow parts. Later loads use nginx caching and the warmed Supabase client. |
-| AI adjustment shows an error | `GROQ_API_KEY` is empty or invalid. This is expected for a no-cost demo. |
+| AI adjustment shows an error | `AI_API_KEY` is empty or invalid, or `AI_MODEL` does not exist at `AI_BASE_URL`. This is expected for a no-cost demo. |
 
 ## Demo checklist
 

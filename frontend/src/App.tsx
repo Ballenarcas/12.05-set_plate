@@ -13,6 +13,7 @@ const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Premium = lazy(() => import('./pages/Premium'))
 const Profile = lazy(() => import('./pages/Profile'))
+const Faq = lazy(() => import('./pages/Faq'))
 const Welcome = lazy(() => import('./pages/Welcome'))
 const Workouts = lazy(() => import('./pages/Workouts'))
 const WorkoutStatistics = lazy(() => import('./pages/WorkoutStatistics'))
@@ -41,6 +42,7 @@ function App() {
             <Route path="/premium" element={<Premium />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Navigate to="/profile" replace />} />
+            <Route path="/faq" element={<Faq />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -49,4 +51,4 @@ function App() {
   )
 }
 
-export default App;
+export default App

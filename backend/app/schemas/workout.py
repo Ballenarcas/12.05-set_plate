@@ -3,12 +3,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class WorkoutSummary(BaseModel):
-    title: str
-    exercise_count: int = Field(ge=0)
-    duration_minutes: int = Field(ge=0)
-
-
 class RoutineExerciseSummary(BaseModel):
     exercise_id: str
     name: str
@@ -64,21 +58,21 @@ class LiveWorkoutSet(BaseModel):
 
 
 class LiveWorkoutExercise(BaseModel):
-    exercise_id: str
-    name: str
+    exercise_id: str = Field(max_length=64)
+    name: str = Field(max_length=120)
     previous_weight_kg: float | None = Field(default=None, ge=0)
     previous_reps: int | None = Field(default=None, ge=0)
     rest_seconds: int | None = Field(default=None, ge=1)
     target_sets: int | None = Field(default=None, ge=0)
     target_reps: int | None = Field(default=None, ge=0)
-    sets: list[LiveWorkoutSet] = Field(default_factory=list)
+    sets: list[LiveWorkoutSet] = Field(default_factory=list, max_length=30)
 
 
 class LiveWorkoutAdjustmentRequest(BaseModel):
-    name: str
+    name: str = Field(max_length=120)
     duration_seconds: int = Field(ge=0)
-    user_goal: str | None = None
-    exercises: list[LiveWorkoutExercise] = Field(min_length=1)
+    user_goal: str | None = Field(default=None, max_length=200)
+    exercises: list[LiveWorkoutExercise] = Field(min_length=1, max_length=30)
 
 
 class LiveWorkoutAdjustmentSuggestion(BaseModel):

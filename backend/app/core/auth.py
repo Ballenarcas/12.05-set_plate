@@ -59,7 +59,7 @@ def _verify_token(token: str) -> str:
         raise _unauthorized() from err
     if expires_at <= int(time.time()):
         raise _unauthorized()
-    if not hmac.compare_digest(_sign(f"{user_id}.{expires_at}"), signature):
+    if not hmac.compare_digest(_sign(f"{user_id}.{expires_at}").encode(), signature.encode()):
         raise _unauthorized()
     try:
         return str(UUID(user_id))
@@ -74,8 +74,3 @@ def current_user(
         raise _unauthorized()
     return UUID(_verify_token(credentials.credentials))
 
-
-def current_admin(user_id: UUID = Depends(current_user)) -> UUID:
-    if str(user_id) not in get_settings().admin_user_id_list:
-        raise HTTPException(status_code=403, detail="Not allowed.")
-    return user_id

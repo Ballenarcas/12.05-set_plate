@@ -106,6 +106,7 @@ def test_a_past_session_keeps_the_order_it_was_trained_in():
 def test_saving_a_workout_stores_the_exercise_order(monkeypatch):
     database = FakeDatabase()
     database.rows["workout_sets"] = []
+    database.rows["workouts"] = []
     monkeypatch.setattr(workout_service, "get_supabase", lambda **_: database)
     monkeypatch.setattr(workout_service, "resolve_exercise_log_id", lambda exercise_id: exercise_id)
     one_set = [{"set_number": 1, "weight_kg": 50, "reps": 8, "is_completed": True}]

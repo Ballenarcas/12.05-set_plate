@@ -123,6 +123,11 @@
 .routine-list { display: grid; gap: 0.6rem; }
 .workout-history-section { margin-bottom: 1.75rem; }
 .workout-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.6rem; }
+.media-credit { margin: 0.75rem 0 0; color: var(--text-muted); font-size: 0.7rem; text-align: center; }
+.media-credit a { color: inherit; }
+.see-more-button { width: 100%; margin-top: 0.75rem; }
+.see-more-button svg { transition: transform 200ms ease-out; }
+.see-more-button[aria-expanded='true'] svg { transform: rotate(180deg); }
 .workout-history-heading .section-title { margin: 0; }
 .workout-history-heading .text-action { color: var(--text-muted); }
 .workout-history-list { display: grid; gap: 0.75rem; }

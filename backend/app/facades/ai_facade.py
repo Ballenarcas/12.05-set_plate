@@ -1,15 +1,15 @@
 from app.core.config import get_settings
 from app.schemas.ai import ParseNaturalLanguageResponse
-from app.services.ai_service import generate_trainer_insight, get_groq_client
+from app.services.ai_service import generate_trainer_insight, get_ai_client
 from app.services.ai_tips_service import decide_tip, get_current_tip, undo_tip
 from app.services.calorie_adjustment_service import decide_adjustment, get_adjustment
 from app.services.fuzzy_matcher import get_fuzzy_matcher
 
 
 class AIFacade:
-    def __init__(self, matcher=None, groq_client_provider=get_groq_client):
+    def __init__(self, matcher=None, ai_client_provider=get_ai_client):
         self.matcher = matcher or get_fuzzy_matcher()
-        self.groq_client_provider = groq_client_provider
+        self.ai_client_provider = ai_client_provider
 
     def parse_intent(self, text: str, threshold: float = 0.7, limit_per_category: int = 5) -> ParseNaturalLanguageResponse:
         return self.matcher.match(text=text, threshold=threshold, limit_per_category=limit_per_category)
@@ -19,7 +19,7 @@ class AIFacade:
         intent = matched.detected_intent
         summary = _format_entities(matched)
         settings = get_settings()
-        if not settings.groq_api_key:
+        if not settings.ai_api_key:
             if intent == "setup_routine":
                 names = ", ".join(item.name for item in matched.exercises) or "your selected exercises"
                 reply = f"Got it! I recognized your workout plan with {names}. Would you like me to add this to your programmed training?"
@@ -40,7 +40,7 @@ class AIFacade:
             messages.extend(conversation_history[-4:])
         messages.append({"role": "user", "content": message})
         try:
-            response = self.groq_client_provider().chat.completions.create(model=settings.groq_model,
+            response = self.ai_client_provider().chat.completions.create(model=settings.ai_model,
                 temperature=0.3, max_tokens=220, messages=messages)
             reply = response.choices[0].message.content or "I have processed your request."
         except Exception:

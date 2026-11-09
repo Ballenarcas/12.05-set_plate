@@ -3,10 +3,7 @@ import logging
 from functools import lru_cache
 from typing import Any
 
-try:
-    from groq import Groq
-except ImportError:
-    Groq = None
+from openai import OpenAI
 
 from app.core.config import get_settings
 
@@ -40,13 +37,11 @@ TIP_INSTRUCTION = (
 
 
 @lru_cache
-def get_groq_client() -> Any:
-    if Groq is None:
-        raise ValueError("Groq library is not installed. Install via pip install groq.")
+def get_ai_client() -> OpenAI:
     settings = get_settings()
-    if not settings.groq_api_key:
-        raise ValueError("Groq credentials missing. Set GROQ_API_KEY in your .env file.")
-    return Groq(api_key=settings.groq_api_key)
+    if not settings.ai_api_key:
+        raise ValueError("AI is not configured. Set AI_API_KEY in your .env file.")
+    return OpenAI(api_key=settings.ai_api_key, base_url=settings.ai_base_url)
 
 
 def generate_trainer_insight(
@@ -55,8 +50,8 @@ def generate_trainer_insight(
     user_goal: str,
 ) -> str:
     settings = get_settings()
-    response = get_groq_client().chat.completions.create(
-        model=settings.groq_model,
+    response = get_ai_client().chat.completions.create(
+        model=settings.ai_model,
         temperature=0.4,
         max_tokens=180,
         messages=[
@@ -85,14 +80,14 @@ def phrase_tip(message: str, reasoning: str, facts: list[str], next_step: str | 
     """Rewrite a tip for this user. Callers must validate the result: this only returns what the model wrote."""
     settings = get_settings()
     request: dict[str, Any] = {
-        "model": settings.groq_tips_model,
+        "model": settings.ai_tips_model,
         "temperature": 0.3,
         "messages": [
             {"role": "system", "content": TIP_INSTRUCTION},
             {"role": "user", "content": json.dumps({"message": message, "reasoning": reasoning, "next_step": next_step, "facts": facts})},
         ],
     }
-    if "gpt-oss" in settings.groq_tips_model:
+    if "gpt-oss" in settings.ai_tips_model:
         # Reasoning models spend completion tokens on thinking before they answer.
         request["reasoning_effort"] = "low"
         request["max_completion_tokens"] = 500
@@ -104,7 +99,7 @@ def phrase_tip(message: str, reasoning: str, facts: list[str], next_step: str | 
         request["max_tokens"] = 200
         request["response_format"] = {"type": "json_object"}
 
-    client = get_groq_client().with_options(timeout=TIP_TIMEOUT_SECONDS, max_retries=0)
+    client = get_ai_client().with_options(timeout=TIP_TIMEOUT_SECONDS, max_retries=0)
     response = client.chat.completions.create(**request)
     logger.info("Tip wording used %s tokens", response.usage.total_tokens if response.usage else "unknown")
     return json.loads(response.choices[0].message.content or "null")

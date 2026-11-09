@@ -59,7 +59,7 @@ class MatchedEntity(BaseModel):
 
 class ParseNaturalLanguageRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
-    threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    threshold: float = Field(default=0.65, ge=0.5, le=1.0)
     limit_per_category: int = Field(default=5, ge=1, le=20)
 
 
@@ -72,9 +72,14 @@ class ParseNaturalLanguageResponse(BaseModel):
     meals: list[MatchedEntity] = Field(default_factory=list)
 
 
+class ConversationMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=2000)
+
+
 class ConversationalSetupRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
-    conversation_history: list[dict[str, str]] = Field(default_factory=list)
+    conversation_history: list[ConversationMessage] = Field(default_factory=list, max_length=20)
 
 
 class ConversationalSetupResponse(BaseModel):

@@ -3,9 +3,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
-from app.core.auth import current_admin, current_user
+from app.core.ai_quota import use_ai_call
+from app.core.auth import current_user
 from app.core.local_day import LocalDay, local_day
-from app.schemas.exercise import Exercise, ExerciseListResponse, WgerImportResponse
+from app.schemas.exercise import Exercise, ExerciseListResponse
 from app.facades.workout_facade import workout_facade
 from app.schemas.workout import (
     LiveWorkoutAdjustmentRequest,
@@ -40,8 +41,14 @@ async def suggest_live_adjustment(
     last_request = _last_adjustment_request.get(str(user_id))
     if last_request is not None and monotonic() - last_request < _ADJUSTMENT_COOLDOWN_SECONDS:
         raise HTTPException(status_code=429, detail="Wait a moment before asking for another adjustment")
-    suggestions = await workout_facade.suggest_adjustment(payload)
+    use_ai_call(user_id)
+    # Set before the AI call, so parallel requests cannot all pass the check above.
     _last_adjustment_request[str(user_id)] = monotonic()
+    try:
+        suggestions = await workout_facade.suggest_adjustment(payload)
+    except Exception:
+        _last_adjustment_request.pop(str(user_id), None)
+        raise
     return LiveWorkoutAdjustmentResponse(suggestions=[
         LiveWorkoutAdjustmentSuggestion.model_validate(suggestion) for suggestion in suggestions
     ])
@@ -95,16 +102,6 @@ def delete_workout_history(
     return {"status": "deleted"}
 
 
-@router.get("/")
-def list_workouts() -> dict[str, list]:
-    return {"items": []}
-
-
-@router.get("/programmed")
-def programmed_workout():
-    return workout_facade.programmed_workout()
-
-
 @router.get("/exercises", response_model=ExerciseListResponse)
 def get_exercises(
     response: Response,
@@ -133,7 +130,6 @@ def get_exercises(
                 update={
                     "description": None,
                     "aliases": [],
-                    "muscle_images": [],
                     "images": item.images[:1],
                 }
             )
@@ -157,19 +153,8 @@ def get_muscle_groups() -> dict[str, list[str]]:
 
 @router.get("/exercises/{exercise_id}", response_model=Exercise)
 def get_exercise(exercise_id: str) -> Exercise:
-    """Retrieve a single exercise by ID or wger_id."""
+    """Retrieve a single exercise by ID."""
     exercise = workout_facade.get_exercise_by_id(exercise_id)
     if not exercise:
         raise HTTPException(status_code=404, detail=f"Exercise '{exercise_id}' not found")
     return exercise
-
-
-@router.post("/exercises/import-wger", response_model=WgerImportResponse)
-def trigger_wger_import(
-    max_items: int | None = Query(None, ge=1, le=2000, description="Optional cap on number of exercises to import"),
-    sync_supabase: bool = Query(False, description="Sync imported exercises to Supabase if configured"),
-    _admin: UUID = Depends(current_admin),
-) -> WgerImportResponse:
-    """Import or refresh exercises from the wger REST API (admin only)."""
-    result = workout_facade.import_wger(max_items=max_items, sync_supabase=sync_supabase)
-    return WgerImportResponse(**result)

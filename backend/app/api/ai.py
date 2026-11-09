@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.core.ai_quota import use_ai_call
 from app.core.auth import current_user
 from app.core.local_day import LocalDay, local_day
 from app.schemas.ai import (
@@ -29,6 +30,7 @@ def trainer_insight(
     request: TrainerInsightRequest,
     user_id: UUID = Depends(current_user),
 ) -> TrainerInsightResponse:
+    use_ai_call(user_id)
     try:
         insight = ai_facade.trainer_insight(
             nutrition_summary=request.nutrition_summary,
@@ -36,15 +38,18 @@ def trainer_insight(
             user_goal=request.user_goal,
         )
     except ValueError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        raise HTTPException(status_code=503, detail="The AI trainer is not available right now.") from error
     except Exception as error:
-        raise HTTPException(status_code=502, detail="GroqCloud request failed.") from error
+        raise HTTPException(status_code=502, detail="The AI trainer could not answer. Please try again.") from error
 
     return TrainerInsightResponse(insight=insight, model="configured")
 
 
 @router.post("/parse-intent", response_model=ParseNaturalLanguageResponse)
-def parse_natural_language(request: ParseNaturalLanguageRequest) -> ParseNaturalLanguageResponse:
+def parse_natural_language(
+    request: ParseNaturalLanguageRequest,
+    user_id: UUID = Depends(current_user),
+) -> ParseNaturalLanguageResponse:
     """Fuzzy matches natural language user input against database exercises, routines, foods, and meals."""
     return ai_facade.parse_intent(
         text=request.text,
@@ -59,9 +64,10 @@ def conversational_setup(
     user_id: UUID = Depends(current_user),
 ) -> ConversationalSetupResponse:
     """Talks to the AI bot to set up routines or log meals with grounded DB object recognition."""
+    use_ai_call(user_id)
     reply, detected_intent, matched_entities = ai_facade.conversational_setup(
         message=request.message,
-        conversation_history=request.conversation_history,
+        conversation_history=[message.model_dump() for message in request.conversation_history],
     )
     return ConversationalSetupResponse(
         reply=reply,

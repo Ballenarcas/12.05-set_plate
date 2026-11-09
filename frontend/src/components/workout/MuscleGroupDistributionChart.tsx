@@ -6,29 +6,13 @@ interface MuscleGroupDistributionChartProps {
   distribution: WorkoutStatisticsMuscleGroup[]
 }
 
-const MUSCLE_COLORS = [
-  '#28cd62',
-  '#8b7bb8',
-  '#d6b85a',
-  '#66b3ff',
-  '#ff8a65',
-  '#4dd0c4',
-  '#c77dff',
-  '#f4a261',
-  '#9ccc65',
-  '#f06292',
-]
-
-function colorForMuscle(name: string): string {
-  let hash = 0
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) >>> 0
-  }
-  return MUSCLE_COLORS[hash % MUSCLE_COLORS.length]
-}
+// Wireframe style: greys from dark to light in the order the groups arrive (largest volume first).
+// Ink mixed toward the card colour, so the shades follow light and dark mode.
+const MUSCLE_SHADES = [88, 70, 54, 40, 28, 18].map((ink) => `color-mix(in srgb, var(--text) ${ink}%, var(--surface))`)
+const SEGMENT_GAP = 2.5
 
 const RADIUS = 72
-const STROKE = 28
+const STROKE = 14
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
 export default function MuscleGroupDistributionChart({ distribution }: MuscleGroupDistributionChartProps) {
@@ -36,12 +20,12 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
   const revealId = useId()
   const classifiedTotal = distribution.reduce((sum, item) => sum + item.volume_kg, 0)
   let accumulatedLength = 0
-  const segments = distribution.map((item) => {
+  const segments = distribution.map((item, index) => {
     const length = classifiedTotal > 0 ? (item.volume_kg / classifiedTotal) * CIRCUMFERENCE : 0
     const middleAngle = (accumulatedLength + length / 2) / CIRCUMFERENCE * 2 * Math.PI - Math.PI / 2
     const segment = {
       ...item,
-      color: colorForMuscle(item.muscle_group),
+      color: MUSCLE_SHADES[index % MUSCLE_SHADES.length],
       share: classifiedTotal > 0 ? (item.volume_kg / classifiedTotal) * 100 : 0,
       length,
       dashOffset: -accumulatedLength,
@@ -60,6 +44,22 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
 
   return (
     <div className="stats-distribution">
+      <ul className="stats-muscle-legend" aria-label="Muscle groups">
+        {segments.map((segment) => (
+          <li key={segment.muscle_group}>
+            <button
+              type="button"
+              className="stats-legend-chip"
+              aria-pressed={selectedMuscle === segment.muscle_group}
+              onClick={() => toggleMuscle(segment.muscle_group)}
+            >
+              <span className="stats-legend-swatch" style={{ backgroundColor: segment.color }} aria-hidden="true" />
+              {segment.muscle_group}
+            </button>
+          </li>
+        ))}
+      </ul>
+
       <div className="stats-doughnut-wrap">
         <svg
           className="stats-doughnut"
@@ -103,9 +103,9 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
               cy="100"
               r={RADIUS}
               fill="none"
-              stroke={segment.color}
+              style={{ stroke: segment.color }}
               strokeWidth={STROKE}
-              strokeDasharray={`${segment.length} ${Math.max(0, CIRCUMFERENCE - segment.length)}`}
+              strokeDasharray={`${Math.max(0, segment.length - (segments.length > 1 ? SEGMENT_GAP : 0))} ${CIRCUMFERENCE}`}
               strokeDashoffset={segment.dashOffset}
               transform={selectedMuscle === segment.muscle_group
                 ? `translate(${segment.offsetX} ${segment.offsetY}) rotate(-90 100 100)`
@@ -133,37 +133,22 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
         </svg>
       </div>
 
+
       <ul className="stats-muscle-list" aria-label="Muscle group volume details">
         {segments.map((segment, index) => (
           <li
             style={{ '--row': index } as CSSProperties}
-            className={`stats-muscle-item${selectedMuscle === segment.muscle_group ? ' stats-muscle-item-selected' : ''}`}
+            className={`stats-muscle-bar${selectedMuscle === segment.muscle_group ? ' is-selected' : ''}`}
             key={segment.muscle_group}
+            role="progressbar"
+            aria-label={`${segment.muscle_group}: ${formatVolumeKg(segment.volume_kg)} kg, ${segment.percentage} of classified volume`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(segment.share)}
           >
-            <div className="stats-muscle-heading">
-              <span
-                className="stats-muscle-marker"
-                style={{ backgroundColor: segment.color }}
-                aria-hidden="true"
-              />
-              <span className="stats-muscle-name">{segment.muscle_group}</span>
-              <span className="stats-muscle-percent">{segment.percentage}</span>
-            </div>
-            <p className="stats-muscle-volume">{formatVolumeKg(segment.volume_kg)} kg</p>
-            <div
-              className="stats-muscle-track"
-              role="progressbar"
-              aria-label={`${segment.muscle_group} share of classified volume`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(segment.share)}
-            >
-              <span
-                className="stats-muscle-fill"
-                style={{ backgroundColor: segment.color, width: `${segment.share}%` }}
-                aria-hidden="true"
-              />
-            </div>
+            <span className="stats-muscle-fill" style={{ width: `${segment.share}%` }} aria-hidden="true" />
+            <span className="stats-muscle-name" aria-hidden="true">{segment.muscle_group}</span>
+            <span className="stats-muscle-volume" aria-hidden="true">{formatVolumeKg(segment.volume_kg)} kg <small>{segment.percentage}</small></span>
           </li>
         ))}
       </ul>

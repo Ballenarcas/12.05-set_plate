@@ -25,7 +25,7 @@ function ProtectedLayout() {
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<div className="screen state-card" role="status">Loading screen…</div>}>
+      <Suspense fallback={<p className="visually-hidden" role="status">Loading screen…</p>}>
         <Routes>
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/login" element={<Login />} />

@@ -568,10 +568,7 @@ export function LogMeals() {
           </div>
 
           {isLoading ? (
-            <div className="loading-indicator">
-              <Loader2 size={18} className="animate-spin" />
-              <span>Loading meals from database...</span>
-            </div>
+            <p className="visually-hidden" role="status">Loading your meals...</p>
           ) : filteredMeals.length === 0 ? (
             <div className="empty-meals-card">
               {searchQuery ? 'No meals found matching your search.' : 'No meals logged yet today. Log your first meal above.'}

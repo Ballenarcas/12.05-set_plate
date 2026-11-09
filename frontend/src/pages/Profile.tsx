@@ -4,6 +4,8 @@ import { AlertCircle, CheckCircle2, ChevronRight, Loader2, LogOut } from 'lucide
 import { cancelPremium, clearDashboardCache, clearSession, getCurrentUser, isPremiumActive, updateUserSettings } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { useDialogBehavior } from '../utils/useDialogBehavior'
+import { applyTheme, getTheme } from '../utils/theme'
+import LiquidToggle from '../components/ui/LiquidToggle'
 
 type Notice = { kind: 'success' | 'error'; text: string }
 
@@ -12,6 +14,8 @@ const GOALS = ['Hypertrophy', 'Strength', 'Endurance', 'Lose Weight', 'Maintenan
 function Profile() {
   const user = getCurrentUser()
   const navigate = useNavigate()
+  const [isDark, setIsDark] = useState(getTheme() === 'dark')
+  const toggleDark = (dark: boolean) => { setIsDark(dark); applyTheme(dark ? 'dark' : 'light') }
 
   const [age, setAge] = useState(user?.age?.toString() || '')
   const [weight, setWeight] = useState(user?.weight?.toString() || '')
@@ -254,6 +258,10 @@ function Profile() {
       <section className="section" aria-labelledby="profile-account">
         <h2 className="section-title" id="profile-account">Account</h2>
         <div className="settings-card">
+          <div className="settings-row">
+            <span className="settings-label">Dark mode</span>
+            <LiquidToggle checked={isDark} onChange={toggleDark} label="Dark mode" />
+          </div>
           <div className="settings-row">
             <span className="settings-label">Email</span>
             <span className="profile-email">{user?.email || '–'}</span>

@@ -1,67 +1,15 @@
-import { Camera, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AiTipCard from '../components/home/AiTipCard'
+import WeekActivity from '../components/home/WeekActivity'
+import DailyIntake from '../components/nutrition/DailyIntake'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
 
-function formatMacro(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1)
-}
-
+// Nothing shows while loading; screen readers still hear it.
 function HomeSkeleton() {
-  return (
-    <div className="screen skeleton-screen" role="status" aria-busy="true" aria-label="Loading your dashboard">
-      <header className="screen-header">
-        <div className="profile-heading">
-          <span className="skeleton skeleton-circle" aria-hidden="true" />
-          <div className="skeleton-stack">
-            <span className="skeleton skeleton-line w-short" aria-hidden="true" />
-            <span className="skeleton skeleton-line w-mid tall" aria-hidden="true" />
-          </div>
-        </div>
-        <div className="home-header-actions">
-          <PremiumUpsellButton />
-          <span className="skeleton skeleton-badge" aria-hidden="true" />
-        </div>
-      </header>
-
-      <section className="skeleton-section" aria-hidden="true">
-        <span className="skeleton skeleton-line w-short" />
-        <div className="skeleton-card ai-banner-skeleton">
-          <span className="skeleton skeleton-line w-long" />
-        </div>
-      </section>
-
-      <section className="skeleton-section" aria-hidden="true">
-        <span className="skeleton skeleton-line w-mid" />
-        <span className="skeleton skeleton-line w-long" />
-        <span className="skeleton skeleton-track" />
-        <div className="skeleton-card skeleton-macros">
-          <span className="skeleton skeleton-macro" />
-          <span className="skeleton skeleton-macro" />
-          <span className="skeleton skeleton-macro" />
-        </div>
-        <div className="skeleton-actions">
-          <span className="skeleton skeleton-button" />
-          <span className="skeleton skeleton-button" />
-        </div>
-      </section>
-
-      <section className="skeleton-section" aria-hidden="true">
-        <span className="skeleton skeleton-line w-mid" />
-        <div className="skeleton-card">
-          <span className="skeleton skeleton-line w-long tall" />
-          <div className="skeleton-list">
-            <span className="skeleton skeleton-meta" />
-            <span className="skeleton skeleton-meta" />
-          </div>
-          <span className="skeleton skeleton-button" />
-        </div>
-      </section>
-    </div>
-  )
+  return <p className="visually-hidden" role="status">Loading your dashboard</p>
 }
 
 function Home() {
@@ -104,10 +52,6 @@ function Home() {
   const { nutrition } = summary
   const plan = summary.plan
   const completedWorkoutToday = summary.completed_workout_today
-  const calorieProgress = Math.max(
-    0,
-    Math.min(100, Math.round(((nutrition.target_kcals - nutrition.remaining_kcals) / nutrition.target_kcals) * 100)),
-  )
   const macros = [
     { label: 'Protein', current: nutrition.current_protein, target: nutrition.target_protein },
     { label: 'Carbs', current: nutrition.current_carbs, target: nutrition.target_carbs },
@@ -125,37 +69,27 @@ function Home() {
         <PremiumUpsellButton />
       </header>
 
-      <section className="section" aria-labelledby="trainer-insight">
-        <h2 className="section-title" id="trainer-insight">AI trainer</h2>
-        <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
+      <section className="section" aria-labelledby="nutrition-summary">
+        <div className="section-heading">
+          <h2 className="section-title" id="nutrition-summary">Nutrition</h2>
+          <button className="text-link" type="button" onClick={() => navigate('/log-meals')}>Log a meal</button>
+        </div>
+        <DailyIntake consumed={nutrition.target_kcals - nutrition.remaining_kcals} goal={nutrition.target_kcals} macros={macros} />
       </section>
 
-      <section className="section" aria-labelledby="nutrition-summary">
-        <h2 className="section-title" id="nutrition-summary">Today's plate</h2>
-        <div className="card plate-card">
-          <div className="plate-figure">
-            <strong>{Math.abs(nutrition.remaining_kcals).toLocaleString()}<small>kcal {nutrition.remaining_kcals < 0 ? 'over' : 'left'}</small></strong>
-            <span>of {nutrition.target_kcals.toLocaleString()} kcal</span>
+      {user?.id && (
+        <section className="section" aria-labelledby="activity-summary">
+          <div className="section-heading">
+            <h2 className="section-title" id="activity-summary">Activity</h2>
+            <button className="text-link" type="button" onClick={() => navigate('/workouts')}>Log a workout</button>
           </div>
-          <div className="progress-track" role="progressbar" aria-label="Daily calorie progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={calorieProgress}><div className="progress-value" style={{ width: `${calorieProgress}%` }} /></div>
-          <div className="macro-card">
-            {macros.map((macro) => <div className="macro" key={macro.label}>
-              <span className="macro-label">{macro.label}</span>
-              <span className="macro-value">{formatMacro(macro.current)}<small> / {formatMacro(macro.target)} g</small></span>
-              <span className="macro-track" aria-hidden="true"><span style={{ width: `${macro.target > 0 ? Math.min(100, (macro.current / macro.target) * 100) : 0}%` }} /></span>
-            </div>)}
-          </div>
-        </div>
-        <div className="action-row">
-          <button
-            className="action-button"
-            type="button"
-            onClick={() => navigate('/log-meals')}
-          >
-            <Plus size={17} aria-hidden="true" /> Log meal
-          </button>
-          <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">Pro</span></button>
-        </div>
+          <WeekActivity userId={user.id} />
+        </section>
+      )}
+
+      <section className="section" aria-labelledby="trainer-insight">
+        <h2 className="section-title" id="trainer-insight">Recommended for you</h2>
+        <AiTipCard onApplied={() => fetchDashboardSummary({ forceRefresh: true }).then(setSummary).catch(() => undefined)} />
       </section>
 
       <section className="section" aria-labelledby="programmed-training">

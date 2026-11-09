@@ -134,7 +134,7 @@ function CardioTimerDisplay({ startedAt, accumulated }: { startedAt: string | nu
     return () => window.clearInterval(timer)
   }, [startedAt, accumulated])
 
-  return <span style={{ fontSize: '3rem', fontWeight: 700, fontFamily: 'monospace' }}>{formatClock(seconds)}</span>
+  return <span className="cardio-clock" role="timer">{formatClock(seconds)}</span>
 }
 
 function CardioManualForm({ 
@@ -170,35 +170,39 @@ function CardioManualForm({
   }
 
   return (
-    <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', marginTop: '12px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+    <div className="cardio-panel">
+      <div className="cardio-fields">
         <div>
-          <label style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>DURATION (MINUTES)</label>
+          <label className="cardio-label" htmlFor="cardio-minutes">Duration (min)</label>
           <input 
-            type="number" 
+            id="cardio-minutes"
+            className="cardio-input"
+            type="number"
+            inputMode="numeric"
             value={mins} 
             onChange={(e) => setMins(e.target.value)} 
             placeholder="e.g. 30"
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px' }}
           />
         </div>
         <div>
-          <label style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, display: 'block', marginBottom: '8px' }}>DISTANCE (KM, OPTIONAL)</label>
+          <label className="cardio-label" htmlFor="cardio-distance">Distance (km)</label>
           <input 
-            type="number" 
+            id="cardio-distance"
+            className="cardio-input"
+            type="number"
+            inputMode="decimal"
             value={dist} 
             onChange={(e) => setDist(e.target.value)} 
-            placeholder="e.g. 5.2"
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px' }}
+            placeholder="Optional"
           />
         </div>
       </div>
       
-      {error && <p style={{ color: '#ff4d4d', fontSize: '13px', margin: '0 0 16px 0' }}>{error}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
       
-      <div style={{ display: 'flex', gap: '12px' }}>
-        <button className="primary-button" type="button" onClick={handleSave} style={{ flex: 1 }}>Save Cardio</button>
-        <button className="secondary-action" type="button" onClick={onCancel} style={{ flex: 1 }}>Cancel</button>
+      <div className="cardio-actions">
+        <button className="secondary-action" type="button" onClick={onCancel}>Cancel</button>
+        <button className="primary-button" type="button" onClick={handleSave}>Save cardio</button>
       </div>
     </div>
   )
@@ -963,7 +967,7 @@ function ActiveWorkout() {
             title="Ask AI for adjustments"
           >
             <Sparkles size={16} aria-hidden="true" />
-            AI
+            <span className="ai-adjust-label">AI</span>
           </button>
         )}
         <button className="finish-button" type="button" onClick={() => setShowFinish(true)}>{isEditingWorkout ? 'Save' : 'Finish'}</button>
@@ -996,10 +1000,8 @@ function ActiveWorkout() {
             <div className="exercise-card-header">
               <ExerciseArtwork name={exercise.name} images={exercise.images} />
               <div className="exercise-heading-copy">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h2>{exercise.name}</h2>
-                  {exercise.is_cardio && <span style={{ fontSize: '10px', fontWeight: 800, padding: '3px 6px', borderRadius: '4px', backgroundColor: 'rgba(34, 197, 94, 0.2)', color: '#4ade80', letterSpacing: '0.5px' }}>CARDIO</span>}
-                </div>
+                <h2>{exercise.name}</h2>
+                {exercise.is_cardio && <span className="cardio-badge">Cardio</span>}
                 
                 <div className="exercise-meta">
                   {!exercise.is_cardio && (
@@ -1022,7 +1024,7 @@ function ActiveWorkout() {
             </div>
 
             {exercise.is_cardio ? (
-              <div className="cardio-container" style={{ padding: '0 12px 16px' }}>
+              <div className="cardio-container">
                 {(() => {
                   const set = exercise.sets[0] || createSet(1);
                   let status = set.cardio_status || 'idle';
@@ -1047,21 +1049,21 @@ function ActiveWorkout() {
 
                   if (status === 'finished') {
                     return (
-                      <div style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', marginTop: '12px', display: 'flex', gap: '24px' }}>
+                      <div className="cardio-panel cardio-summary">
                         <div>
-                          <div style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, marginBottom: '4px' }}>TIME</div>
-                          <div style={{ fontSize: '18px', fontWeight: 600 }}>{formatDuration(set.duration_seconds || 0)}</div>
+                          <span className="cardio-label">Time</span>
+                          <strong className="cardio-stat">{formatDuration(set.duration_seconds || 0)}</strong>
                         </div>
                         {set.distance_km && (
                           <div>
-                            <div style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, marginBottom: '4px' }}>DISTANCE</div>
-                            <div style={{ fontSize: '18px', fontWeight: 600 }}>{set.distance_km} km</div>
+                            <span className="cardio-label">Distance</span>
+                            <strong className="cardio-stat">{set.distance_km} km</strong>
                           </div>
                         )}
                         {set.distance_km && set.duration_seconds && (
                           <div>
-                            <div style={{ fontSize: '11px', color: '#8e8e93', fontWeight: 600, marginBottom: '4px' }}>PACE</div>
-                            <div style={{ fontSize: '18px', fontWeight: 600 }}>{formatPace(set.duration_seconds, set.distance_km)}</div>
+                            <span className="cardio-label">Pace</span>
+                            <strong className="cardio-stat">{formatPace(set.duration_seconds, set.distance_km)}</strong>
                           </div>
                         )}
                       </div>
@@ -1069,11 +1071,10 @@ function ActiveWorkout() {
                   }
 
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.02)', padding: '24px 16px', borderRadius: '16px', marginTop: '8px' }}>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+                    <div className="cardio-panel cardio-timer">
+                      <div className="cardio-clock-row">
                         {status === 'idle' ? (
-                          <span style={{ fontSize: '3rem', fontWeight: 700, fontFamily: 'monospace' }}>00:00</span>
+                          <span className="cardio-clock">00:00</span>
                         ) : (
                           <CardioTimerDisplay 
                             startedAt={status === 'running' ? set.cardio_started_at! : null} 
@@ -1083,34 +1084,36 @@ function ActiveWorkout() {
                       </div>
 
                       {(status === 'running' || status === 'paused') && (
-                        <div style={{ width: '100%', marginBottom: '24px', position: 'relative' }}>
+                        <div className="cardio-distance">
                           <input
+                            className="cardio-input"
                             type="number"
+                            inputMode="decimal"
+                            aria-label="Distance in km, optional"
                             placeholder="Distance (km, optional)"
                             value={set.distance_km || ''}
                             onChange={e => updateSet(exerciseIndex, 0, { distance_km: e.target.value ? Number(e.target.value) : null })}
-                            style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', backgroundColor: '#1c1c1e', border: '1px solid #333', color: '#fff', fontSize: '16px', textAlign: 'center' }}
                           />
                         </div>
                       )}
 
-                      <div style={{ display: 'flex', width: '100%', gap: '12px' }}>
+                      <div className="cardio-actions">
                         {status === 'idle' && (
                           <>
-                            <button className="primary-button" type="button" onClick={() => startCardioTimer(exerciseIndex)} style={{ flex: 1 }}>Start timer</button>
-                            <button className="secondary-action" type="button" onClick={() => updateSet(exerciseIndex, 0, { cardio_status: 'manual' })} style={{ flex: 1 }}>Enter manually</button>
+                            <button className="primary-button" type="button" onClick={() => startCardioTimer(exerciseIndex)}>Start timer</button>
+                            <button className="secondary-action" type="button" onClick={() => updateSet(exerciseIndex, 0, { cardio_status: 'manual' })}>Enter manually</button>
                           </>
                         )}
                         {status === 'running' && (
                           <>
-                            <button className="secondary-action" type="button" onClick={() => pauseCardioTimer(exerciseIndex)} style={{ flex: 1 }}><Pause size={18} style={{marginRight: '6px'}}/> Pause</button>
-                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)} style={{ flex: 1 }}>Finish block</button>
+                            <button className="secondary-action" type="button" onClick={() => pauseCardioTimer(exerciseIndex)}><Pause size={18} aria-hidden="true" /> Pause</button>
+                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)}>Finish block</button>
                           </>
                         )}
                         {status === 'paused' && (
                           <>
-                            <button className="secondary-action" type="button" onClick={() => resumeCardioTimer(exerciseIndex)} style={{ flex: 1 }}><Play size={18} style={{marginRight: '6px'}}/> Resume</button>
-                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)} style={{ flex: 1 }}>Finish block</button>
+                            <button className="secondary-action" type="button" onClick={() => resumeCardioTimer(exerciseIndex)}><Play size={18} aria-hidden="true" /> Resume</button>
+                            <button className="primary-button" type="button" onClick={() => finishCardioTimer(exerciseIndex)}>Finish block</button>
                           </>
                         )}
                       </div>
@@ -1262,7 +1265,12 @@ function ActiveWorkout() {
             <h2 id="finish-title">{session?.editWorkoutId ? 'Save workout changes?' : 'Finish workout?'}</h2>
             {isEditingWorkout
               ? <p>Your original date and duration will be kept. Changes are saved to this workout only when confirmed.</p>
-              : <p>{(completedSets || completedCardio) ? `${completedSets} of ${totalSets} strength sets, ${completedCardio} cardio blocks done.` : 'No sets completed yet. Complete at least one to save.'} · <ElapsedTime startedAt={session.startedAt} format={formatDuration} /></p>}
+              : <p>
+                  {(completedSets || completedCardio)
+                    ? `${completedSets} of ${totalSets} sets done${session.exercises.some((exercise) => exercise.is_cardio) ? `, ${completedCardio} cardio` : ''} · `
+                    : 'No sets completed yet. Complete at least one to save. · '}
+                  <ElapsedTime startedAt={session.startedAt} format={(seconds) => `${Math.max(1, Math.round(seconds / 60))} min`} />
+                </p>}
             <div className="workout-name-field">
               <label htmlFor="completed-workout-name">Workout name (e.g. Best chest day)</label>
               <input
@@ -1279,7 +1287,7 @@ function ActiveWorkout() {
             <div className="modal-actions">
               <button className="secondary-action" type="button" onClick={closeFinish} disabled={isSaving}>Keep training</button>
               <button className="danger-action" type="button" onClick={discardWorkout} disabled={isSaving}>{confirmDiscard ? 'Tap again to discard' : session?.editWorkoutId ? 'Discard edits' : 'Discard workout'}</button>
-              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'Saving...' : session?.editWorkoutId ? 'Save changes' : 'Save woRKOUT'}</button>
+              <button className="primary-button" type="button" onClick={finishWorkout} disabled={isSaving || (!isEditingWorkout && completedSets === 0 && completedCardio === 0)}>{isSaving ? 'Saving...' : session?.editWorkoutId ? 'Save changes' : 'Save workout'}</button>
             </div>
           </div>
         </div>

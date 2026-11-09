@@ -1,4 +1,4 @@
-import { Apple, CircleUserRound, Dumbbell, House } from 'lucide-react'
+import { Apple, ChartColumn, CircleUserRound, Dumbbell, House } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import '../../styles/glass-dock.css'
@@ -8,6 +8,7 @@ type DockItem = { path: string; label: string; Icon: LucideIcon }
 const items: DockItem[] = [
   { path: '/', label: 'Home', Icon: House },
   { path: '/workouts', label: 'Workouts', Icon: Dumbbell },
+  { path: '/workouts/statistics', label: 'Statistics', Icon: ChartColumn },
   { path: '/nutrition', label: 'Nutrition', Icon: Apple },
   { path: '/profile', label: 'Profile', Icon: CircleUserRound },
 ]
@@ -15,9 +16,11 @@ const items: DockItem[] = [
 export default function GlassDock() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const active = Math.max(0, items.findIndex(({ path }) => path === '/'
-    ? pathname === '/'
-    : pathname === path || pathname.startsWith(`${path}/`)))
+  // The longest matching path wins, so /workouts/statistics marks Statistics, not Workouts.
+  const active = items.reduce((best, { path }, index) => {
+    const matches = path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`)
+    return matches && path.length > items[best].path.length ? index : best
+  }, 0)
 
   return (
     <nav

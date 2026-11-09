@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog } from '../services/api';
+import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog, type TodayNutritionData } from '../services/api';
+import DailyIntake from '../components/nutrition/DailyIntake';
+import MealDatePicker from '../components/nutrition/MealDatePicker';
 import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
 import '../styles/log-meals.css';
 
@@ -30,11 +32,19 @@ type HighQuantityWarning =
     next: number;
   };
 
+const MAX_DAYS_BACK = 7;
+
+/** YYYY-MM-DD in the phone's own time zone. */
+function toInputDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export default function Nutrition() {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [meals, setMeals] = useState<MealLogItem[]>([]);
-  const [dateError, setDateError] = useState<string | null>(null);
+  const [targets, setTargets] = useState<Pick<TodayNutritionData, 'daily_goal' | 'target_proteins_g' | 'target_carbs_g' | 'target_fats_g'> | null>(null);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
   // États pour l'édition et la suppression
@@ -63,16 +73,13 @@ export default function Nutrition() {
 
     setIsLoading(true);
 
-    // Formatage sûr de la date locale en YYYY-MM-DD (évite les bugs de fuseau horaire)
-    const year = selectedDate.getFullYear();
-    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(selectedDate.getDate()).padStart(2, '0');
-    const formattedDate = `${year}-${month}-${day}`;
+    const formattedDate = toInputDate(selectedDate);
 
     // On utilise ta nouvelle fonction API qui gère les dates
     fetchTodayNutrition(user.id, formattedDate)
       .then(data => {
         setMeals(data.meals || []);
+        setTargets(data);
       })
       .catch(error => {
         console.error("Erreur de chargement des repas:", error);
@@ -107,19 +114,9 @@ export default function Nutrition() {
     };
   }, [editingMeal, editFoodName, isFoodSearchOpen]);
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newDate = new Date(e.target.value);
-    const today = new Date();
-    const diffTime = today.getTime() - newDate.getTime(); 
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const today = new Date();
+  const oldestDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - MAX_DAYS_BACK);
 
-    if (diffDays > 7 || diffDays < 0) {
-      setDateError("You can't select a date outside the 1-week limit.");
-    } else {
-      setDateError(null);
-      setSelectedDate(newDate); // Ceci va déclencher le useEffect juste au-dessus
-    }
-  };
 
   const formatDateLabel = (date: Date) => {
     const today = new Date();
@@ -321,36 +318,55 @@ export default function Nutrition() {
           <ArrowLeft size={22} aria-hidden="true" />
         </button>
         <h1>Meals</h1>
-        <label className="subpage-button">
+        <button className="subpage-button" type="button" onClick={() => setIsDatePickerOpen(true)} aria-label="Choose a day" aria-haspopup="dialog">
           <Calendar size={21} aria-hidden="true" />
-          <input
-            type="date"
-            max={new Date().toISOString().split('T')[0]}
-            onChange={handleDateChange}
-            aria-label="Select date"
-          />
-        </label>
+        </button>
       </header>
 
-      {dateError && <p className="inline-error" role="alert">{dateError}</p>}
+      {isDatePickerOpen && (
+        <MealDatePicker
+          selected={selectedDate}
+          min={oldestDay}
+          max={today}
+          onSelect={(date) => {
+            setSelectedDate(date);
+            setIsDatePickerOpen(false);
+          }}
+          onClose={() => setIsDatePickerOpen(false)}
+        />
+      )}
 
       <h2 className="meal-day">
         {formatDateLabel(selectedDate)}
         {meals.length > 0 && <strong>{meals.reduce((total, meal) => total + meal.item_calories, 0).toLocaleString()} kcal</strong>}
       </h2>
 
+      {targets && (
+        <DailyIntake
+          consumed={meals.reduce((total, meal) => total + meal.item_calories, 0)}
+          goal={targets.daily_goal}
+          macros={[
+            { label: 'Protein', current: meals.reduce((total, meal) => total + (meal.proteins_g ?? 0), 0), target: targets.target_proteins_g },
+            { label: 'Carbs', current: meals.reduce((total, meal) => total + (meal.carbs_g ?? 0), 0), target: targets.target_carbs_g },
+            { label: 'Fat', current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets.target_fats_g },
+          ]}
+        />
+      )}
+
       <div className="action-row">
         <button className="action-button" type="button" onClick={() => navigate('/log-meals')}>
-          <Plus size={17} aria-hidden="true" /> Log meal
+          <Plus size={17} aria-hidden="true" /> Manual entry
         </button>
-        <button className="action-button" type="button" disabled aria-label="Scan plate, available with Pro">
-          <Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">Pro</span>
+        <button className="action-button" type="button" disabled aria-label="Scan your meal, available with Pro">
+          <Camera size={17} aria-hidden="true" /> Scan meal <span className="pro-badge">Pro</span>
         </button>
       </div>
 
+      <h2 className="section-title meal-list-title">Logged meals</h2>
+
       <div className="meal-list">
         {isLoading ? (
-          <p className="state-line" role="status">Loading your meals...</p>
+          <p className="visually-hidden" role="status">Loading your meals...</p>
         ) : meals.length === 0 ? (
           <p className="state-line">No meals recorded for this day.</p>
         ) : (

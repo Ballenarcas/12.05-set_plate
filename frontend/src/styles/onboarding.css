@@ -46,7 +46,7 @@
 }
 
 .onboarding-step-counter {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
   
@@ -104,7 +104,7 @@
 }
 
 .field-hint {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--text-faint);
   line-height: 1.4;
   margin: -0.1rem 0 0.15rem;
@@ -139,7 +139,7 @@
   outline: none;
   background-color: var(--surface-raised);
   border-color: var(--text);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.14);
 }
 
 .form-input.has-error {
@@ -213,7 +213,7 @@
 .segmented-option.is-selected {
   background-color: var(--surface-raised);
   color: var(--text);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 /* Two-column layout for numeric inputs */
@@ -330,7 +330,7 @@
   background: var(--primary);
 }
 
-.btn-primary-outline:hover:not(:disabled) { background: #3da3e0; }
+.btn-primary-outline:hover:not(:disabled) { background: var(--text); }
 
 .btn-primary-outline:active:not(:disabled) { transform: scale(0.98); }
 
@@ -345,18 +345,18 @@
 .btn-secondary-outline:hover {
   border-color: var(--control);
   color: var(--text);
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: rgba(0, 0, 0, 0.04);
   transform: translateY(-1px);
 }
 
 .btn-secondary-outline:active {
   transform: translateY(1px);
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(0, 0, 0, 0.08);
 }
 
 /* Error message banner / field errors */
 .error-text {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--negative);
   margin-top: 0.2rem;
 }

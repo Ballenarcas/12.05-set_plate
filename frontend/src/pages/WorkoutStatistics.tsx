@@ -1,7 +1,5 @@
-import type { CSSProperties } from 'react'
-import { ArrowLeft, Dumbbell, PieChart, TrendingUp } from 'lucide-react'
+import { Dumbbell, PieChart, TrendingUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import MuscleGroupDistributionChart from '../components/workout/MuscleGroupDistributionChart'
 import VolumeProgressionChart from '../components/workout/VolumeProgressionChart'
 import { fetchWorkoutStatistics, getCurrentUser } from '../services/api'
@@ -10,6 +8,8 @@ import { describeError } from '../utils/errors.js'
 import {
   DEFAULT_STATISTICS_RANGE,
   STATISTICS_RANGES,
+  formatCompactDuration,
+  formatCompactVolumeKg,
   formatStatisticsDateRange,
   formatStatisticsDuration,
   formatVolumeKg,
@@ -17,50 +17,49 @@ import {
 } from '../utils/workoutStatistics'
 import '../styles/workout-statistics.css'
 
+// Half-oval range picker, in px because the dot follows the same SVG path with offset-path.
+const DIAL = (() => {
+  const rx = 115, ry = 38, side = 14, top = 34
+  const left = side, right = side + 2 * rx
+  return {
+    width: right + side,
+    height: top + ry + 40,
+    path: `M ${left} ${top} A ${rx} ${ry} 0 0 0 ${right} ${top}`,
+    labels: [
+      { left, top: top - 6, transform: 'translate(-50%, -100%)' },
+      { left: left + rx, top: top + ry + 4, transform: 'translateX(-50%)' },
+      { left: right, top: top - 6, transform: 'translate(-50%, -100%)' },
+    ],
+  }
+})()
+
 interface MetricCardProps {
   label: string
   value: string
-  note: string
+  exact: string
+  note?: string
 }
 
-function MetricCard({ label, value, note }: MetricCardProps) {
+function MetricCard({ label, value, exact, note }: MetricCardProps) {
+  const [number, unit] = value.split(' ')
   return (
     <article className="card stats-metric-card">
-      <p className="stats-metric-label">{label}</p>
-      <p className="stats-metric-value">{value}</p>
-      <p className="stats-metric-note">{note}</p>
+      <p className="stats-metric-label"><span>{label}</span><span>Total</span></p>
+      <p className="stats-metric-value" title={exact}><span aria-hidden="true">{number}{unit && <small> {unit}</small>}</span><span className="visually-hidden">{exact}</span></p>
+      {note && <p className="stats-metric-note">{note}</p>}
     </article>
   )
 }
 
+// Nothing shows while loading; screen readers still hear it.
 function StatisticsSkeleton() {
-  return (
-    <div className="stats-loading" role="status" aria-label="Loading workout statistics">
-      <div className="stats-metrics" aria-hidden="true">
-        {[0, 1, 2].map((item) => (
-          <div className="card stats-metric-card" key={item}>
-            <span className="skeleton skeleton-line w-short" />
-            <span className="skeleton skeleton-line w-mid tall" />
-            <span className="skeleton skeleton-line w-mid" />
-          </div>
-        ))}
-      </div>
-      <div className="card stats-panel" aria-hidden="true">
-        <span className="skeleton skeleton-line w-mid tall" />
-        <span className="skeleton stats-chart-skeleton" />
-      </div>
-      <div className="card stats-panel" aria-hidden="true">
-        <span className="skeleton skeleton-line w-mid tall" />
-        <span className="skeleton stats-chart-skeleton" />
-      </div>
-    </div>
-  )
+  return <p className="visually-hidden" role="status">Loading workout statistics</p>
 }
 
-function durationValue(data: WorkoutStatistics): string {
-  if (data.total_workouts === 0) return '0 min'
-  if (data.workouts_with_duration === 0) return 'Unavailable'
-  return formatStatisticsDuration(data.total_duration_seconds)
+function durationValue(data: WorkoutStatistics, compact = false): string {
+  if (data.total_workouts === 0) return compact ? '0m' : '0 min'
+  if (data.workouts_with_duration === 0) return compact ? '–' : 'Unavailable'
+  return compact ? formatCompactDuration(data.total_duration_seconds) : formatStatisticsDuration(data.total_duration_seconds)
 }
 
 function durationNote(data: WorkoutStatistics): string {
@@ -73,7 +72,6 @@ function durationNote(data: WorkoutStatistics): string {
 }
 
 function WorkoutStatisticsPage() {
-  const navigate = useNavigate()
   const userId = getCurrentUser()?.id
   const [range, setRange] = useState<WorkoutStatisticsRange>(DEFAULT_STATISTICS_RANGE)
   const [data, setData] = useState<WorkoutStatistics | null>(null)
@@ -129,49 +127,46 @@ function WorkoutStatisticsPage() {
 
   return (
     <div className="screen workout-stats-screen" aria-busy={isLoading}>
-      <header className="stats-page-header">
-        <button
-          className="icon-button stats-back-button"
-          type="button"
-          aria-label="Back to workouts"
-          onClick={() => navigate('/workouts')}
-        >
-          <ArrowLeft size={21} aria-hidden="true" />
-        </button>
-        <div>
-          <h1>Statistics</h1>
-        </div>
-      </header>
+      {/* The wireframe starts with the range picker; the title stays for screen readers. */}
+      <h1 className="visually-hidden">Statistics</h1>
 
-      <section className="stats-range-section" aria-labelledby="stats-range-title">
-        <div className="stats-range-heading">
-          <h2 className="section-title" id="stats-range-title">Date range</h2>
-          {data?.range === range && (
-            <p className="stats-range-caption">{formatStatisticsDateRange(data.start_date, data.end_date)}</p>
-          )}
-        </div>
-        <div className="stats-range" role="group" aria-label="Statistics date range" style={{ '--range-index': Math.max(0, STATISTICS_RANGES.findIndex((option) => option.value === range)) } as CSSProperties}>
-          <span className="stats-range-pill" aria-hidden="true" />
-          {STATISTICS_RANGES.map((option) => (
+      <section className="stats-range-section" aria-label="Date range">
+        {/* Wireframe dial: the ranges sit around a half oval and a hollow dot slides along it to the chosen one. */}
+        <div className="stats-range" role="group" aria-label="Statistics date range" style={{ width: DIAL.width, height: DIAL.height }}>
+          <svg className="stats-range-arc" width={DIAL.width} height={DIAL.height} aria-hidden="true">
+            <path d={DIAL.path} />
+          </svg>
+          <span
+            className="stats-range-dot"
+            aria-hidden="true"
+            style={{
+              offsetPath: `path('${DIAL.path}')`,
+              offsetDistance: `${50 * Math.max(0, STATISTICS_RANGES.findIndex((option) => option.value === range))}%`,
+            }}
+          />
+          {STATISTICS_RANGES.map((option, index) => (
             <button
-              className="stats-range-button"
+              className={`stats-range-button stats-range-button-${index}`}
               key={option.value}
               type="button"
               aria-pressed={range === option.value}
               aria-label={option.description}
               onClick={() => changeRange(option.value)}
+              style={DIAL.labels[index]}
             >
               {option.label}
             </button>
           ))}
         </div>
+        {data?.range === range && (
+          <p className="visually-hidden">{formatStatisticsDateRange(data.start_date, data.end_date)}</p>
+        )}
       </section>
 
       {isLoading && !data && <StatisticsSkeleton />}
 
       {isLoading && data && (
-        <p className="stats-refresh-status" role="status">
-          <span className="stats-refresh-indicator" aria-hidden="true" />
+        <p className="visually-hidden" role="status">
           Updating {selectedRangeLabel} statistics; showing {displayedRangeLabel} results until ready.
         </p>
       )}
@@ -187,21 +182,22 @@ function WorkoutStatisticsPage() {
 
       {data && (isLoading || !error) && (
         <div className="stats-content">
-          <div className="stats-metrics" aria-live="polite">
+          <div className="stats-total" aria-live="polite">
+            <p className="stats-total-label">Total workouts</p>
+            <p className="stats-total-value">{formatWorkoutCount(data.total_workouts)}</p>
+          </div>
+          <div className="stats-tiles">
             <MetricCard
-              label="Total workouts"
-              value={formatWorkoutCount(data.total_workouts)}
-              note={data.total_workouts === 0 ? 'No completed sessions' : 'Completed sessions'}
+              label="Volume"
+              value={formatCompactVolumeKg(data.total_volume_kg)}
+              exact={`${formatVolumeKg(data.total_volume_kg)} kg`}
+              note={data.eligible_set_count === 0 ? 'No eligible weighted sets' : undefined}
             />
             <MetricCard
-              label="Total volume"
-              value={`${formatVolumeKg(data.total_volume_kg)} kg`}
-              note={data.eligible_set_count === 0 ? 'No eligible weighted sets' : `${data.eligible_set_count} completed weighted sets`}
-            />
-            <MetricCard
-              label="Total time"
-              value={durationValue(data)}
-              note={durationNote(data)}
+              label="Time"
+              value={durationValue(data, true)}
+              exact={durationValue(data)}
+              note={durationNote(data) === 'Recorded session time' ? undefined : durationNote(data)}
             />
           </div>
 
@@ -215,12 +211,8 @@ function WorkoutStatisticsPage() {
             </div>
           )}
 
+          <h2 className="stats-section-title" id="volume-progression-title">Volume progression</h2>
           <section className="card stats-panel" aria-labelledby="volume-progression-title">
-            <div className="stats-panel-heading">
-              <div>
-                <h2 id="volume-progression-title">Volume over time</h2>
-              </div>
-            </div>
             {volumeEmpty ? (
               <div className="stats-chart-empty" role="status">
                 <TrendingUp size={24} aria-hidden="true" />
@@ -238,12 +230,8 @@ function WorkoutStatisticsPage() {
             )}
           </section>
 
+          <h2 className="stats-section-title" id="muscle-distribution-title">Muscle distribution</h2>
           <section className="card stats-panel" aria-labelledby="muscle-distribution-title">
-            <div className="stats-panel-heading">
-              <div>
-                <h2 id="muscle-distribution-title">Volume by muscle group</h2>
-              </div>
-            </div>
             {distributionEmpty ? (
               <div className="stats-chart-empty" role="status">
                 <PieChart size={24} aria-hidden="true" />

@@ -41,7 +41,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 .swipe-row__action:disabled { cursor: wait; }
-.swipe-row__glyph { display: grid; justify-items: center; gap: 4px; font-size: 0.6875rem; font-weight: 700; line-height: 1; transition: transform 160ms var(--sr-ease-out); }
+.swipe-row__glyph { display: grid; justify-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; line-height: 1; transition: transform 160ms var(--sr-ease-out); }
 .swipe-row__action:active .swipe-row__glyph { transform: scale(0.97); }
 .swipe-row__surface {
   position: relative;
@@ -53,7 +53,7 @@
   will-change: transform;
   transition: transform 200ms var(--sr-ease-out);
 }
-.swipe-row--set { --sr-r: 0.75rem; width: 100%; min-width: 0; margin-top: 0.4rem; }
+.swipe-row--set { --sr-r: var(--radius-control); width: 100%; min-width: 0; margin-top: 0.4rem; }
 .swipe-row--set .swipe-row__surface > .set-row {
   position: relative;
   z-index: 1;

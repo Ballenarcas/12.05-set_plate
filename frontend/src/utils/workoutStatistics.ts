@@ -41,6 +41,36 @@ export function formatStatisticsDuration(seconds: number): string {
   return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`
 }
 
+/** A few round y-axis values (0, 5k, 10k, 15k) whose top tick sits at or above the highest reading. */
+export function volumeAxisTicks(maxValue: number): number[] {
+  const max = Math.max(1, maxValue)
+  const rough = max / 3
+  const magnitude = 10 ** Math.floor(Math.log10(rough))
+  const step = [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((candidate) => candidate >= rough) ?? 10 * magnitude
+  return Array.from({ length: Math.ceil(max / step) + 1 }, (_, index) => index * step)
+}
+
+/** Axis label: 0, 500, 2.5k, 10k. */
+export function formatAxisVolume(value: number): string {
+  return value >= 1000 ? `${volumeFormatter.format(value / 1000)}k` : volumeFormatter.format(value)
+}
+
+/** Short volume for the stat tiles, as in the wireframe: 950 kg, 9.8k kg, 79.1k kg. */
+export function formatCompactVolumeKg(value: number): string {
+  if (!Number.isFinite(value) || value < 1000) return `${formatVolumeKg(value)} kg`
+  return `${volumeFormatter.format(Math.round(value / 100) / 10)}k kg`
+}
+
+/** Short duration for the stat tiles, as in the wireframe: 45m, 2h, 2h40m. */
+export function formatCompactDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '–'
+  const totalMinutes = Math.floor(seconds / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours === 0) return `${minutes}m`
+  return minutes === 0 ? `${hours}h` : `${hours}h${String(minutes).padStart(2, '0')}m`
+}
+
 function parseCalendarDate(value: string): Date | null {
   const [year, month, day] = value.split('-').map(Number)
   if (!year || !month || !day) return null

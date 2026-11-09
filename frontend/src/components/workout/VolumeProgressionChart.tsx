@@ -1,7 +1,7 @@
-import { useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useId, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { WorkoutStatisticsVolumePoint } from '../../types/workout'
 import { useSpring } from '../../utils/useSpring'
-import { formatChartDate, formatVolumeKg } from '../../utils/workoutStatistics'
+import { formatAxisVolume, formatChartDate, formatVolumeKg, volumeAxisTicks } from '../../utils/workoutStatistics'
 
 interface VolumeProgressionChartProps {
   points: WorkoutStatisticsVolumePoint[]
@@ -14,17 +14,12 @@ type Point = { x: number; y: number }
 
 const WIDTH = 640
 const HEIGHT = 260
-const PADDING = { top: 18, right: 14, bottom: 38, left: 58 }
+const PADDING = { top: 18, right: 20, bottom: 38, left: 44 }
 
 function dayNumber(value: string): number {
   const [year, month, day] = value.slice(0, 10).split('-').map(Number)
   if (!year || !month || !day) return 0
   return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000)
-}
-
-function axisVolume(value: number): string {
-  if (value >= 10_000) return `${Math.round(value / 1000)}k`
-  return formatVolumeKg(value)
 }
 
 function axisLabelAnchor(x: number): 'start' | 'middle' | 'end' {
@@ -82,7 +77,8 @@ export default function VolumeProgressionChart({ points, granularity, rangeStart
   // x100 because the spring settles at an absolute threshold.
   const travelling = useSpring(shown * 100) / 100
 
-  const maxVolume = Math.max(...points.map((point) => point.volume_kg), 1)
+  const yTicks = volumeAxisTicks(Math.max(...points.map((point) => point.volume_kg)))
+  const maxVolume = yTicks[yTicks.length - 1]
   const plotWidth = WIDTH - PADDING.left - PADDING.right
   const plotHeight = HEIGHT - PADDING.top - PADDING.bottom
   const baseline = PADDING.top + plotHeight
@@ -105,14 +101,9 @@ export default function VolumeProgressionChart({ points, granularity, rangeStart
   const reading = points[shown]
   const readingDate = formatChartDate(reading.date, granularity)
 
-  const maxLabels = granularity === 'week' ? 3 : 4
-  const tickCount = Math.min(maxLabels, points.length)
-  const tickIndexes = Array.from({ length: tickCount }, (_, index) => {
-    if (points.length === 1) return 0
-    return Math.round((index / Math.max(1, tickCount - 1)) * (points.length - 1))
-  })
-  const labelIndexes = Array.from(new Set(tickIndexes)).sort((a, b) => a - b)
-  const yTicks = Array.from({ length: 5 }, (_, index) => (maxVolume / 4) * index)
+  // Wireframe: only the first and last period are labelled.
+  const labelIndexes = Array.from(new Set([0, last]))
+  const fillId = useId()
 
   // The figure always snaps to a real period: a weekly total between two weeks was never recorded.
   function readAt(event: PointerEvent<HTMLDivElement>) {
@@ -161,12 +152,25 @@ export default function VolumeProgressionChart({ points, granularity, rangeStart
               <g key={tick}>
                 <line className="stats-chart-grid" x1={PADDING.left} x2={WIDTH - PADDING.right} y1={y} y2={y} />
                 <text className="stats-chart-axis-label" x={PADDING.left - 10} y={y + 4} textAnchor="end">
-                  {axisVolume(tick)}
+                  {formatAxisVolume(tick)}
                 </text>
               </g>
             )
           })}
 
+          <defs>
+            <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+              <stop className="stats-area-stop" offset="0" stopOpacity="0.5" />
+              <stop className="stats-area-stop" offset="1" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {coordinates.length > 1 && (
+            <path
+              className="stats-area-path"
+              d={`${path} L ${coordinates[last].x} ${baseline} L ${coordinates[0].x} ${baseline} Z`}
+              fill={`url(#${fillId})`}
+            />
+          )}
           {coordinates.length > 1 && <path className="stats-line-path" d={path} pathLength={1} />}
 
           <line className="stats-line-guide" x1={marker.x} x2={marker.x} y1={PADDING.top} y2={baseline} />

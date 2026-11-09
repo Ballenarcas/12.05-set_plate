@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  formatAxisVolume,
+  volumeAxisTicks,
+  formatCompactDuration,
+  formatCompactVolumeKg,
   DEFAULT_STATISTICS_RANGE,
   STATISTICS_RANGES,
   formatChartDate,
@@ -49,4 +53,24 @@ test('percentages are calculated from classified volume safely', () => {
   assert.equal(formatPercentage(200, 200), '100%')
   assert.equal(formatPercentage(0, 0), '0%')
   assert.equal(formatPercentage(10, 0), '0%')
+})
+
+test('stat tiles use short values that fit on a phone', () => {
+  assert.equal(formatCompactVolumeKg(950), '950 kg')
+  assert.equal(formatCompactVolumeKg(9_840), '9.8k kg')
+  assert.equal(formatCompactVolumeKg(79_097.5), '79.1k kg')
+  assert.equal(formatCompactVolumeKg(1_000), '1k kg')
+  assert.equal(formatCompactDuration(45 * 60), '45m')
+  assert.equal(formatCompactDuration(2 * 3600), '2h')
+  assert.equal(formatCompactDuration(10 * 3600 + 11 * 60), '10h11m')
+  assert.equal(formatCompactDuration(2 * 3600 + 5 * 60), '2h05m')
+})
+
+test('the volume axis shows a few round, short values', () => {
+  assert.deepEqual(volumeAxisTicks(13_000), [0, 5_000, 10_000, 15_000])
+  assert.deepEqual(volumeAxisTicks(4_650), [0, 2_000, 4_000, 6_000])
+  assert.deepEqual(volumeAxisTicks(9_450), [0, 5_000, 10_000])
+  assert.deepEqual(volumeAxisTicks(300), [0, 100, 200, 300])
+  assert.ok(volumeAxisTicks(0).length >= 2)
+  assert.deepEqual([0, 2_500, 10_000, 500].map(formatAxisVolume), ['0', '2.5k', '10k', '500'])
 })

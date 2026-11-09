@@ -106,7 +106,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
         right: 0,
         bottom: 0,
         zIndex: 99999,
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
         backdropFilter: 'blur(2px)',
         WebkitBackdropFilter: 'blur(2px)',
         display: 'flex',
@@ -125,8 +125,8 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
           maxWidth: '360px',
           backgroundColor: 'var(--surface)',
           borderRadius: '16px',
-          boxShadow: '0 12px 32px rgba(0, 0, 0, 0.6)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 12px 32px rgba(0, 0, 0, 0.12)',
+          border: '1px solid var(--line)',
           padding: '20px 18px 14px 18px',
           color: 'var(--text)',
           display: 'flex',
@@ -206,7 +206,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
             {muscleGroups.map((group) => <option key={group} value={group}>{group}</option>)}
           </select>
           {muscleGroupError && <span role="alert" style={{ color: 'var(--negative)', fontWeight: 400 }}>{muscleGroupError}</span>}
-          {!muscleGroupsLoaded && <span role="status" style={{ color: 'var(--text-muted)', fontWeight: 400 }}>Loading muscle groups...</span>}
+          {!muscleGroupsLoaded && <span className="visually-hidden" role="status">Loading muscle groups...</span>}
         </label>
 
         {/* Liste des exercices */}
@@ -217,11 +217,11 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
             overflowY: 'auto',
             paddingRight: '2px',
             scrollbarWidth: 'thin',
-            scrollbarColor: '#3a3a3c transparent',
+            scrollbarColor: 'var(--control) transparent',
           }}
         >
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: '13px' }}>Loading exercises...</div>
+            <p className="visually-hidden" role="status">Loading exercises...</p>
           ) : loadError ? (
             <div role="alert" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--negative)', fontSize: '13px' }}>{loadError}</div>
           ) : availableExercises.length === 0 ? (
@@ -277,7 +277,7 @@ export const SelectExerciseModal: React.FC<SelectExerciseModalProps> = ({
         <MediaCredit />
 
         {/* Pied de page */}
-        {onCreateCustom && <div style={{ marginTop: '10px', paddingTop: '10px', textAlign: 'right', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+        {onCreateCustom && <div style={{ marginTop: '10px', paddingTop: '10px', textAlign: 'right', borderTop: '1px solid var(--line)' }}>
           <button
             onClick={onCreateCustom}
             type="button"

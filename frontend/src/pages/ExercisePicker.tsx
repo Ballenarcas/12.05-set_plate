@@ -85,7 +85,7 @@ function ExercisePicker() {
         <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search exercises" aria-label="Search exercises" />
       </label>
 
-      {isLoading && <div className="card state-card" role="status">Loading exercises...</div>}
+      {isLoading && <p className="visually-hidden" role="status">Loading exercises...</p>}
       {error && <div className="card state-card" role="alert">{error}</div>}
       {!isLoading && !error && exercises.length === 0 && <div className="card state-card">No exercises found.</div>}
 

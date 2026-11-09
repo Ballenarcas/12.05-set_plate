@@ -1,9 +1,10 @@
-import { ArrowRight, BarChart3, ChevronDown, Dumbbell, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowRight, ChevronDown, Dumbbell, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
+import { lastLifts, type LastLift } from '../utils/lastLifts'
 import type { ActiveExercise, Routine, WorkoutHistoryEntry } from '../types/workout'
 
 function formatWorkoutDuration(seconds: number): string {
@@ -17,17 +18,18 @@ function formatWorkoutDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
-function createActiveExercises(routine: Routine): ActiveExercise[] {
+// Routines store no weight, so each exercise starts from the last weight the user lifted for it.
+function createActiveExercises(routine: Routine, lifts: Map<string, LastLift>): ActiveExercise[] {
   return routine.exercises.map((exercise) => ({
     exercise_id: exercise.exercise_id,
     name: exercise.name,
-    previous_weight_kg: null,
-    previous_reps: null,
+    previous_weight_kg: lifts.get(exercise.exercise_id)?.weight_kg ?? null,
+    previous_reps: lifts.get(exercise.exercise_id)?.reps ?? null,
     target_sets: exercise.target_sets,
     target_reps: exercise.target_reps,
     sets: Array.from({ length: exercise.target_sets ?? 1 }, (_, index) => ({
       set_number: index + 1,
-      weight_kg: 0,
+      weight_kg: lifts.get(exercise.exercise_id)?.weight_kg ?? 0,
       reps: exercise.reps_by_set?.[index] ?? exercise.target_reps ?? 0,
       is_completed: false,
     })),
@@ -57,6 +59,7 @@ function Workouts() {
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistoryEntry[]>([])
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [showAllRoutines, setShowAllRoutines] = useState(false)
+  const lifts = useMemo(() => lastLifts(workoutHistory), [workoutHistory])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isHistoryLoading, setIsHistoryLoading] = useState(() => Boolean(getCurrentUser()?.id))
@@ -109,7 +112,7 @@ function Workouts() {
         routineId: routine?.id,
         name: routine?.name ?? 'Empty workout',
         startedAt: new Date().toISOString(),
-        exercises: routine ? createActiveExercises(routine) : [],
+        exercises: routine ? createActiveExercises(routine, lifts) : [],
       },
     })
   }
@@ -240,24 +243,60 @@ function Workouts() {
           <h1>Workouts</h1>
           <PremiumUpsellButton />
         </div>
-        <div className="workouts-header-actions">
-          <button className="primary-button" type="button" onClick={requestEmptyWorkout}><Plus size={16} aria-hidden="true" /> Empty workout</button>
-          <button className="secondary-action" type="button" onClick={() => navigate('/workouts/create')}><Plus size={16} aria-hidden="true" /> New routine</button>
-        </div>
+        <button className="primary-button" type="button" onClick={requestEmptyWorkout}><Plus size={16} aria-hidden="true" /> Start a workout</button>
       </header>
 
-      {isLoading && <div className="card state-card" role="status">Loading routines...</div>}
+      {isLoading && <p className="visually-hidden" role="status">Loading routines...</p>}
       {error && <div className="card state-card" role="alert">{error}</div>}
       {routineDeleteError && <div className="card routine-delete-error" role="alert">{routineDeleteError}</div>}
 
+      <section className="workout-history-section" aria-labelledby="saved-routines-title">
+        <h2 className="section-title" id="saved-routines-title">My routines</h2>
+      {!isLoading && !error && routines.length === 0 && <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No saved routines yet.</p></div>}
+
+      <div className="routine-list">
+        {(showAllRoutines ? routines : routines.slice(0, LIST_PREVIEW_SIZE)).map((routine) => (
+          <article className="card routine-card" key={routine.id}>
+            <div className="routine-card-heading">
+              <div>
+                <h2>{routine.name}</h2>
+                <p className="routine-meta">{routine.exercises.length} exercises{routine.estimated_duration_minutes !== null && ` · Est. ${routine.estimated_duration_minutes} min`}</p>
+              </div>
+              <div className="routine-card-actions">
+                <button className="routine-edit-button" type="button" aria-label={`Edit ${routine.name}`} onClick={() => navigate('/workouts/create', { state: { routine } })}>
+                  <Pencil size={17} aria-hidden="true" />
+                </button>
+                <button className="routine-delete-button" type="button" aria-label={`Delete ${routine.name}`} onClick={() => { setRoutineDeleteError(null); setRoutineToDelete(routine) }}>
+                  <Trash2 size={17} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <ul className="preview-rows">
+              {routine.exercises.slice(0, 3).map((exercise) => (
+                <li key={exercise.exercise_id}>
+                  <span>{exercise.name}</span>
+                  {exercise.target_sets && exercise.target_reps ? <span>{exercise.target_sets} × {exercise.target_reps}{lifts.has(exercise.exercise_id) ? ` · ${lifts.get(exercise.exercise_id)!.weight_kg} kg` : ''}</span> : null}
+                </li>
+              ))}
+              {routine.exercises.length > 3 && <li><span>+{routine.exercises.length - 3} more</span></li>}
+            </ul>
+            <button className="secondary-action card-action" type="button" onClick={() => startWorkout(routine)}>Start workout <ArrowRight size={16} aria-hidden="true" /></button>
+          </article>
+        ))}
+      </div>
+      {routines.length > LIST_PREVIEW_SIZE && (
+        <SeeMoreButton
+          hiddenCount={routines.length - LIST_PREVIEW_SIZE}
+          expanded={showAllRoutines}
+          onToggle={() => setShowAllRoutines((current) => !current)}
+        />
+      )}
+      <button className="secondary-action create-routine-button" type="button" onClick={() => navigate('/workouts/create')}><Plus size={16} aria-hidden="true" /> Create routine</button>
+      </section>
+
       <section className="workout-history-section" aria-labelledby="workout-history-title">
-        <div className="workout-history-heading">
-          <h2 className="section-title" id="workout-history-title">History</h2>
-          <button className="text-action" type="button" onClick={() => navigate('/workouts/statistics')}>
-            <BarChart3 size={16} aria-hidden="true" /> Statistics
-          </button>
-        </div>
-        {isHistoryLoading && <div className="card state-card" role="status">Loading your workouts...</div>}
+        <h2 className="section-title" id="workout-history-title">Recent workouts</h2>
+        {isHistoryLoading && <p className="visually-hidden" role="status">Loading your workouts...</p>}
         {historyError && <div className="card state-card" role="alert">{historyError}</div>}
         {!isHistoryLoading && !historyError && workoutHistory.length === 0 && (
           <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No completed workouts yet. Finish a workout to start building your history.</p></div>
@@ -315,49 +354,6 @@ function Workouts() {
             onToggle={() => setShowAllHistory((current) => !current)}
           />
         )}
-      </section>
-
-      <section aria-labelledby="saved-routines-title">
-        <h2 className="section-title" id="saved-routines-title">Saved routines</h2>
-      {!isLoading && !error && routines.length === 0 && <div className="card state-card"><Dumbbell size={24} aria-hidden="true" /><p>No saved routines yet.</p></div>}
-
-      <div className="routine-list">
-        {(showAllRoutines ? routines : routines.slice(0, LIST_PREVIEW_SIZE)).map((routine) => (
-          <article className="card routine-card" key={routine.id}>
-            <div className="routine-card-heading">
-              <div>
-                <h2>{routine.name}</h2>
-                <p className="routine-meta">{routine.exercises.length} exercises{routine.estimated_duration_minutes !== null && ` · Est. ${routine.estimated_duration_minutes} min`}</p>
-              </div>
-              <div className="routine-card-actions">
-                <button className="routine-edit-button" type="button" aria-label={`Edit ${routine.name}`} onClick={() => navigate('/workouts/create', { state: { routine } })}>
-                  <Pencil size={17} aria-hidden="true" />
-                </button>
-                <button className="routine-delete-button" type="button" aria-label={`Delete ${routine.name}`} onClick={() => { setRoutineDeleteError(null); setRoutineToDelete(routine) }}>
-                  <Trash2 size={17} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-            <ul className="preview-rows">
-              {routine.exercises.slice(0, 3).map((exercise) => (
-                <li key={exercise.exercise_id}>
-                  <span>{exercise.name}</span>
-                  {exercise.target_sets && exercise.target_reps ? <span>{exercise.target_sets} × {exercise.target_reps}</span> : null}
-                </li>
-              ))}
-              {routine.exercises.length > 3 && <li><span>+{routine.exercises.length - 3} more</span></li>}
-            </ul>
-            <button className="secondary-action card-action" type="button" onClick={() => startWorkout(routine)}>Start workout <ArrowRight size={16} aria-hidden="true" /></button>
-          </article>
-        ))}
-      </div>
-      {routines.length > LIST_PREVIEW_SIZE && (
-        <SeeMoreButton
-          hiddenCount={routines.length - LIST_PREVIEW_SIZE}
-          expanded={showAllRoutines}
-          onToggle={() => setShowAllRoutines((current) => !current)}
-        />
-      )}
       </section>
 
       {workoutToDelete && <div className="modal-backdrop">

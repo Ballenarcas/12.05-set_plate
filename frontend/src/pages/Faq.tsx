@@ -45,15 +45,15 @@ export default function Faq() {
             <article 
               key={index} 
               className="card faq-card" 
-              style={{ padding: '16px', cursor: 'pointer', backgroundColor: '#1c1c1e', borderRadius: '12px' }}
+              style={{ padding: '16px', cursor: 'pointer', backgroundColor: 'var(--well)', borderRadius: '12px' }}
               onClick={() => setOpenIndex(openIndex === index ? null : index)}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ fontSize: '16px', margin: 0, fontWeight: 600 }}>{item.question}</h3>
-                <HelpCircle size={18} style={{ color: '#8e8e93' }} />
+                <HelpCircle size={18} style={{ color: 'var(--text-muted)' }} />
               </div>
               {openIndex === index && (
-                <p style={{ marginTop: '12px', fontSize: '14px', color: '#a1a1aa', lineHeight: 1.5 }}>
+                <p style={{ marginTop: '12px', fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                   {item.answer}
                 </p>
               )}
@@ -62,7 +62,7 @@ export default function Faq() {
         </section>
 
         {/* Section Support (Conforme à la PA) */}
-        <section className="support-section" style={{ marginTop: '16px', paddingTop: '24px', borderTop: '1px solid #333' }}>
+        <section className="support-section" style={{ marginTop: '16px', paddingTop: '24px', borderTop: '1px solid var(--line)' }}>
           <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Need more help?</h2>
           
           <button 
@@ -75,7 +75,7 @@ export default function Faq() {
           </button>
 
           {showSupportMessage && (
-            <div style={{ marginTop: '16px', padding: '16px', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: '8px', color: '#4ade80', fontSize: '14px', textAlign: 'center', lineHeight: 1.5 }}>
+            <div style={{ marginTop: '16px', padding: '16px', backgroundColor: 'var(--green-tint)', border: '1px solid var(--green-tint)', borderRadius: '8px', color: 'var(--green)', fontSize: '14px', textAlign: 'center', lineHeight: 1.5 }}>
               Please write an email to support@setandplate.com and we will respond asap
             </div>
           )}

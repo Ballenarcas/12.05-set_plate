@@ -58,7 +58,7 @@ def test_onboarding_facade_inserts_a_new_user():
             assert name == "users"
             return Query()
 
-    payload = UserOnboardingRequest(name="Ada", surname="Lovelace", email="Ada@Example.com")
+    payload = UserOnboardingRequest(name="Ada", surname="Lovelace", email="Ada@Example.com", password="secure-pass-123")
     response = OnboardingFacade(lambda **_: Client()).register(payload)
     assert response.user_id == store["record"]["id"]
     assert response.saved_to_supabase is True
@@ -91,7 +91,7 @@ def test_onboarding_facade_refuses_an_existing_email():
             assert name == "users"
             return Query()
 
-    payload = UserOnboardingRequest(name="Ada", surname="Lovelace", email="ada@example.com")
+    payload = UserOnboardingRequest(name="Ada", surname="Lovelace", email="ada@example.com", password="secure-pass-123")
 
     with pytest.raises(HTTPException) as excinfo:
         OnboardingFacade(lambda **_: Client()).register(payload)

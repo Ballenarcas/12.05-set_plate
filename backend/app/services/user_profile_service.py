@@ -10,7 +10,7 @@ def calculate_calorie_goal(
     h = height if height and height > 0 else 175.0
     a = age if age and age > 0 else 25
     g = (gender or "male").lower()
-    gender_offset = 5 if "male" in g else (-161 if "female" in g else -78)
+    gender_offset = -161 if "female" in g else (5 if "male" in g else -78)
     bmr = (10.0 * w) + (6.25 * h) - (5.0 * a) + gender_offset
     tdee = bmr * 1.25
 

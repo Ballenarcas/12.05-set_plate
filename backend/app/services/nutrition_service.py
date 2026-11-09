@@ -1,6 +1,7 @@
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 import logging
 from typing import Any
 
@@ -13,7 +14,6 @@ from app.db.supabase_client import get_supabase
 from app.schemas.nutrition import (
     DailyNutritionResponse,
     FoodSearchItem,
-    MacroSummary,
     MealCreateRequest,
     MealIngredient,
     MealItem,
@@ -49,10 +49,6 @@ def _meal_ingredient_records(
         }
         for ingredient in ingredients
     ]
-
-
-def get_daily_macros() -> MacroSummary:
-    return MacroSummary(protein_grams=45, carbs_grams=120, fat_grams=30, calories_remaining=1420)
 
 
 def infer_meal_type(timestamp_str: str | None) -> str:
@@ -306,6 +302,48 @@ FOOD_DATABASE: list[dict] = [
 ]
 
 
+@lru_cache(maxsize=512)  # a failed lookup raises, so it is not cached and can be tried again
+def _search_open_food_facts(query: str) -> tuple[FoodSearchItem, ...]:
+    with httpx.Client(timeout=2.5) as client:
+        resp = client.get(
+            "https://world.openfoodfacts.org/cgi/search.pl",
+            params={
+                "search_terms": query,
+                "search_simple": 1,
+                "action": "process",
+                "json": 1,
+                "page_size": 5,
+            },
+            headers={"User-Agent": "SetAndPlateApp/1.0 (fitness-assistant)"},
+        )
+    resp.raise_for_status()
+
+    items: list[FoodSearchItem] = []
+    for prod in resp.json().get("products", []):
+        name = (prod.get("product_name") or prod.get("product_name_en") or "").strip()
+        nutriments = prod.get("nutriments", {})
+        cals = nutriments.get("energy-kcal_100g") or nutriments.get("energy-kcal")
+        if not name or cals is None:
+            continue
+        try:
+            cals_int = round(float(cals))
+        except (ValueError, TypeError):
+            continue
+
+        items.append(
+            FoodSearchItem(
+                id=f"off_{prod.get('code', name)}",
+                name=name,
+                calories_per_100g=cals_int,
+                proteins_per_100g=round(float(nutriments.get("proteins_100g") or 0.0), 1),
+                carbs_per_100g=round(float(nutriments.get("carbohydrates_100g") or 0.0), 1),
+                fats_per_100g=round(float(nutriments.get("fat_100g") or 0.0), 1),
+                category="open_food_facts",
+            )
+        )
+    return tuple(items)
+
+
 def search_foods(query: str) -> list[FoodSearchItem]:
     """Searches food database locally with Open Food Facts API fallback."""
     q = (query or "").strip().lower()
@@ -346,51 +384,13 @@ def search_foods(query: str) -> list[FoodSearchItem]:
     # 2. If fewer than 4 matches and query has 2+ characters, query Open Food Facts API
     if len(results) < 4 and len(q) >= 2:
         try:
-            with httpx.Client(timeout=2.5) as client:
-                resp = client.get(
-                    "https://world.openfoodfacts.org/cgi/search.pl",
-                    params={
-                        "search_terms": q,
-                        "search_simple": 1,
-                        "action": "process",
-                        "json": 1,
-                        "page_size": 5,
-                    },
-                    headers={"User-Agent": "SetAndPlateApp/1.0 (fitness-assistant)"},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for prod in data.get("products", []):
-                        name = (prod.get("product_name") or prod.get("product_name_en") or "").strip()
-                        if not name or name.lower() in seen_names:
-                            continue
-                        nutriments = prod.get("nutriments", {})
-                        cals = nutriments.get("energy-kcal_100g") or nutriments.get("energy-kcal")
-                        if cals is None:
-                            continue
-                        try:
-                            cals_int = round(float(cals))
-                        except (ValueError, TypeError):
-                            continue
-
-                        p = float(nutriments.get("proteins_100g") or 0.0)
-                        c = float(nutriments.get("carbohydrates_100g") or 0.0)
-                        f = float(nutriments.get("fat_100g") or 0.0)
-
-                        results.append(
-                            FoodSearchItem(
-                                id=f"off_{prod.get('code', name)}",
-                                name=name,
-                                calories_per_100g=cals_int,
-                                proteins_per_100g=round(p, 1),
-                                carbs_per_100g=round(c, 1),
-                                fats_per_100g=round(f, 1),
-                                category="open_food_facts",
-                            )
-                        )
-                        seen_names.add(name.lower())
-                        if len(results) >= 8:
-                            break
+            for item in _search_open_food_facts(q):
+                if item.name.lower() in seen_names:
+                    continue
+                results.append(item)
+                seen_names.add(item.name.lower())
+                if len(results) >= 8:
+                    break
         except Exception as err:
             logger.debug(f"Open Food Facts lookup skipped or timed out: {err}")
 
@@ -439,7 +439,7 @@ def create_user_meal(payload: MealCreateRequest) -> MealItem:
         fats = payload.fats
 
         # Automatically calculate calories and macros if not explicitly provided
-        if cals is None or cals <= 0:
+        if cals is None:
             cals, calc_p, calc_c, calc_f = calculate_meal_nutrition(payload.name, qty)
             if proteins is None or proteins == 0.0:
                 proteins = calc_p

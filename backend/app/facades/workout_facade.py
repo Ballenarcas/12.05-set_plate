@@ -63,9 +63,6 @@ class WorkoutFacade:
     def delete_routine(self, user_id: UUID, routine_id: UUID) -> None:
         workout_service.delete_user_routine(user_id, routine_id)
 
-    def programmed_workout(self):
-        return workout_service.get_programmed_workout()
-
     def list_exercises(self, **filters):
         return workout_service.list_exercises(**filters)
 

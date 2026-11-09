@@ -22,7 +22,6 @@ class Settings(BaseSettings):
 
     environment: str = "development"
     allowed_hosts: str = ""
-    admin_user_ids: str = ""
 
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env", "backend/.env"),
@@ -47,10 +46,6 @@ class Settings(BaseSettings):
             if loopback not in hosts:
                 hosts.append(loopback)
         return hosts
-
-    @property
-    def admin_user_id_list(self) -> set[str]:
-        return {user_id.strip() for user_id in self.admin_user_ids.split(",") if user_id.strip()}
 
     @property
     def is_production(self) -> bool:

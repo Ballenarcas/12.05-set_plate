@@ -51,8 +51,13 @@ Supabase stays external. There is no database container and no persistent volume
    AI_BASE_URL=https://api.groq.com/openai/v1
    AI_API_KEY=
    AI_MODEL=openai/gpt-oss-20b
+   RESEND_API_KEY=
+   EMAIL_FROM=SET&PLATE <no-reply@your-domain.com>
+   APP_URL=https://zimaos.tailxxxx.ts.net
    WEB_CONCURRENCY=1
    ```
+
+   `RESEND_API_KEY`, `EMAIL_FROM` and `APP_URL` are for password reset emails. Create the key at resend.com and verify the domain used in `EMAIL_FROM` there (Domains → Add Domain, then add its DNS records). It must be a domain you own: Resend rejects free shared domains and `ts.net` addresses. `APP_URL` is the address people open the app at, used to build the reset link.
 
    `AUTH_SECRET_KEY`, `ALLOWED_HOSTS` and `CORS_ORIGINS` are mandatory: the stack fails to start without them. Keep `127.0.0.1` and `localhost` inside `ALLOWED_HOSTS` because the backend healthcheck calls `/health` on loopback.
 

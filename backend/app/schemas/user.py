@@ -39,6 +39,19 @@ class UserLoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=1024)
 
 
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=20, max_length=200)
+    new_password: str = Field(..., min_length=12, max_length=128)
+
+
+class PasswordResetResponse(BaseModel):
+    message: str
+
+
 class UserLoginResponse(BaseModel):
     id: str
     email: str

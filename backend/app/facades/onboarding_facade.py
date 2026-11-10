@@ -1,14 +1,21 @@
+import hashlib
 import logging
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from fastapi import HTTPException
 
 from app.core.auth import issue_access_token
+from app.core.config import get_settings
+from app.core.reset_quota import allow_reset_email
 from app.core.security import hash_password, verify_password
 from app.db.supabase_client import get_supabase
 from app.services.user_profile_service import calculate_calorie_goal
 from app.schemas.user import (
+    PasswordResetConfirm,
+    PasswordResetRequest,
     UserLoginRequest,
     UserLoginResponse,
     UserOnboardingRequest,
@@ -25,6 +32,14 @@ _DUMMY_HASH = hash_password("set-and-plate-timing-equalizer")
 
 def _expires_at(expires_at_unix: int) -> datetime:
     return datetime.fromtimestamp(expires_at_unix, tz=timezone.utc)
+
+
+RESET_LINK_MINUTES = 30
+INVALID_RESET_LINK = "This link is invalid or has expired. Ask for a new one."
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class OnboardingFacade:
@@ -168,6 +183,84 @@ class OnboardingFacade:
             access_token=token,
             token_expires_at=_expires_at(expires_at),
         )
+
+    def request_password_reset(self, payload: PasswordResetRequest) -> tuple[str, str] | None:
+        """Create a one-time reset link. Returns ``(email, link)`` to send, or None.
+
+        The caller answers the same way either way, so the response never
+        reveals whether an address is registered.
+        """
+        email = payload.email.strip().lower()
+        supabase = (self.supabase_provider or get_supabase)(admin=True)
+        if supabase is None:
+            raise HTTPException(status_code=503, detail="Service unavailable. Please try again.")
+        try:
+            result = supabase.table("users").select("id").eq("email", email).limit(1).execute()
+        except Exception as err:
+            logger.error("Could not look up the reset email: %s", err, exc_info=True)
+            raise HTTPException(status_code=503, detail="Service unavailable. Please try again.") from err
+
+        user = result.data[0] if result.data else None
+        if not user or not allow_reset_email(email):
+            return None
+
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=RESET_LINK_MINUTES)
+        try:
+            # One live link per user: asking again replaces the older one.
+            supabase.table("password_resets").delete().eq("user_id", user["id"]).execute()
+            supabase.table("password_resets").insert({
+                "user_id": user["id"],
+                "token_hash": _token_hash(token),
+                "expires_at": expires_at.isoformat(),
+            }).execute()
+        except Exception as err:
+            logger.error("Could not save the password reset: %s", err, exc_info=True)
+            return None
+
+        link = f"{get_settings().app_url.rstrip('/')}/reset-password?token={quote(token)}"
+        return email, link
+
+    def confirm_password_reset(self, payload: PasswordResetConfirm) -> None:
+        """Set a new password if the link is valid, unused and not expired."""
+        supabase = (self.supabase_provider or get_supabase)(admin=True)
+        if supabase is None:
+            raise HTTPException(status_code=503, detail="Service unavailable. Please try again.")
+        now = datetime.now(timezone.utc)
+        try:
+            result = (
+                supabase.table("password_resets")
+                .select("id,user_id,expires_at,used_at")
+                .eq("token_hash", _token_hash(payload.token))
+                .limit(1)
+                .execute()
+            )
+            reset = result.data[0] if result.data else None
+            if not reset or reset.get("used_at") or datetime.fromisoformat(reset["expires_at"]) <= now:
+                raise HTTPException(status_code=400, detail=INVALID_RESET_LINK)
+
+            # Marking it used only while still unused stops two requests from spending one link twice.
+            claimed = (
+                supabase.table("password_resets")
+                .update({"used_at": now.isoformat()})
+                .eq("id", reset["id"])
+                .is_("used_at", "null")
+                .execute()
+            )
+            if not claimed.data:
+                raise HTTPException(status_code=400, detail=INVALID_RESET_LINK)
+
+            supabase.table("users").update(
+                {"password": hash_password(payload.new_password)}
+            ).eq("id", reset["user_id"]).execute()
+            supabase.table("password_resets").delete().eq("user_id", reset["user_id"]).execute()
+        except HTTPException:
+            raise
+        except Exception as err:
+            logger.error("Could not reset the password: %s", err, exc_info=True)
+            raise HTTPException(status_code=500, detail="Could not update the password. Please try again.") from err
+        # shortcut: sessions are stateless, so devices already signed in stay signed in until their
+        # token expires (AUTH_TOKEN_TTL_HOURS). Add a password_changed_at check in auth.py to end them.
 
 
 onboarding_facade = OnboardingFacade()

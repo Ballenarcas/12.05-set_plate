@@ -8,6 +8,8 @@ const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
 const CreateRoutine = lazy(() => import('./pages/CreateRoutine'))
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
 const Login = lazy(() => import('./pages/Login'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const LogMeals = lazy(() => import('./pages/LogMeals'))
 const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
@@ -29,6 +31,8 @@ function App() {
         <Routes>
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/log-meals" element={<LogMeals />} />
           <Route element={<ProtectedLayout />}>

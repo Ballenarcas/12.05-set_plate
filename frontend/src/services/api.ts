@@ -431,6 +431,33 @@ export async function fetchWorkoutStatistics(
   return data
 }
 
+async function postPasswordReset(path: string, body: object, fallback: string): Promise<string> {
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/api/v1/users/password-reset/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
+    })
+  } catch (error) {
+    throw new Error('This is taking longer than expected. Check your connection and try again.', { cause: error })
+  }
+  if (response.status === 429) throw new Error('Too many attempts. Wait a minute and try again.')
+  const data = await response.json().catch(() => ({})) as { message?: string; detail?: unknown }
+  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : fallback)
+  return data.message ?? ''
+}
+
+/** Always resolves with the same message, whether or not the email has an account. */
+export function requestPasswordReset(email: string): Promise<string> {
+  return postPasswordReset('request', { email: email.trim() }, "We couldn't send the reset link. Please try again.")
+}
+
+export function confirmPasswordReset(token: string, newPassword: string): Promise<string> {
+  return postPasswordReset('confirm', { token, new_password: newPassword }, "We couldn't update your password. Please try again.")
+}
+
 export async function loginUser(email: string, password: string): Promise<import('../types').UserProfile> {
   let response: Response
   try {

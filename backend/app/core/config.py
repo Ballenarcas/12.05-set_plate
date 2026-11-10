@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     auth_secret_key: str = ""
     auth_token_ttl_hours: int = 12
 
+    # Password reset emails go through Resend. Without a key, no email is sent.
+    resend_api_key: str = ""
+    # Sender on a domain verified in Resend, e.g. "SET&PLATE <no-reply@your-domain.com>".
+    email_from: str = ""
+    # Public address of the frontend, used to build the reset link.
+    app_url: str = "http://localhost:5173"
+
     environment: str = "development"
     allowed_hosts: str = ""
 

@@ -41,6 +41,10 @@ services:
       AI_TIPS_MODEL: ${AI_TIPS_MODEL:-${GROQ_TIPS_MODEL:-openai/gpt-oss-120b}}
       AI_TIPS_MODEL_ENABLED: ${AI_TIPS_MODEL_ENABLED:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      # Password reset emails through Resend. Without RESEND_API_KEY no reset email is sent.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      APP_URL: ${APP_URL:-}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     expose:
       - "8000"

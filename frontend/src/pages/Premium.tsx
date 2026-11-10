@@ -1,7 +1,8 @@
 import { BookOpen, Camera, Check, Crown, Dumbbell, Loader2, TrendingUp, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import {
   getCurrentUser,
   isPremiumActive,
@@ -76,7 +77,7 @@ function PremiumConfirmation({ plan, expiresAt, isNew, onContinue }: PremiumConf
 }
 
 function Premium() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from
   const user = getCurrentUser()

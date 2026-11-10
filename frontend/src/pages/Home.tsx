@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import AiTipCard from '../components/home/AiTipCard'
 import WeekActivity from '../components/home/WeekActivity'
 import DailyIntake from '../components/nutrition/DailyIntake'
@@ -8,16 +8,13 @@ import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planT
 import { describeError } from '../utils/errors.js'
 
 // Nothing shows while loading; screen readers still hear it.
-function HomeSkeleton() {
-  return <p className="visually-hidden" role="status">Loading your dashboard</p>
-}
-
 function Home() {
   const [summary, setSummary] = useState<DashboardSummary | null>(() => getCachedDashboardSummary())
   const [error, setError] = useState<string | null>(null)
+  const [planning, setPlanning] = useState(false)
   const user = getCurrentUser()
   const userId = user?.id
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
 
   useEffect(() => {
     let isMounted = true
@@ -27,12 +24,15 @@ function Home() {
         if (!isMounted) return
         setSummary(data)
         if (data.plan || data.completed_workout_today || !userId) return
+        setPlanning(true)
         try {
           await planTodaysWorkout(userId)
           const refreshed = await fetchDashboardSummary({ forceRefresh: true })
           if (isMounted) setSummary(refreshed)
         } catch {
           // Keep the dashboard available when planning is temporarily unavailable.
+        } finally {
+          if (isMounted) setPlanning(false)
         }
       })
       .catch((requestError: Error) => {
@@ -47,23 +47,25 @@ function Home() {
   }, [userId])
 
   if (error) return <div className="screen state-card" role="alert">{error}</div>
-  if (!summary) return <HomeSkeleton />
 
-  const { nutrition } = summary
-  const plan = summary.plan
-  const completedWorkoutToday = summary.completed_workout_today
+  // The page is drawn straight away; only the parts that need the dashboard wait for it, and the
+  // tip and activity load at the same time instead of after it.
+  const nutrition = summary?.nutrition
+  const plan = summary?.plan
+  const completedWorkoutToday = summary?.completed_workout_today
   const macros = [
-    { label: 'Protein', current: nutrition.current_protein, target: nutrition.target_protein },
-    { label: 'Carbs', current: nutrition.current_carbs, target: nutrition.target_carbs },
-    { label: 'Fat', current: nutrition.current_fat, target: nutrition.target_fat },
+    { label: 'Protein', current: nutrition?.current_protein ?? 0, target: nutrition?.target_protein ?? 0 },
+    { label: 'Carbs', current: nutrition?.current_carbs ?? 0, target: nutrition?.target_carbs ?? 0 },
+    { label: 'Fat', current: nutrition?.current_fat ?? 0, target: nutrition?.target_fat ?? 0 },
   ]
-  const firstName = (summary.user_name || user?.name || '').split(' ')[0]
+  const firstName = (summary?.user_name || user?.name || '').split(' ')[0]
+  const today = summary?.current_date_formatted ?? new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' })
 
   return (
     <div className="screen">
       <header className="screen-header">
         <div>
-          <p className="eyebrow">{summary.current_date_formatted}</p>
+          <p className="eyebrow">{today}</p>
           <h1>Hello, {firstName}</h1>
         </div>
         <PremiumUpsellButton />
@@ -74,7 +76,12 @@ function Home() {
           <h2 className="section-title" id="nutrition-summary">Nutrition</h2>
           <button className="text-link" type="button" onClick={() => navigate('/log-meals')}>Log a meal</button>
         </div>
-        <DailyIntake consumed={nutrition.target_kcals - nutrition.remaining_kcals} goal={nutrition.target_kcals} macros={macros} />
+        <DailyIntake
+          consumed={nutrition ? nutrition.target_kcals - nutrition.remaining_kcals : 0}
+          goal={nutrition?.target_kcals ?? 0}
+          macros={macros}
+          pending={!nutrition}
+        />
       </section>
 
       {user?.id && (
@@ -94,7 +101,12 @@ function Home() {
 
       <section className="section" aria-labelledby="programmed-training">
         <h2 className="section-title" id="programmed-training">Today's set</h2>
-        {completedWorkoutToday ? (
+        {!summary || (planning && !plan && !completedWorkoutToday) ? (
+          // Same card shape straight away, so nothing jumps in later at the bottom of the page.
+          <div className="card training-card empty-state" role="status" aria-busy="true">
+            {summary ? "Planning today's workout…" : "Loading today's workout…"}
+          </div>
+        ) : completedWorkoutToday ? (
           <div className="card training-card">
             <div className="scheduled-training-heading">
               <h3>Workout completed today</h3>

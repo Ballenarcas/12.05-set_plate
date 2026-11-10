@@ -1,10 +1,16 @@
-import { Outlet, useLocation } from 'react-router-dom'
+import { useLayoutEffect } from 'react'
+import { Outlet, useLocation, useNavigationType } from 'react-router-dom'
 import GlassDock from './GlassDock'
 import WorkoutInProgressBar from './WorkoutInProgressBar'
 import '../../styles/global.css'
 
 function MainLayout() {
   const { pathname } = useLocation()
+  const navigationType = useNavigationType()
+  // A new page starts at its top; Back keeps wherever the browser puts it.
+  useLayoutEffect(() => {
+    if (navigationType !== 'POP') window.scrollTo(0, 0)
+  }, [pathname, navigationType])
   const hideDock = pathname.startsWith('/workouts/active') || pathname === '/premium'
   return (
     <div className={`app-shell${hideDock ? ' session-shell' : ''}`}>

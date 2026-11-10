@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import {
   ChevronLeft,
   Loader2,
@@ -70,7 +70,7 @@ function applyMealDelta(prev: TodayNutritionData, delta: MealDelta, sign: 1 | -1
 }
 
 export function LogMeals() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const currentUser = getCurrentUser()
 
   // 1. Session check: redirect to /login if unauthenticated

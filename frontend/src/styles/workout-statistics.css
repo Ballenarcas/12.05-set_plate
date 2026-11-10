@@ -63,22 +63,6 @@
   gap: 1rem;
 }
 
-.stats-metrics > .stats-metric-card,
-.stats-content > .stats-empty-callout,
-.stats-content > .stats-panel {
-  animation: stats-card-enter 420ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
-}
-
-.stats-metrics > .stats-metric-card:nth-child(2) { animation-delay: 55ms; }
-.stats-metrics > .stats-metric-card:nth-child(3) { animation-delay: 110ms; }
-.stats-content > .stats-empty-callout { animation-delay: 70ms; }
-.stats-content > .stats-panel:nth-of-type(1) { animation-delay: 100ms; }
-.stats-content > .stats-panel:nth-of-type(2) { animation-delay: 175ms; }
-
-@keyframes stats-card-enter {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 
 .stats-metrics {
   display: grid;
@@ -308,11 +292,6 @@
   to { stroke-dashoffset: 0; }
 }
 
-@keyframes stats-doughnut-sweep {
-  from { stroke-dashoffset: 1; }
-  to { stroke-dashoffset: 0; }
-}
-
 @keyframes stats-muscle-fill-in {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
@@ -351,28 +330,53 @@
   stroke: var(--background);
 }
 
-.stats-doughnut-reveal {
-  stroke-dasharray: 1;
-  animation: stats-doughnut-sweep 720ms var(--ease-out);
+.stats-doughnut-ring {
+  /* The entrance rotates this group; turn it about the ring's centre, not the SVG corner. */
+  transform-box: view-box;
+  transform-origin: 100px 100px;
 }
+
+.stats-doughnut-reveal { stroke-dasharray: 1; }
+
+/* Until the chart is on screen the ring is undrawn and turned back, ready for the entrance. */
+.stats-distribution:not([data-visible]) .stats-doughnut-reveal { stroke-dashoffset: 1; }
+.stats-distribution:not([data-visible]) .stats-doughnut-ring { transform: rotate(-90deg); }
 
 .stats-doughnut-segment {
   cursor: pointer;
   outline: 0 !important;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  stroke-width: 14px;
+  /* A CSS transform with the same functions in both states, so the move interpolates smoothly. */
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+  transform: translate(0, 0) rotate(-90deg);
   transition:
-    opacity var(--motion) ease-out,
-    filter var(--motion) ease-out,
-    transform 260ms var(--ease-out);
+    opacity 220ms ease-out,
+    stroke-width 360ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* The chosen slice steps out and thickens with a small overshoot; the rest step back. */
+.stats-doughnut-segment[aria-pressed='true'] {
+  stroke-width: 19px;
+  transform: translate(var(--pop-x), var(--pop-y)) rotate(-90deg);
 }
 
 .stats-doughnut[data-selected] .stats-doughnut-segment:not([aria-pressed='true']) {
-  opacity: 0.35;
+  opacity: 0.3;
 }
 
+.stats-doughnut-segment:active { transition-duration: 120ms; }
+
+/* The centre swaps with a short rise, keyed on the choice so each change plays it. */
 .stats-doughnut-label {
-  animation: backdrop-in var(--motion) ease-out;
+  animation: stats-label-in 260ms var(--ease-out);
+}
+
+@keyframes stats-label-in {
+  from { opacity: 0; transform: translateY(5px); }
 }
 
 .stats-doughnut-segment:focus-visible {
@@ -436,8 +440,14 @@
   transition: box-shadow var(--motion-fast) var(--ease-out);
 }
 
+.stats-legend-chip { transition: opacity 220ms ease-out; }
+.stats-legend-swatch { transition: transform 360ms cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 220ms ease-out; }
 .stats-legend-chip[aria-pressed='true'] { font-weight: 600; }
-.stats-legend-chip[aria-pressed='true'] .stats-legend-swatch { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
+.stats-legend-chip[aria-pressed='true'] .stats-legend-swatch { transform: scale(1.12); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text); }
+/* Everything that isn't the chosen group steps back together: legend, ring and bars. */
+.stats-distribution[data-selected] .stats-legend-chip:not([aria-pressed='true']) { opacity: 0.45; }
+.stats-muscle-bar { transition: opacity 220ms ease-out; }
+.stats-distribution[data-selected] .stats-muscle-bar:not(.is-selected) { opacity: 0.45; }
 .stats-legend-chip:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: var(--radius-control); }
 
 .stats-muscle-list {
@@ -470,8 +480,11 @@
   background: var(--control);
   transform-origin: left;
   transition: background-color var(--motion) ease-out;
-  animation: stats-muscle-fill-in 520ms var(--ease-out) calc(160ms + var(--row, 0) * 50ms) both;
+  animation: stats-muscle-fill-in 620ms var(--ease-out) calc(450ms + var(--row, 0) * 60ms) both;
 }
+
+/* The bars wait for the chart to scroll into view, then fill in after the ring has started drawing. */
+.stats-distribution:not([data-visible]) .stats-muscle-fill { animation-play-state: paused; }
 
 .stats-muscle-bar.is-selected .stats-muscle-fill { background: var(--text-faint); }
 
@@ -542,7 +555,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .stats-doughnut-segment,
-  .stats-doughnut-reveal,
   .stats-doughnut-label,
   .stats-metric-card,
   .stats-content > .stats-empty-callout,

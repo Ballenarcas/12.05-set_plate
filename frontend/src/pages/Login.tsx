@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import { loginUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { UserProfile } from '../types'
@@ -8,7 +9,7 @@ import '../styles/onboarding.css'
 import '../styles/login.css'
 
 function Login() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)

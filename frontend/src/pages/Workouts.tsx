@@ -1,8 +1,8 @@
 import { ArrowRight, ChevronDown, Dumbbell, Pencil, Plus, Repeat2, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser } from '../services/api'
+import { deleteRoutine, deleteWorkoutHistoryEntry, fetchRoutines, fetchWorkoutHistory, getCurrentUser, readSavedCopy } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import { lastLifts, type LastLift } from '../utils/lastLifts'
 import type { ActiveExercise, Routine, WorkoutHistoryEntry } from '../types/workout'
@@ -53,16 +53,19 @@ function SeeMoreButton({ hiddenCount, expanded, onToggle }: { hiddenCount: numbe
 }
 
 function Workouts() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const currentUserId = getCurrentUser()?.id
-  const [routines, setRoutines] = useState<Routine[]>([])
-  const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistoryEntry[]>([])
+  // Last copies saved on this device show at once; the requests below refresh them.
+  const [savedRoutines] = useState(() => (currentUserId ? readSavedCopy<Routine[]>(`routines:${currentUserId}`) : null))
+  const [savedHistory] = useState(() => (currentUserId ? readSavedCopy<WorkoutHistoryEntry[]>(`history:${currentUserId}`) : null))
+  const [routines, setRoutines] = useState<Routine[]>(savedRoutines ?? [])
+  const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistoryEntry[]>(savedHistory ?? [])
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [showAllRoutines, setShowAllRoutines] = useState(false)
   const lifts = useMemo(() => lastLifts(workoutHistory), [workoutHistory])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(!savedRoutines)
   const [error, setError] = useState<string | null>(null)
-  const [isHistoryLoading, setIsHistoryLoading] = useState(() => Boolean(getCurrentUser()?.id))
+  const [isHistoryLoading, setIsHistoryLoading] = useState(() => Boolean(currentUserId) && !savedHistory)
   const [historyError, setHistoryError] = useState<string | null>(() => (
     getCurrentUser()?.id ? null : 'Sign in to view your workout history.'
   ))
@@ -90,7 +93,6 @@ function Workouts() {
     }
 
     let isMounted = true
-    setIsHistoryLoading(true)
     setHistoryError(null)
     fetchWorkoutHistory(currentUserId)
       .then((items) => { if (isMounted) setWorkoutHistory(items) })

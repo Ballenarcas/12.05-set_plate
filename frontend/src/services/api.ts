@@ -27,6 +27,7 @@ import type {
   WorkoutStatisticsRange,
 } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
+import { DEFAULT_STATISTICS_RANGE } from '../utils/workoutStatistics'
 import type { PremiumPlan, UserProfile } from '../types'
 
 export interface PlanExercise {
@@ -87,6 +88,9 @@ export function getAccessToken(): string | null {
 }
 
 export function clearSession(): void {
+  clearDashboardCache()
+  forgetSavedCopies()
+  forgetSavedStatistics()
   try {
     localStorage.removeItem(SESSION_KEY)
     localStorage.removeItem('set_plate_user')
@@ -112,22 +116,81 @@ async function apiFetch(input: string, init: RequestInit = {}): Promise<Response
   return response
 }
 
-function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {  try {
-    const saved = sessionStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+function todayKey(): string {
+  return new Date().toDateString()
+}
+
+// Kept on the device, not just the tab, so reopening the app shows the last dashboard at once while a
+// fresh one loads. Only today's copy is used, and signing out removes it.
+function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
+  try {
+    const saved = localStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
     if (!saved) return null
-    const cached = JSON.parse(saved) as { data: DashboardSummary; at: number }
-    return cached?.data && typeof cached.at === 'number' ? cached : null
+    const cached = JSON.parse(saved) as { data: DashboardSummary; at: number; day?: string }
+    return cached?.data && typeof cached.at === 'number' && cached.day === todayKey() ? cached : null
   } catch {
     return null
   }
 }
 
+// Last answers kept on the device, so pages show them at once on the next visit (even after the
+// app is reopened) while a fresh copy loads. Cleared when the data changes and on sign-out.
+const SAVED_COPY_PREFIX = 'set_plate_copy:'
+
+export function readSavedCopy<T>(key: string): T | null {
+  try {
+    return JSON.parse(localStorage.getItem(SAVED_COPY_PREFIX + key) ?? 'null') as T | null
+  } catch {
+    return null
+  }
+}
+
+function saveCopy(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(SAVED_COPY_PREFIX + key, JSON.stringify(value))
+  } catch {
+    // The fresh answer is still shown when storage is unavailable or full.
+  }
+}
+
+function forgetSavedCopies(prefix = ''): void {
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(SAVED_COPY_PREFIX + prefix))
+      .forEach((key) => localStorage.removeItem(key))
+  } catch {
+    // Nothing saved to forget when storage is unavailable.
+  }
+}
+
+// Short in-memory cache for what Home shows next to the dashboard. Same request in flight is shared,
+// so Home and Workouts never fetch it twice at once. Cleared with the dashboard after any change.
+const SHORT_CACHE_TTL_MS = 30_000
+const shortCache = new Map<string, { at: number; value: Promise<unknown> }>()
+
+function cachedRequest<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const hit = shortCache.get(key)
+  if (hit && Date.now() - hit.at < SHORT_CACHE_TTL_MS) return hit.value as Promise<T>
+  const value = load()
+  shortCache.set(key, { at: Date.now(), value })
+  value.catch(() => { if (shortCache.get(key)?.value === value) shortCache.delete(key) })
+  return value
+}
+
+/** A decided tip is replaced by the next one, so the cached tip must not come back. */
+function forgetCachedTip(): void {
+  for (const key of [...shortCache.keys()]) if (key.startsWith('tip:')) shortCache.delete(key)
+}
+
 export function clearDashboardCache(): void {
   dashboardRequests.clear()
+  shortCache.clear()
+  forgetSavedCopies('history:')
+  forgetSavedCopies('nutrition:')
   try {
-    Object.keys(sessionStorage)
+    Object.keys(localStorage)
       .filter((key) => key.startsWith(DASHBOARD_CACHE_PREFIX))
-      .forEach((key) => sessionStorage.removeItem(key))
+      .forEach((key) => localStorage.removeItem(key))
   } catch {
     // The next dashboard request remains authoritative if browser storage is unavailable.
   }
@@ -154,7 +217,7 @@ export async function fetchDashboardSummary(options: { forceRefresh?: boolean } 
       if (!response.ok) throw new Error("We couldn't load your dashboard. Please try again.")
       const data = await response.json() as DashboardSummary
       try {
-        sessionStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now() }))
+        localStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify({ data, at: Date.now(), day: todayKey() }))
       } catch {
         // The fresh response remains usable when browser storage is unavailable.
       }
@@ -183,6 +246,7 @@ let routinesRequest: Promise<Routine[]> | null = null
 
 export function clearRoutinesCache(): void {
   routinesRequest = null
+  forgetSavedCopies('routines:')
 }
 
 export async function fetchRoutines(): Promise<Routine[]> {
@@ -194,7 +258,9 @@ export async function fetchRoutines(): Promise<Routine[]> {
   })
     .then(async (response) => {
       if (!response.ok) throw new Error("We couldn't load your routines. Please try again.")
-      return response.json() as Promise<Routine[]>
+      const routines = await response.json() as Routine[]
+      saveCopy(`routines:${user.id}`, routines)
+      return routines
     })
     .catch((error: unknown) => {
       routinesRequest = null
@@ -350,7 +416,14 @@ export async function requestWorkoutAdjustment(
   return response.json() as Promise<LiveWorkoutAdjustmentResponse>
 }
 
-export async function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
+export function fetchWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
+  return cachedRequest(`history:${userId}`, () => loadWorkoutHistory(userId).then((items) => {
+    saveCopy(`history:${userId}`, items)
+    return items
+  }))
+}
+
+async function loadWorkoutHistory(userId: string): Promise<WorkoutHistoryEntry[]> {
   const query = new URLSearchParams({ user_id: userId, limit: '30' })
   const response = await apiFetch(`${API_URL}/api/v1/workouts/history?${query}`, {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -395,11 +468,46 @@ export async function deleteWorkoutHistoryEntry(userId: string, workoutId: strin
   clearDashboardCache()
 }
 
+// The last statistics for each range are also kept on the device, so the page can show them at
+// once while fresh ones load. Only today's copy is used; saving or deleting a workout, or signing
+// out, removes them.
+const SAVED_STATISTICS_PREFIX = 'set_plate_stats:'
+
+export function getSavedWorkoutStatistics(userId: string, range: WorkoutStatisticsRange): WorkoutStatistics | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`${SAVED_STATISTICS_PREFIX}${userId}:${range}`) ?? 'null') as { data: WorkoutStatistics; day: string } | null
+    return saved?.day === new Date().toDateString() ? saved.data : null
+  } catch {
+    return null
+  }
+}
+
+function forgetSavedStatistics(userId?: string): void {
+  try {
+    const prefix = `${SAVED_STATISTICS_PREFIX}${userId ?? ''}`
+    Object.keys(localStorage).filter((key) => key.startsWith(prefix)).forEach((key) => localStorage.removeItem(key))
+  } catch {
+    // Nothing saved to forget when storage is unavailable.
+  }
+}
+
 function invalidateWorkoutStatisticsCache(userId: string): void {
   const prefix = `${userId}:`
   for (const key of workoutStatisticsCache.keys()) {
     if (key.startsWith(prefix)) workoutStatisticsCache.delete(key)
   }
+  forgetSavedStatistics(userId)
+}
+
+/** Loads what the main pages show in the background, so their first visit is instant too. */
+export function prefetchMainPages(): void {
+  const userId = getCurrentUser()?.id
+  if (!userId) return
+  const quietly = (request: Promise<unknown>) => { void request.catch(() => undefined) }
+  quietly(fetchWorkoutStatistics(userId, DEFAULT_STATISTICS_RANGE))
+  quietly(fetchRoutines())
+  quietly(fetchWorkoutHistory(userId))
+  quietly(fetchTodayNutrition(userId))
 }
 
 export async function fetchWorkoutStatistics(
@@ -428,6 +536,11 @@ export async function fetchWorkoutStatistics(
   }
   const data = await response.json() as WorkoutStatistics
   workoutStatisticsCache.set(cacheKey, { data, expiresAt: Date.now() + WORKOUT_STATISTICS_CACHE_TTL_MS })
+  try {
+    localStorage.setItem(`${SAVED_STATISTICS_PREFIX}${userId}:${range}`, JSON.stringify({ data, day: new Date().toDateString() }))
+  } catch {
+    // The fresh response is still shown when storage is unavailable or full.
+  }
   return data
 }
 
@@ -819,7 +932,7 @@ export async function updateUserSettings(
     if (user?.id === userId) {
       localStorage.setItem('set_plate_user', JSON.stringify({ ...user, ...settings }))
     }
-    sessionStorage.removeItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
+    localStorage.removeItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
   } catch {
     // The saved server response remains authoritative if browser storage is unavailable.
   }
@@ -893,6 +1006,11 @@ function nutritionCacheKey(userId: string, windowStart: string): string {
   return `${NUTRITION_CACHE_PREFIX}${userId}:${windowStart}`
 }
 
+/** The last copy of a day's meals saved on this device, however old; the page refreshes it. */
+export function getSavedDayNutrition(userId: string, dateString?: string): TodayNutritionData | null {
+  return userId ? readSavedCopy<TodayNutritionData>(`nutrition:${userId}:${localDayWindow(dateString).today_start}`) : null
+}
+
 export function getCachedTodayNutrition(userId: string, dateString?: string): TodayNutritionData | null {
   if (!userId) return null
   try {
@@ -929,6 +1047,7 @@ export async function fetchTodayNutrition(userId: string, dateString?: string): 
           nutritionCacheKey(userId, window.today_start),
           JSON.stringify({ data, at: Date.now() }),
         )
+        saveCopy(`nutrition:${userId}:${window.today_start}`, data)
       } catch {
         // The fresh response remains usable when browser storage is unavailable.
       }
@@ -1013,7 +1132,11 @@ function clearGoalCaches(): void {
   }
 }
 
-export async function fetchCurrentTip(): Promise<AiTip | null> {
+export function fetchCurrentTip(): Promise<AiTip | null> {
+  return cachedRequest(`tip:${getCurrentUser()?.id ?? ''}:${localDayQuery()}`, loadCurrentTip)
+}
+
+async function loadCurrentTip(): Promise<AiTip | null> {
   const response = await apiFetch(`${API_URL}/api/v1/ai/tips/current?${localDayQuery()}`, { signal: AbortSignal.timeout(LLM_TIMEOUT_MS) })
   if (!response.ok) throw new Error("We couldn't load your tip.")
   return ((await response.json()) as { tip: AiTip | null }).tip
@@ -1027,6 +1150,7 @@ export async function decideTip(tipId: string, status: 'accepted' | 'dismissed')
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error("We couldn't update this tip. Please try again.")
+  forgetCachedTip()
   if (status === 'accepted') clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
 }
@@ -1037,6 +1161,7 @@ export async function undoTip(tipId: string): Promise<AiTipDecision> {
     signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error("We couldn't undo that change. Please try again.")
+  forgetCachedTip()
   clearGoalCaches()
   return response.json() as Promise<AiTipDecision>
 }

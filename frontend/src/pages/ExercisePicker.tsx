@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchExercises } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -10,7 +11,7 @@ import type { Exercise } from '../types'
 const PAGE_SIZE = 30
 
 function ExercisePicker() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const location = useLocation()
   const replaceExerciseIndex = (location.state as { replaceExerciseIndex?: number } | null)?.replaceExerciseIndex
   const [exercises, setExercises] = useState<Exercise[]>([])

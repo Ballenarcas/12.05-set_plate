@@ -1,6 +1,7 @@
 import { Apple, ChartColumn, CircleUserRound, Dumbbell, House } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../../utils/usePageNavigate'
 import '../../styles/glass-dock.css'
 
 type DockItem = { path: string; label: string; Icon: LucideIcon }
@@ -14,7 +15,7 @@ const items: DockItem[] = [
 ]
 
 export default function GlassDock() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const { pathname } = useLocation()
   // The longest matching path wins, so /workouts/statistics marks Statistics, not Workouts.
   const active = items.reduce((best, { path }, index) => {
@@ -37,7 +38,8 @@ export default function GlassDock() {
             aria-label={label}
             aria-current={isActive ? 'page' : undefined}
             data-active={isActive}
-            onClick={() => navigate(path)}
+            // Tabs slide in the dock's order: a tab to the right comes in from the right.
+            onClick={() => { if (!isActive) navigate(path, { direction: index > active ? 'forward' : 'back' }) }}
           >
             <span className="gdock-glyph">
               <Icon size={21} strokeWidth={2} aria-hidden="true" />

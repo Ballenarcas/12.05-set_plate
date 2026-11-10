@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import { Check, Eye, EyeOff } from 'lucide-react'
 import { submitUserOnboarding } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -21,7 +21,7 @@ const initialFormData: UserOnboardingFormData = {
 }
 
 function Onboarding() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [formData, setFormData] = useState<UserOnboardingFormData>(initialFormData)
   const [showPassword, setShowPassword] = useState(false)

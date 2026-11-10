@@ -1,6 +1,7 @@
 import { ArrowUp, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../../utils/usePageNavigate'
 
 type ActiveWorkoutSummary = { name: string; startedAt: string }
 
@@ -27,7 +28,7 @@ function formatElapsed(startedAt: string, now: number): string {
 }
 
 export default function WorkoutInProgressBar() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const { pathname } = useLocation()
   const [workout, setWorkout] = useState(readActiveWorkout)
   const [now, setNow] = useState(Date.now)

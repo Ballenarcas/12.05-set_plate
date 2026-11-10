@@ -1,6 +1,6 @@
 import { ChevronLeft, HelpCircle, Mail } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 
 const FAQ_ITEMS = [
   {
@@ -22,7 +22,7 @@ const FAQ_ITEMS = [
 ]
 
 export default function Faq() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const [showSupportMessage, setShowSupportMessage] = useState(false)
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 

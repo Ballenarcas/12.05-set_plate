@@ -2,7 +2,7 @@ import { Dumbbell, PieChart, TrendingUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import MuscleGroupDistributionChart from '../components/workout/MuscleGroupDistributionChart'
 import VolumeProgressionChart from '../components/workout/VolumeProgressionChart'
-import { fetchWorkoutStatistics, getCurrentUser } from '../services/api'
+import { fetchWorkoutStatistics, getCurrentUser, getSavedWorkoutStatistics } from '../services/api'
 import type { WorkoutStatistics, WorkoutStatisticsRange } from '../types/workout'
 import { describeError } from '../utils/errors.js'
 import {
@@ -74,7 +74,8 @@ function durationNote(data: WorkoutStatistics): string {
 function WorkoutStatisticsPage() {
   const userId = getCurrentUser()?.id
   const [range, setRange] = useState<WorkoutStatisticsRange>(DEFAULT_STATISTICS_RANGE)
-  const [data, setData] = useState<WorkoutStatistics | null>(null)
+  // Today's last statistics from this device show at once; the request below refreshes them.
+  const [data, setData] = useState<WorkoutStatistics | null>(() => (userId ? getSavedWorkoutStatistics(userId, DEFAULT_STATISTICS_RANGE) : null))
   const [isLoading, setIsLoading] = useState(Boolean(userId))
   const [error, setError] = useState<string | null>(userId ? null : 'Sign in to view your workout statistics.')
   const [retryToken, setRetryToken] = useState(0)
@@ -108,6 +109,8 @@ function WorkoutStatisticsPage() {
     requestId.current += 1
     setError(null)
     setIsLoading(true)
+    const saved = userId ? getSavedWorkoutStatistics(userId, nextRange) : null
+    if (saved) setData(saved)
     setRange(nextRange)
   }
 

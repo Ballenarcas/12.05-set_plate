@@ -1,6 +1,7 @@
 import { Crown } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../../utils/usePageNavigate'
 import { PREMIUM_UPDATED_EVENT, isPremiumActive } from '../../services/api'
 
 interface PremiumUpsellButtonProps {
@@ -9,7 +10,7 @@ interface PremiumUpsellButtonProps {
 }
 
 function PremiumUpsellButton({ compact = false, className = '' }: PremiumUpsellButtonProps) {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const location = useLocation()
   const [isPremium, setIsPremium] = useState(() => isPremiumActive())
 

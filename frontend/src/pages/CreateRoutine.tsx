@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { createRoutine, updateRoutine } from '../services/api'
@@ -20,7 +21,7 @@ function normalizeExerciseName(name: string): string {
 }
 
 function CreateRoutine() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const location = useLocation()
   const routineToEdit = (location.state as { routine?: Routine } | null)?.routine
   const nameInputRef = useRef<HTMLInputElement>(null)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import { AlertCircle, CheckCircle2, ChevronRight, Loader2, LogOut } from 'lucide-react'
 import { cancelPremium, clearDashboardCache, clearSession, getCurrentUser, isPremiumActive, updateUserSettings } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -13,7 +13,7 @@ const GOALS = ['Hypertrophy', 'Strength', 'Endurance', 'Lose Weight', 'Maintenan
 
 function Profile() {
   const user = getCurrentUser()
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const [isDark, setIsDark] = useState(getTheme() === 'dark')
   const toggleDark = (dark: boolean) => { setIsDark(dark); applyTheme(dark ? 'dark' : 'light') }
 

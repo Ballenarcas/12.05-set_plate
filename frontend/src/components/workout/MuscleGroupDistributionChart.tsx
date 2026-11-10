@@ -1,4 +1,5 @@
-import { useId, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { prefersStillness } from '../../utils/useSpring'
 import type { WorkoutStatisticsMuscleGroup } from '../../types/workout'
 import { formatPercentage, formatVolumeKg } from '../../utils/workoutStatistics'
 
@@ -14,11 +15,50 @@ const SEGMENT_GAP = 2.5
 const RADIUS = 72
 const STROKE = 14
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
+// One entrance, played when the chart scrolls into view: the ring winds in a quarter turn while it draws,
+// and the total counts up with it. Slow in, slow out, so it reads as one gesture.
+// Native Web Animations and a direct text update, so the chart doesn't re-render on every frame.
+const DRAW = { duration: 1100, easing: 'cubic-bezier(0.65, 0, 0.35, 1)' }
+const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
 
 export default function MuscleGroupDistributionChart({ distribution }: MuscleGroupDistributionChartProps) {
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null)
   const revealId = useId()
   const classifiedTotal = distribution.reduce((sum, item) => sum + item.volume_kg, 0)
+  const chartRef = useRef<HTMLDivElement | null>(null)
+  const revealRef = useRef<SVGCircleElement | null>(null)
+  const ringRef = useRef<SVGGElement | null>(null)
+  const valueRef = useRef<SVGTextElement | null>(null)
+  const [still] = useState(prefersStillness)
+  const [shown, setShown] = useState(still)
+  const [counted, setCounted] = useState(still)
+
+  // Start once, when 40% of the chart is on screen.
+  useEffect(() => {
+    const chart = chartRef.current
+    if (shown || !chart) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setShown(true); observer.disconnect() }
+    }, { threshold: 0.4 })
+    observer.observe(chart)
+    return () => observer.disconnect()
+  }, [shown])
+
+  useEffect(() => {
+    if (!shown || still) return
+    const reveal = revealRef.current?.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], DRAW)
+    const ring = ringRef.current?.animate([{ transform: 'rotate(-90deg)' }, { transform: 'rotate(0deg)' }], DRAW)
+    const start = performance.now()
+    let frame = requestAnimationFrame(function tick(now) {
+      const progress = Math.min(1, (now - start) / DRAW.duration)
+      // React's own text node, so its later updates still land on what is shown.
+      const text = valueRef.current?.firstChild
+      if (text) text.nodeValue = `${formatVolumeKg(Math.round(classifiedTotal * easeInOutCubic(progress)))} kg`
+      if (progress < 1) frame = requestAnimationFrame(tick)
+      else setCounted(true)
+    })
+    return () => { cancelAnimationFrame(frame); reveal?.cancel(); ring?.cancel() }
+  }, [shown, still, classifiedTotal])
   let accumulatedLength = 0
   const segments = distribution.map((item, index) => {
     const length = classifiedTotal > 0 ? (item.volume_kg / classifiedTotal) * CIRCUMFERENCE : 0
@@ -29,8 +69,9 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
       share: classifiedTotal > 0 ? (item.volume_kg / classifiedTotal) * 100 : 0,
       length,
       dashOffset: -accumulatedLength,
-      offsetX: Math.cos(middleAngle) * 7,
-      offsetY: Math.sin(middleAngle) * 7,
+      // Where the slice moves when chosen: outwards, along its own middle.
+      offsetX: Math.cos(middleAngle) * 6,
+      offsetY: Math.sin(middleAngle) * 6,
       percentage: formatPercentage(item.volume_kg, classifiedTotal),
     }
     accumulatedLength += length
@@ -39,11 +80,12 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
   const selectedSegment = segments.find((segment) => segment.muscle_group === selectedMuscle)
 
   function toggleMuscle(muscleGroup: string) {
+    navigator.vibrate?.(8)
     setSelectedMuscle((current) => current === muscleGroup ? null : muscleGroup)
   }
 
   return (
-    <div className="stats-distribution">
+    <div className="stats-distribution" ref={chartRef} data-visible={shown || undefined} data-selected={selectedMuscle !== null || undefined}>
       <ul className="stats-muscle-legend" aria-label="Muscle groups">
         {segments.map((segment) => (
           <li key={segment.muscle_group}>
@@ -67,10 +109,13 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
           role="group"
           aria-label={`Muscle group distribution: ${distribution.length} groups, ${formatVolumeKg(classifiedTotal)} kilograms classified`}
           data-selected={selectedMuscle !== null || undefined}
+          // Tapping the empty middle or around the ring clears the choice.
+          onClick={(event) => { if (!(event.target as Element).closest('.stats-doughnut-segment')) setSelectedMuscle(null) }}
         >
-          {/* One mask sweeps the whole ring, so every slice shares a single continuous motion. */}
+          {/* One mask draws the whole ring, so every slice shares a single continuous stroke. */}
           <mask id={revealId} maskUnits="userSpaceOnUse" x="-20" y="-20" width="240" height="240">
             <circle
+              ref={revealRef}
               className="stats-doughnut-reveal"
               cx="100"
               cy="100"
@@ -90,7 +135,7 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
             fill="none"
             strokeWidth={STROKE}
           />
-          <g mask={`url(#${revealId})`}>
+          <g ref={ringRef} className="stats-doughnut-ring" mask={`url(#${revealId})`}>
           {segments.map((segment) => (
             <circle
               className="stats-doughnut-segment"
@@ -103,13 +148,9 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
               cy="100"
               r={RADIUS}
               fill="none"
-              style={{ stroke: segment.color }}
-              strokeWidth={STROKE}
+              style={{ stroke: segment.color, '--pop-x': `${segment.offsetX}px`, '--pop-y': `${segment.offsetY}px` } as CSSProperties}
               strokeDasharray={`${Math.max(0, segment.length - (segments.length > 1 ? SEGMENT_GAP : 0))} ${CIRCUMFERENCE}`}
               strokeDashoffset={segment.dashOffset}
-              transform={selectedMuscle === segment.muscle_group
-                ? `translate(${segment.offsetX} ${segment.offsetY}) rotate(-90 100 100)`
-                : 'rotate(-90 100 100)'}
               onClick={() => toggleMuscle(segment.muscle_group)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
@@ -123,8 +164,8 @@ export default function MuscleGroupDistributionChart({ distribution }: MuscleGro
           ))}
           </g>
           <g className="stats-doughnut-label" key={selectedMuscle ?? 'total'}>
-            <text className="stats-doughnut-value" x="100" y="96" textAnchor="middle">
-              {selectedSegment?.percentage ?? `${formatVolumeKg(classifiedTotal)} kg`}
+            <text ref={valueRef} className="stats-doughnut-value" x="100" y="96" textAnchor="middle">
+              {selectedSegment?.percentage ?? `${formatVolumeKg(counted ? classifiedTotal : 0)} kg`}
             </text>
             <text className="stats-doughnut-unit" x="100" y="116" textAnchor="middle">
               {selectedSegment?.muscle_group ?? 'classified'}

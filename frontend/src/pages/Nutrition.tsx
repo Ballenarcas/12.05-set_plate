@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, Camera, ChevronLeft, ChevronRight, Loader2, PenLine, Plus, Scale, Search, Trash2, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog, type TodayNutritionData } from '../services/api';
+import { usePageNavigate } from '../utils/usePageNavigate';
+import { deleteMealLog, fetchTodayNutrition, getCurrentUser, getSavedDayNutrition, searchFoodItems, updateMealLog, type TodayNutritionData } from '../services/api';
 import DailyIntake from '../components/nutrition/DailyIntake';
 import MealDatePicker from '../components/nutrition/MealDatePicker';
 import { sameDay } from '../utils/monthGrid';
@@ -41,14 +41,16 @@ function toInputDate(date: Date): string {
 }
 
 export default function Nutrition() {
-  const navigate = useNavigate();
+  const navigate = usePageNavigate();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [meals, setMeals] = useState<MealLogItem[]>([]);
-  const [targets, setTargets] = useState<Pick<TodayNutritionData, 'daily_goal' | 'target_proteins_g' | 'target_carbs_g' | 'target_fats_g'> | null>(null);
+  // Start from the copy saved earlier in this visit, so the card and list show at once.
+  const [cachedToday] = useState(() => getSavedDayNutrition(getCurrentUser()?.id ?? '', toInputDate(new Date())));
+  const [meals, setMeals] = useState<MealLogItem[]>(cachedToday?.meals ?? []);
+  const [targets, setTargets] = useState<Pick<TodayNutritionData, 'daily_goal' | 'target_proteins_g' | 'target_carbs_g' | 'target_fats_g'> | null>(cachedToday);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const daySwipeRef = useRef<{ x: number; y: number; swiped: boolean } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!cachedToday);
   
   // États pour l'édition et la suppression
   const [editingMeal, setEditingMeal] = useState<MealLogItem | null>(null);
@@ -74,9 +76,14 @@ export default function Nutrition() {
     const user = getCurrentUser();
     if (!user?.id) return;
 
-    setIsLoading(true);
-
     const formattedDate = toInputDate(selectedDate);
+    // Show a saved copy of this day straight away; the request below refreshes it.
+    const cached = getSavedDayNutrition(user.id, formattedDate);
+    if (cached) {
+      setMeals(cached.meals || []);
+      setTargets(cached);
+    }
+    setIsLoading(!cached);
 
     // On utilise ta nouvelle fonction API qui gère les dates
     fetchTodayNutrition(user.id, formattedDate)
@@ -357,17 +364,17 @@ export default function Nutrition() {
       <h1 className="meals-title">Meals</h1>
       <h2 className="meals-subtitle">Daily intake</h2>
 
-      {targets && (
-        <DailyIntake
-          consumed={meals.reduce((total, meal) => total + meal.item_calories, 0)}
-          goal={targets.daily_goal}
-          macros={[
-            { label: 'Protein', current: meals.reduce((total, meal) => total + (meal.proteins_g ?? 0), 0), target: targets.target_proteins_g },
-            { label: 'Carbs', current: meals.reduce((total, meal) => total + (meal.carbs_g ?? 0), 0), target: targets.target_carbs_g },
-            { label: 'Fat', current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets.target_fats_g },
-          ]}
-        />
-      )}
+      {/* Always drawn, so it never pops in late: it shows its shape while the day loads. */}
+      <DailyIntake
+        consumed={meals.reduce((total, meal) => total + meal.item_calories, 0)}
+        goal={targets?.daily_goal ?? 0}
+        pending={!targets}
+        macros={[
+          { label: 'Protein', current: meals.reduce((total, meal) => total + (meal.proteins_g ?? 0), 0), target: targets?.target_proteins_g ?? 0 },
+          { label: 'Carbs', current: meals.reduce((total, meal) => total + (meal.carbs_g ?? 0), 0), target: targets?.target_carbs_g ?? 0 },
+          { label: 'Fat', current: meals.reduce((total, meal) => total + (meal.fats_g ?? 0), 0), target: targets?.target_fats_g ?? 0 },
+        ]}
+      />
 
       <h2 className="meals-subtitle meal-list-title">{sameDay(selectedDate, today) ? "Today's meals" : 'Meals this day'}</h2>
 

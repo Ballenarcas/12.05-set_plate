@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { usePageNavigate } from '../utils/usePageNavigate'
 import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { Exercise } from '../types'
@@ -360,7 +361,7 @@ function readSavedSession(): ActiveSession | null {
 }
 
 function ActiveWorkout() {
-  const navigate = useNavigate()
+  const navigate = usePageNavigate()
   const location = useLocation()
   useScreenAwake()
   const routeSession = getSession(location.state)

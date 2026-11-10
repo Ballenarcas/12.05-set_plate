@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { loginUser } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -37,7 +37,7 @@ function Login() {
     return (
       <main className="onboarding-container login-container">
         <div className="completion-overlay">
-          <div className="completion-icon-wrapper"><Sparkles size={34} aria-hidden="true" /></div>
+          <div className="completion-icon-wrapper"><Check size={34} aria-hidden="true" /></div>
           <h1 className="onboarding-title">Welcome, {profile.name}!</h1>
           <p className="onboarding-subtitle">Your personalized training &amp; nutrition plan is ready.</p>
         </div>
@@ -48,7 +48,7 @@ function Login() {
   return (
     <main className="onboarding-container login-container">
       <div className="onboarding-content login-content">
-        <div className="login-mark"><Sparkles size={17} aria-hidden="true" /> SET&PLATE</div>
+        <div className="login-mark">SET&amp;PLATE</div>
         <header className="onboarding-header login-header">
           <h1 className="onboarding-title">Welcome back</h1>
           <p className="onboarding-subtitle">Sign in to continue your training and nutrition journey.</p>

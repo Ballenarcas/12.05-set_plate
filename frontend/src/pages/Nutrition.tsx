@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Camera, ChevronLeft, ChevronRight, Loader2, PenLine, Plus, Scale, Search, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog, type TodayNutritionData } from '../services/api';
 import DailyIntake from '../components/nutrition/DailyIntake';
 import MealDatePicker from '../components/nutrition/MealDatePicker';
+import { sameDay } from '../utils/monthGrid';
 import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
 import '../styles/log-meals.css';
 
@@ -45,6 +46,8 @@ export default function Nutrition() {
   const [meals, setMeals] = useState<MealLogItem[]>([]);
   const [targets, setTargets] = useState<Pick<TodayNutritionData, 'daily_goal' | 'target_proteins_g' | 'target_carbs_g' | 'target_fats_g'> | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const daySwipeRef = useRef<{ x: number; y: number; swiped: boolean } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   // États pour l'édition et la suppression
@@ -116,6 +119,12 @@ export default function Nutrition() {
 
   const today = new Date();
   const oldestDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - MAX_DAYS_BACK);
+  const canGoBack = !sameDay(selectedDate, oldestDay) && selectedDate > oldestDay;
+  const canGoForward = !sameDay(selectedDate, today);
+  const moveDay = (step: number) => {
+    if (step < 0 ? !canGoBack : !canGoForward) return;
+    setSelectedDate((current) => new Date(current.getFullYear(), current.getMonth(), current.getDate() + step));
+  };
 
 
   const formatDateLabel = (date: Date) => {
@@ -129,16 +138,6 @@ export default function Nutrition() {
     if (date.toDateString() === today.toDateString()) return `Today, ${dateString}`;
     if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${dateString}`;
     return dateString;
-  };
-
-  const formatTime = (timeString?: string) => {
-    if (!timeString) return 'Just now';
-    try {
-      const date = new Date(timeString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
-      return timeString;
-    }
   };
 
   const openEditModal = (meal: MealLogItem) => {
@@ -312,16 +311,35 @@ export default function Nutrition() {
   };
 
   return (
-    <div className="screen">
-      <header className="subpage-header">
-        <button className="subpage-button" type="button" onClick={() => navigate('/')} aria-label="Back to home">
-          <ArrowLeft size={22} aria-hidden="true" />
+    <div
+      className="screen meals-screen"
+      // Swipe left or right anywhere on the page to change day.
+      onPointerDown={(event) => { daySwipeRef.current = { x: event.clientX, y: event.clientY, swiped: false }; }}
+      onPointerUp={(event) => {
+        const start = daySwipeRef.current;
+        if (!start) return;
+        const dx = event.clientX - start.x;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(event.clientY - start.y) * 1.5) {
+          start.swiped = true;
+          moveDay(dx < 0 ? 1 : -1);
+        }
+      }}
+      onClickCapture={(event) => {
+        if (daySwipeRef.current?.swiped) event.stopPropagation();
+        daySwipeRef.current = null;
+      }}
+    >
+      <nav className="meal-day-nav" aria-label="Day">
+        <button className="subpage-button" type="button" onClick={() => moveDay(-1)} disabled={!canGoBack} aria-label="Previous day">
+          <ChevronLeft size={20} aria-hidden="true" />
         </button>
-        <h1>Meals</h1>
-        <button className="subpage-button" type="button" onClick={() => setIsDatePickerOpen(true)} aria-label="Choose a day" aria-haspopup="dialog">
-          <Calendar size={21} aria-hidden="true" />
+        <button className="meal-day-button" type="button" onClick={() => setIsDatePickerOpen(true)} aria-haspopup="dialog" aria-label={`${formatDateLabel(selectedDate)}. Choose a day`}>
+          {formatDateLabel(selectedDate)}
         </button>
-      </header>
+        <button className="subpage-button" type="button" onClick={() => moveDay(1)} disabled={!canGoForward} aria-label="Next day">
+          <ChevronRight size={20} aria-hidden="true" />
+        </button>
+      </nav>
 
       {isDatePickerOpen && (
         <MealDatePicker
@@ -336,10 +354,8 @@ export default function Nutrition() {
         />
       )}
 
-      <h2 className="meal-day">
-        {formatDateLabel(selectedDate)}
-        {meals.length > 0 && <strong>{meals.reduce((total, meal) => total + meal.item_calories, 0).toLocaleString()} kcal</strong>}
-      </h2>
+      <h1 className="meals-title">Meals</h1>
+      <h2 className="meals-subtitle">Daily intake</h2>
 
       {targets && (
         <DailyIntake
@@ -353,16 +369,7 @@ export default function Nutrition() {
         />
       )}
 
-      <div className="action-row">
-        <button className="action-button" type="button" onClick={() => navigate('/log-meals')}>
-          <Plus size={17} aria-hidden="true" /> Manual entry
-        </button>
-        <button className="action-button" type="button" disabled aria-label="Scan your meal, available with Pro">
-          <Camera size={17} aria-hidden="true" /> Scan meal <span className="pro-badge">Pro</span>
-        </button>
-      </div>
-
-      <h2 className="section-title meal-list-title">Logged meals</h2>
+      <h2 className="meals-subtitle meal-list-title">{sameDay(selectedDate, today) ? "Today's meals" : 'Meals this day'}</h2>
 
       <div className="meal-list">
         {isLoading ? (
@@ -371,35 +378,30 @@ export default function Nutrition() {
           <p className="state-line">No meals recorded for this day.</p>
         ) : (
           meals.map((meal) => (
-            <article className="card meal-card" key={meal.id}>
-              <div className="meal-card-heading">
-                <div>
-                  <h3>{meal.meal_name}</h3>
-                  <p>{meal.meal_type} · {formatTime(meal.consumed_at)}</p>
-                </div>
-                <div className="meal-card-actions">
-                  <button className="subpage-button" type="button" onClick={() => openEditModal(meal)} aria-label={`Edit ${meal.meal_name}`}>
-                    <Pencil size={17} aria-hidden="true" />
-                  </button>
-                  <button className="subpage-button" type="button" onClick={() => setDeletingMeal(meal)} aria-label={`Delete ${meal.meal_name}`}>
-                    <Trash2 size={17} aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-              <ul className="meal-macros">
-                <li><strong>{meal.item_calories} kcal</strong></li>
-                {meal.proteins_g !== undefined && <li>{meal.proteins_g} g protein</li>}
-                {meal.carbs_g !== undefined && <li>{meal.carbs_g} g carbs</li>}
-                {meal.fats_g !== undefined && <li>{meal.fats_g} g fat</li>}
-              </ul>
-              {meal.ingredient_details_saved === false && (
-                <p className="meal-note">
-                  Saved without ingredient details. Apply the meal ingredients database migration to enable ingredient editing.
-                </p>
-              )}
-            </article>
+            <button className="meal-row" type="button" key={meal.id} onClick={() => openEditModal(meal)} aria-label={`${meal.meal_type}: ${meal.meal_name}, ${meal.item_calories} kcal. Edit`}>
+              <span className="meal-row-text">
+                <strong>{meal.meal_type}</strong>
+                <small>{meal.meal_name}</small>
+              </span>
+              <span className="meal-row-kcal">{meal.item_calories}kcal</span>
+            </button>
           ))
         )}
+      </div>
+
+      <div className="meal-add">
+        {/* Always rendered so it can slide in and out; inert while closed so it can't be tabbed to. */}
+        <div className={`meal-add-options${isAddOpen ? ' is-open' : ''}`} id="meal-add-options" inert={!isAddOpen}>
+            <button className="action-button" type="button" onClick={() => navigate('/log-meals')}>
+              <PenLine size={17} aria-hidden="true" /> Manual entry
+            </button>
+            <button className="action-button" type="button" disabled aria-label="Scan your meal, available with Pro">
+              <Camera size={17} aria-hidden="true" /> Scan meal <span className="pro-badge">Pro</span>
+            </button>
+        </div>
+        <button className="primary-button meal-add-button" type="button" aria-expanded={isAddOpen} aria-controls="meal-add-options" onClick={() => setIsAddOpen((open) => !open)}>
+          <Plus className="meal-add-icon" size={18} aria-hidden="true" /> Add food
+        </button>
       </div>
 
       {editingMeal && (
@@ -527,6 +529,9 @@ export default function Nutrition() {
               {editError && <div className="inline-alert" role="alert">{editError}</div>}
               <button className="primary-button" type="submit" disabled={isSavingEdit || editIngredients.length === 0 || editIngredients.some((ingredient) => ingredient.quantity_g <= 0)}>
                 {isSavingEdit ? <><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Saving...</> : 'Save changes'}
+              </button>
+              <button className="text-action meal-delete-link" type="button" disabled={isSavingEdit} onClick={() => { setDeletingMeal(editingMeal); setEditingMeal(null); }}>
+                <Trash2 size={16} aria-hidden="true" /> Delete meal
               </button>
             </form>
           </div>

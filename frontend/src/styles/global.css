@@ -172,8 +172,6 @@
 .active-exercise-artwork-fallback span { display: none; }
 .rest-toggle { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 2.75rem; padding: 0 0.15rem; border: 0; color: var(--text-muted); background: transparent; cursor: pointer; font: inherit; font-weight: 700; }
 .rest-toggle.is-on { color: var(--data); }
-.rest-step { display: inline-grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 1px solid var(--line); border-radius: var(--radius-control); color: var(--text); background: transparent; cursor: pointer; }
-.rest-step:disabled { cursor: not-allowed; opacity: 0.35; }
 .rest-bar { position: fixed; z-index: 10; bottom: max(0.75rem, env(safe-area-inset-bottom)); left: 50%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.35rem; width: min(calc(100% - 1.5rem), 26.5rem); padding: 0.45rem 0.45rem 0.45rem 0.85rem; border-radius: var(--radius-card); background: var(--surface-raised); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); transform: translateX(-50%); }
 .rest-bar-copy { display: grid; min-width: 0; }
 .rest-bar-copy strong { color: var(--data); font-size: 1.25rem; line-height: 1.15; font-variant-numeric: tabular-nums; }
@@ -547,3 +545,62 @@ select.settings-input { appearance: none; padding-right: 2rem; background-image:
 .liq-thumb { position: absolute; top: 50%; left: 0; width: var(--liq-thumb, 36px); height: var(--liq-thumb, 36px); margin-top: calc(var(--liq-thumb, 36px) / -2); border-radius: 999px; background: color-mix(in srgb, var(--text) 19%, var(--background)); transition: background 420ms ease; }
 .liq-sw[data-on="true"] .liq-thumb { background: var(--background); }
 @media (prefers-reduced-motion: reduce) { .liq-sw, .liq-thumb { transition-duration: 160ms; } }
+
+/* Rest timer sheet: a scroll wheel of 40px rows, five visible, the middle one highlighted. */
+.rest-sheet { display: grid; justify-items: center; padding-top: 0.5rem; }
+.rest-sheet-grabber { width: 2.5rem; height: 0.3rem; margin-bottom: 0.9rem; border-radius: 999px; background: var(--control); }
+.rest-sheet h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.rest-sheet-subtitle { margin: 0.2rem 0 0.75rem; color: var(--text-muted); font-size: 0.875rem; }
+.rest-wheel-frame { position: relative; width: 100%; height: 200px; }
+.rest-wheel-highlight { position: absolute; top: 80px; right: 0.25rem; left: 0.25rem; height: 40px; border-radius: var(--radius-control); background: var(--surface); }
+.rest-wheel-frame:focus-within .rest-wheel-highlight { box-shadow: 0 0 0 2px var(--text); }
+.rest-wheel { position: relative; height: 100%; overflow-y: auto; padding-block: 80px; outline: none; scroll-snap-type: y mandatory; scrollbar-width: none; -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); }
+.rest-wheel::-webkit-scrollbar { display: none; }
+.rest-wheel-item { display: grid; height: 40px; place-items: center; color: var(--text-faint); cursor: pointer; font-size: 1.05rem; font-variant-numeric: tabular-nums; scroll-snap-align: start; transition: color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out); }
+.rest-wheel-item[data-distance="2"] { transform: scale(0.94); }
+.rest-wheel-item[data-distance="3"] { transform: scale(0.88); }
+.rest-wheel-item.is-selected { color: var(--text); font-size: 1.15rem; font-weight: 500; }
+.rest-sheet-done { width: 100%; margin-top: 0.9rem; }
+
+/* RPE sheet: big number, what it means, then a 6–10 strip in half steps. */
+.rpe-sheet-subtitle { width: 100%; padding-bottom: 0.9rem; border-bottom: 1px solid var(--line); text-align: center; }
+.rpe-sheet-value { display: grid; justify-items: center; gap: 0.3rem; margin: 0.6rem 0 1rem; }
+.rpe-sheet-value strong { font-size: 4rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.rpe-sheet-effort { margin-top: 0.4rem; font-size: 1rem; font-weight: 500; }
+.rpe-sheet-reps { color: var(--text-muted); font-size: 0.9rem; }
+.rpe-strip { display: grid; width: 100%; grid-template-columns: repeat(9, minmax(0, 1fr)); padding: 0.2rem; border-radius: 999px; background: var(--surface); }
+.rpe-strip button { height: 2.6rem; min-width: 0; padding: 0; border: 0; border-radius: 999px; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 0.875rem; font-variant-numeric: tabular-nums; transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
+.rpe-strip button.is-selected { color: var(--on-primary); background: var(--primary); font-weight: 600; }
+.rpe-sheet-clear { margin-top: 0.5rem; min-height: 2.75rem; }
+
+/* Meals page from the wireframe: day arrows on top, big title, compact meal rows, Add food reveals the two ways to log. */
+.meals-screen { touch-action: pan-y; }
+.meal-day-nav { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem; align-items: center; margin-bottom: 0.5rem; }
+.meal-day-nav .subpage-button:disabled { opacity: 0.3; cursor: default; }
+.meal-day-button { min-height: 2.75rem; padding: 0; border: 0; color: var(--text-muted); background: transparent; cursor: pointer; font: inherit; font-size: 0.875rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.meals-title { margin: 0 0 0.75rem; font-size: 2rem; font-weight: 600; letter-spacing: -0.01em; }
+.meals-subtitle { margin: 0 0 0.6rem; font-size: 1.25rem; font-weight: 500; }
+.meal-list-title { margin-top: 1.75rem; }
+.meal-list { display: grid; gap: 0.4rem; margin-top: 0; }
+.meal-row { display: flex; width: 100%; min-height: 3.5rem; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 1rem; border: 0; border-radius: var(--radius-control); color: var(--text); background: var(--surface); cursor: pointer; font: inherit; text-align: left; }
+.meal-row:active { background: var(--surface-raised); }
+.meal-row-text { display: grid; min-width: 0; gap: 0.1rem; }
+.meal-row-text strong { font-size: 1.05rem; font-weight: 600; }
+.meal-row-text small { overflow: hidden; color: var(--text-muted); font-size: 0.8rem; letter-spacing: 0.03em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.meal-row-kcal { flex: none; font-size: 1rem; font-variant-numeric: tabular-nums; }
+/* Sticks above the dock so Add food is always in reach. */
+.meal-add { position: sticky; z-index: 4; bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 4.75rem); display: grid; justify-items: center; margin-top: 5.5rem; }
+/* Options float above the button (no layout jump) and rise from it: scale from 0.95 at the bottom, 40 ms stagger in, quicker out. */
+/* margin-top on .meal-add leaves room for these, so at rest they never cover the last meal. */
+.meal-add-options { position: absolute; bottom: calc(100% + 1rem); left: 0; display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: 1rem; pointer-events: none; }
+.meal-add-options .action-button { opacity: 0; transform: translateY(0.5rem) scale(0.95); transform-origin: 50% 100%; transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.12); }
+.meal-add-options.is-open { pointer-events: auto; }
+.meal-add-options.is-open .action-button { opacity: 1; transform: none; transition-duration: 220ms; }
+.meal-add-options.is-open .action-button:nth-child(2) { transition-delay: 40ms; }
+.meal-add-icon { transition: transform 220ms var(--ease-out); }
+.meal-add-button[aria-expanded="true"] .meal-add-icon { transform: rotate(45deg); }
+.meal-add-button:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) { .meal-add-options .action-button { transform: none; } .meal-add-icon { transition: none; } }
+.meal-add-options .action-button { background: var(--surface-raised); }
+.meal-add-button { width: auto; min-width: 10rem; margin-top: 0; box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15); }
+.meal-delete-link { justify-self: center; margin-top: 0.25rem; color: var(--negative); }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Eye, EyeOff, Sparkles } from 'lucide-react'
+import { Check, Eye, EyeOff } from 'lucide-react'
 import { submitUserOnboarding } from '../services/api'
 import { describeError } from '../utils/errors.js'
 import type { FitnessGoal, UserOnboardingFormData } from '../types'
@@ -191,7 +191,7 @@ function Onboarding() {
       {step === 3 && (
         <div className="completion-overlay">
           <div className="completion-icon-wrapper">
-            <Sparkles size={34} />
+            <Check size={34} aria-hidden="true" />
           </div>
           <h1 className="onboarding-title">Welcome, {formData.firstName}!</h1>
           <p className="onboarding-subtitle">

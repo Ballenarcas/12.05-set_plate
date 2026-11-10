@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, Minus, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, Clock3, Dumbbell, MoreVertical, Plus, Repeat2, Sparkles, Trash2, X, Play, Pause } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { fetchExerciseById, fetchExercises, getCurrentUser, requestWorkoutAdjustment, saveWorkoutLog, updateWorkoutHistoryEntry } from '../services/api'
@@ -20,10 +20,21 @@ import { applyAdjustments, reindexKeyedMap } from '../utils/workoutAdjustments'
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
 import SwipeToDeleteRow from '../components/workout/SwipeToDeleteRow'
 import MediaCredit from '../components/workout/MediaCredit'
+import WheelPickerSheet, { type WheelOption } from '../components/workout/WheelPickerSheet'
+import RpeSheet from '../components/workout/RpeSheet'
 
 const EXTREME_WEIGHT_WARNING_KG = 600
 const DEFAULT_REST_SECONDS = 90
 const REST_STEP_SECONDS = 15
+// "off", then every 5 seconds up to 10 minutes.
+const REST_OPTIONS: WheelOption<number | null>[] = [
+  { value: null, label: 'off' },
+  ...Array.from({ length: 120 }, (_, index) => {
+    const seconds = (index + 1) * 5
+    const minutes = Math.floor(seconds / 60)
+    return { value: seconds, label: minutes ? `${minutes}min ${seconds % 60}s` : `${seconds}s` }
+  }),
+]
 const ACTIVE_WORKOUT_KEY = 'set_plate_active_workout'
 const ADJUSTMENT_ACTION_LABELS: Record<LiveWorkoutAdjustmentAction, string> = {
   reduce_load: 'Reduce the load',
@@ -363,6 +374,8 @@ function ActiveWorkout() {
   const [rpeValues, setRpeValues] = useState<Record<string, number>>(() => session?.rpeValues ?? {})
   const [missingReps, setMissingReps] = useState<string | null>(null)
   const [restRemaining, setRestRemaining] = useState<Record<number, number>>({})
+  const [restPickerIndex, setRestPickerIndex] = useState<number | null>(null)
+  const [rpePicker, setRpePicker] = useState<{ exerciseIndex: number; setIndex: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
   const [pendingSetRemoval, setPendingSetRemoval] = useState<PendingSetRemoval | null>(null)
   const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
@@ -742,12 +755,15 @@ function ActiveWorkout() {
     else setRestRemaining((current) => ({ ...current, [exerciseIndex]: remaining }))
   }
 
-  function toggleRest(exerciseIndex: number) {
-    const exercise = session?.exercises[exerciseIndex]
-    if (!exercise) return
-    const enable = !exercise.rest_enabled
-    updateExercise(exerciseIndex, { rest_enabled: enable })
-    if (!enable) stopRest(exerciseIndex)
+  function chooseRest(exerciseIndex: number, seconds: number | null) {
+    setRestPickerIndex(null)
+    if (seconds === null) {
+      updateExercise(exerciseIndex, { rest_enabled: false })
+      stopRest(exerciseIndex)
+      return
+    }
+    updateExercise(exerciseIndex, { rest_enabled: true })
+    updateRestDuration(exerciseIndex, seconds)
   }
 
   function toggleSetComplete(exerciseIndex: number, setIndex: number, isCompleted: boolean) {
@@ -769,6 +785,18 @@ function ActiveWorkout() {
     if (exercise.rest_enabled) {
       setRestRemaining((current) => ({ ...current, [exerciseIndex]: exercise.rest_seconds ?? DEFAULT_REST_SECONDS }))
     }
+  }
+
+  function chooseRpe(exerciseIndex: number, setIndex: number, rpe: number | null) {
+    setRpePicker(null)
+    const set = session?.exercises[exerciseIndex]?.sets[setIndex]
+    if (!set) return
+    if (rpe === null) {
+      clearRpe(exerciseIndex, setIndex, set.set_number)
+      return
+    }
+    updateRpe(exerciseIndex, set.set_number, rpe)
+    if (!set.is_completed) toggleSetComplete(exerciseIndex, setIndex, true)
   }
 
   function updateRestDuration(exerciseIndex: number, seconds: number) {
@@ -1009,16 +1037,12 @@ function ActiveWorkout() {
                   )}
                   
                   {!exercise.is_cardio && (
-                    <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-pressed={Boolean(exercise.rest_enabled)} aria-label={`Rest timer for ${exercise.name}`} onClick={() => toggleRest(exerciseIndex)}>
+                    <button className={`rest-toggle${exercise.rest_enabled ? ' is-on' : ''}`} type="button" aria-haspopup="dialog" aria-label={`Rest timer for ${exercise.name}: ${exercise.rest_enabled ? formatRest(restSeconds) : 'off'}`} onClick={() => setRestPickerIndex(exerciseIndex)}>
                       <Clock3 size={14} aria-hidden="true" />
                       {exercise.rest_enabled ? formatRest(restSeconds) : 'Rest off'}
                     </button>
                   )}
                   
-                  {exercise.rest_enabled && !exercise.is_cardio && <>
-                    <button className="rest-step" type="button" aria-label={`Shorter rest for ${exercise.name}`} disabled={restSeconds <= REST_STEP_SECONDS} onClick={() => updateRestDuration(exerciseIndex, restSeconds - REST_STEP_SECONDS)}><Minus size={14} aria-hidden="true" /></button>
-                    <button className="rest-step" type="button" aria-label={`Longer rest for ${exercise.name}`} onClick={() => updateRestDuration(exerciseIndex, restSeconds + REST_STEP_SECONDS)}><Plus size={14} aria-hidden="true" /></button>
-                  </>}
                 </div>
               </div>
             </div>
@@ -1155,18 +1179,9 @@ function ActiveWorkout() {
                           updateSet(exerciseIndex, setIndex, { reps })
                           setMissingReps(null)
                         }} />
-                        <select className="rpe-select" aria-label={`Set ${set.set_number} RPE`} value={rpeValues[setKey] ?? set.rpe ?? ''} onChange={(event) => {
-                          const rpe = Number(event.target.value)
-                          if (!rpe) {
-                            clearRpe(exerciseIndex, setIndex, set.set_number)
-                            return
-                          }
-                          updateRpe(exerciseIndex, set.set_number, rpe)
-                          if (!set.is_completed) toggleSetComplete(exerciseIndex, setIndex, true)
-                        }}>
-                          <option value="">—</option>
-                          {Array.from({ length: 10 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
-                        </select>
+                        <button className="rpe-select" type="button" aria-haspopup="dialog" aria-label={`Set ${set.set_number} RPE: ${rpeValues[setKey] ?? set.rpe ?? 'none'}`} onClick={() => setRpePicker({ exerciseIndex, setIndex })}>
+                          {rpeValues[setKey] ?? set.rpe ?? '—'}
+                        </button>
                         <button className={`done-button${set.is_completed ? ' is-done' : ''}`} type="button" onClick={() => toggleSetComplete(exerciseIndex, setIndex, !set.is_completed)} aria-label={`Toggle set ${set.set_number}`} aria-pressed={set.is_completed}><Check size={18} strokeWidth={3} /></button>
                       </div>
                     </SwipeToDeleteRow>
@@ -1203,6 +1218,33 @@ function ActiveWorkout() {
         </button>
       </section>
 
+      {restPickerIndex !== null && session.exercises[restPickerIndex] && (() => {
+        const exercise = session.exercises[restPickerIndex]
+        const seconds = exercise.rest_enabled ? exercise.rest_seconds ?? DEFAULT_REST_SECONDS : null
+        return (
+          <WheelPickerSheet
+            title="Rest Timer"
+            subtitle={exercise.name}
+            options={REST_OPTIONS}
+            initialIndex={seconds === null ? 0 : Math.min(REST_OPTIONS.length - 1, Math.max(1, Math.round(seconds / 5)))}
+            onDone={(value) => chooseRest(restPickerIndex, value)}
+            onClose={() => setRestPickerIndex(null)}
+          />
+        )
+      })()}
+      {rpePicker && session.exercises[rpePicker.exerciseIndex]?.sets[rpePicker.setIndex] && (() => {
+        const exercise = session.exercises[rpePicker.exerciseIndex]
+        const set = exercise.sets[rpePicker.setIndex]
+        const rpe = rpeValues[`${rpePicker.exerciseIndex}:${set.set_number}`] ?? set.rpe ?? null
+        return (
+          <RpeSheet
+            subtitle={`${exercise.name} · Set ${set.set_number}${set.weight_kg ? `: ${set.weight_kg}kg` : ''}${set.reps ? ` × ${set.reps}` : ''}`}
+            rpe={rpe}
+            onDone={(value) => chooseRpe(rpePicker.exerciseIndex, rpePicker.setIndex, value)}
+            onClose={() => setRpePicker(null)}
+          />
+        )
+      })()}
       {runningRestIndex !== null && (
         <section className="rest-bar" aria-label="Rest timer">
           <div className="rest-bar-copy">

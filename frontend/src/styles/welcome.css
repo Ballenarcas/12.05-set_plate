@@ -1,16 +1,11 @@
-.welcome-screen { display: flex; width: min(100%, 28rem); min-height: 100svh; margin: 0 auto; flex-direction: column; justify-content: space-between; padding: max(1.5rem, env(safe-area-inset-top)) 1.35rem max(1.5rem, env(safe-area-inset-bottom)); background: var(--background); }
-.welcome-mark { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text); font-size: 0.9375rem; font-weight: 700; }
-.welcome-mark svg { color: var(--green); }
-.welcome-hero { padding: 10vh 0 6vh; }
-.welcome-hero h1 { max-width: 19rem; margin: 0 0 0.85rem; color: var(--text); font-size: clamp(2rem, 9.5vw, 2.6rem); line-height: 1.05; }
-.welcome-hero p { max-width: 21rem; margin: 0; color: var(--text-muted); font-size: 1rem; line-height: 1.55; }
-.welcome-actions { display: grid; gap: 0.6rem; margin-top: 1.75rem; }
-.welcome-actions .primary-button { margin-top: 0; }
-.welcome-actions .secondary-action { min-height: 3rem; text-decoration: none; }
-.welcome-features { display: grid; gap: 0.7rem; }
-.welcome-feature { display: flex; align-items: center; gap: 0.8rem; padding: 0.9rem 1rem; border-radius: var(--radius-card); background: var(--surface); }
-.welcome-feature > svg { flex: none; color: var(--text-muted); }
-.welcome-feature h2 { margin: 0 0 0.1rem; color: var(--text); font-size: 0.9375rem; font-weight: 600; }
-.welcome-feature p { margin: 0; color: var(--text-muted); font-size: 0.8125rem; }
-
+.welcome-screen { display: flex; width: min(100%, 28rem); min-height: 100svh; margin: 0 auto; flex-direction: column; gap: 1.5rem; padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.25rem, env(safe-area-inset-bottom)); color: var(--text); background: var(--background); }
+.welcome-mark { margin: 0; font-size: 1rem; font-weight: 700; letter-spacing: 0.08em; }
+/* The preview fades out at the bottom so it reads as a glimpse, not as live data. */
+.welcome-preview { display: grid; margin-block: auto; gap: 0.75rem; pointer-events: none; user-select: none; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.welcome-hero h1 { margin: 0 0 0.75rem; font-size: clamp(2rem, 9vw, 2.5rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
+.welcome-hero p { max-width: 22rem; margin: 0; color: var(--text-muted); font-size: 1rem; line-height: 1.5; }
+.welcome-actions { display: grid; justify-items: center; gap: 0.25rem; }
+.welcome-actions .primary-button { margin-top: 0; min-height: 3.25rem; }
+.welcome-login { margin: 0; color: var(--text-muted); font-size: 0.9375rem; }
+.welcome-login a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--text); font-weight: 600; text-underline-offset: 0.2em; }
 @media (min-width: 700px) { .welcome-screen { border-inline: 1px solid var(--line); padding-inline: 1.5rem; } }

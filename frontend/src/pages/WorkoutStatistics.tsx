@@ -19,7 +19,7 @@ import '../styles/workout-statistics.css'
 
 // Half-oval range picker, in px because the dot follows the same SVG path with offset-path.
 const DIAL = (() => {
-  const rx = 115, ry = 38, side = 14, top = 34
+  const rx = 80, ry = 38, side = 14, top = 34
   const left = side, right = side + 2 * rx
   return {
     width: right + side,

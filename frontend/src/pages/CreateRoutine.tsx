@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, GripVertical, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SelectExerciseModal } from '../components/layout/SelectExerciseModal'
@@ -335,7 +335,7 @@ function CreateRoutine() {
       <div className="routine-builder-footer">
         <button className="secondary-action" type="button" onClick={() => navigate('/workouts')}>Cancel</button>
         <button className="primary-button routine-builder-submit" type="button" onClick={saveRoutine} disabled={!canSave}>
-          {isSaving ? 'Saving...' : routineToEdit ? 'Update Routine' : 'Save Routine'} {!isSaving && <Sparkles size={16} aria-hidden="true" />}
+          {isSaving ? 'Saving...' : routineToEdit ? 'Update Routine' : 'Save Routine'}
         </button>
       </div>
     </div>

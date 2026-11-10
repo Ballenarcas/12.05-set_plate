@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -13,6 +14,10 @@ from main import app
 
 client = TestClient(app)
 USER_ID = "11111111-1111-1111-1111-111111111111"
+# Random per run, so no password-like text lives in the repo for secret scanners to flag.
+OLD_PASSWORD = secrets.token_urlsafe(16)
+NEW_PASSWORD = secrets.token_urlsafe(16)
+FAKE_API_KEY = secrets.token_hex(8)
 
 
 class FakeTable:
@@ -71,7 +76,7 @@ class FakeTable:
 class FakeSupabase:
     def __init__(self) -> None:
         self.tables = {
-            "users": [{"id": USER_ID, "email": "user@example.com", "password": hash_password("old-password-123")}],
+            "users": [{"id": USER_ID, "email": "user@example.com", "password": hash_password(OLD_PASSWORD)}],
             "password_resets": [],
         }
 
@@ -122,14 +127,14 @@ def test_only_the_token_hash_is_stored(db, sent) -> None:
 
 def test_confirm_sets_the_new_password_once(db, sent) -> None:
     request_reset("user@example.com")
-    body = {"token": token_from(sent[0][1]), "new_password": "brand-new-pass-456"}
+    body = {"token": token_from(sent[0][1]), "new_password": NEW_PASSWORD}
 
     first = client.post("/api/v1/users/password-reset/confirm", json=body)
     second = client.post("/api/v1/users/password-reset/confirm", json=body)
 
     assert first.status_code == 200
-    assert verify_password("brand-new-pass-456", db.tables["users"][0]["password"])
-    assert not verify_password("old-password-123", db.tables["users"][0]["password"])
+    assert verify_password(NEW_PASSWORD, db.tables["users"][0]["password"])
+    assert not verify_password(OLD_PASSWORD, db.tables["users"][0]["password"])
     assert second.status_code == 400
 
 
@@ -138,11 +143,11 @@ def test_expired_or_unknown_links_are_rejected(db, sent) -> None:
     token = token_from(sent[0][1])
     db.tables["password_resets"][0]["expires_at"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
 
-    expired = client.post("/api/v1/users/password-reset/confirm", json={"token": token, "new_password": "brand-new-pass-456"})
-    unknown = client.post("/api/v1/users/password-reset/confirm", json={"token": "x" * 43, "new_password": "brand-new-pass-456"})
+    expired = client.post("/api/v1/users/password-reset/confirm", json={"token": token, "new_password": NEW_PASSWORD})
+    unknown = client.post("/api/v1/users/password-reset/confirm", json={"token": "x" * 43, "new_password": NEW_PASSWORD})
 
     assert expired.status_code == unknown.status_code == 400
-    assert verify_password("old-password-123", db.tables["users"][0]["password"])
+    assert verify_password(OLD_PASSWORD, db.tables["users"][0]["password"])
 
 
 def test_short_new_password_is_rejected(db) -> None:
@@ -169,7 +174,7 @@ def test_email_goes_out_through_resend_with_the_link(monkeypatch) -> None:
     from app.services import email_service
 
     settings = get_settings()
-    monkeypatch.setattr(settings, "resend_api_key", "re_test")
+    monkeypatch.setattr(settings, "resend_api_key", FAKE_API_KEY)
     monkeypatch.setattr(settings, "email_from", "SET&PLATE <no-reply@example.com>")
     calls = []
 
@@ -182,6 +187,6 @@ def test_email_goes_out_through_resend_with_the_link(monkeypatch) -> None:
 
     url, headers, body = calls[0]
     assert url == "https://api.resend.com/emails"
-    assert headers["Authorization"] == "Bearer re_test"
+    assert headers["Authorization"] == f"Bearer {FAKE_API_KEY}"
     assert body["to"] == ["user@example.com"]
     assert "https://app.test/reset-password?token=abc" in body["text"]

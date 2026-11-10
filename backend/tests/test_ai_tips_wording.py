@@ -177,7 +177,7 @@ def model(monkeypatch):
 
     monkeypatch.setattr(tips, "phrase_tip", phrase)
     monkeypatch.setattr(tips, "has_active_premium", lambda _user, _session: state.premium)
-    monkeypatch.setattr(tips, "get_settings", lambda: SimpleNamespace(ai_tips_model_enabled=True, groq_api_key="key"))
+    monkeypatch.setattr(tips, "get_settings", lambda: SimpleNamespace(ai_tips_model_enabled=True, ai_api_key="key"))
     return state
 
 
@@ -193,7 +193,7 @@ def test_model_rewords_a_new_tip_once_for_premium_users(use_database, model):  #
 
 def test_model_is_not_called_while_the_switch_is_off(use_database, model, monkeypatch):  # noqa: F811
     use_database(_database())
-    monkeypatch.setattr(tips, "get_settings", lambda: SimpleNamespace(ai_tips_model_enabled=False, groq_api_key="key"))
+    monkeypatch.setattr(tips, "get_settings", lambda: SimpleNamespace(ai_tips_model_enabled=False, ai_api_key="key"))
     assert "Friendly" not in _current().json()["tip"]["message"]
     assert model.calls == []
 
@@ -207,7 +207,7 @@ def test_model_is_not_called_for_free_users(use_database, model):  # noqa: F811
 
 def test_model_is_not_called_without_an_api_key(use_database, model, monkeypatch):  # noqa: F811
     use_database(_database())
-    monkeypatch.setattr(tips, "get_settings", lambda: SimpleNamespace(ai_tips_model_enabled=True, groq_api_key=""))
+    monkeypatch.setattr(tips, "get_settings", lambda: SimpleNamespace(ai_tips_model_enabled=True, ai_api_key=""))
     _current()
     assert model.calls == []
 

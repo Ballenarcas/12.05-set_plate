@@ -535,7 +535,7 @@ def _with_model_wording(
 ) -> dict[str, Any]:
     """Make a new tip personal if allowed. Any failure keeps the rule's text, so Home never depends on the model."""
     settings = get_settings()
-    if not settings.ai_tips_model_enabled or not settings.groq_api_key:
+    if not settings.ai_tips_model_enabled or not settings.ai_api_key:
         return tip
     # A key seen before means the data has not changed: dismissing tips or reloading spends nothing.
     if tip["state_key"] in seen_keys or len(seen_keys) >= MAX_MODEL_TIPS_PER_DAY:

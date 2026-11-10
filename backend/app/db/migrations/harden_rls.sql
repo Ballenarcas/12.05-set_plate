@@ -30,6 +30,7 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS "Allow public all %s" ON public.%I;', target, target);
     EXECUTE format('DROP POLICY IF EXISTS "Users can access meal ingredients" ON public.%I;', target);
     EXECUTE format('DROP POLICY IF EXISTS "Allow service role full access to workout plans" ON public.%I;', target);
+    EXECUTE format('DROP POLICY IF EXISTS "Allow service role full access to calorie adjustments" ON public.%I;', target);
 
     EXECUTE format('DROP POLICY IF EXISTS "%s_service_role" ON public.%I;', target, target);
     EXECUTE format(
@@ -40,15 +41,16 @@ BEGIN
   END LOOP;
 END $$;
 
--- Table privileges: anon/authenticated keep no access at all.
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
-GRANT USAGE ON SCHEMA public TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO service_role;
-
 -- Table privileges: anon/authenticated keep no access at all. The SPA never
 -- talks to Supabase directly; it goes through the FastAPI service, which uses
 -- the service-role key. The exercise catalogue is therefore still public, but
 -- only through /api/v1/workouts/exercises.
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO service_role;
+
+-- Supabase grants new tables to anon by default, so a future table would start open.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
 
 -- Verify afterwards:
 --   SELECT tablename, policyname, roles, cmd, qual

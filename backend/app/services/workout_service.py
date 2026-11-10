@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
-from app.schemas.workout import RoutineCreate, RoutineExerciseSummary, RoutineSummary, WorkoutSummary
+from app.schemas.workout import RoutineCreate, RoutineExerciseSummary, RoutineSummary
 from app.schemas.workout_log import (
     WorkoutHistoryEntry,
     WorkoutHistoryExercise,
@@ -24,10 +24,6 @@ from app.services.exercise_catalog import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def get_programmed_workout() -> WorkoutSummary:
-    return WorkoutSummary(title="Upper Body", exercise_count=4, duration_minutes=45)
 
 
 def list_exercises(
@@ -219,7 +215,7 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
                 supabase.table("routines").delete().eq("id", routine_id).execute()
             except Exception:
                 logger.exception("Failed to clean up incomplete routine")
-        raise HTTPException(status_code=502, detail=f"Could not save routine: {err}") from err
+        raise HTTPException(status_code=502, detail="Could not save this routine.") from err
 
     return RoutineSummary(
         id=str(routine_id),
@@ -309,7 +305,7 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
                 supabase.table("routine_exercises").insert(existing_rows).execute()
         except Exception:
             logger.exception("Failed to restore routine exercises after update failure")
-        raise HTTPException(status_code=502, detail=f"Could not update routine: {err}") from err
+        raise HTTPException(status_code=502, detail="Could not update this routine.") from err
 
     return RoutineSummary(
         id=str(routine_id),
@@ -358,10 +354,28 @@ def delete_user_routine(user_id: UUID, routine_id: UUID) -> None:
         raise HTTPException(status_code=502, detail=f"Could not delete routine: {err}") from err
 
 
+def _saved_workout_id(supabase, user_id: UUID, payload: WorkoutLogCreate) -> str | None:
+    """A session keeps its start time, so the same start means a retry of the same workout."""
+    rows = (
+        supabase.table("workouts")
+        .select("id")
+        .eq("user_id", str(user_id))
+        .eq("start_time", payload.started_at.isoformat())
+        .limit(1)
+        .execute()
+        .data or []
+    )
+    return rows[0]["id"] if rows else None
+
+
 def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
     supabase = get_supabase(admin=True)
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
+
+    saved_id = _saved_workout_id(supabase, user_id, payload)
+    if saved_id:
+        return WorkoutLogResponse(id=saved_id, status="saved")
 
     set_records = []
     for position, exercise in enumerate(payload.exercises):
@@ -398,6 +412,18 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
         plan = plan_rows[0]
 
     routine_id = payload.routine_id or (plan.get("routine_id") if plan else None)
+    if routine_id:
+        # Dropping the link keeps a workout whose routine was deleted while it was running.
+        owned = (
+            supabase.table("routines")
+            .select("id")
+            .eq("id", str(routine_id))
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        routine_id = routine_id if owned else None
     workout_id = None
     try:
         record = {
@@ -430,6 +456,10 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
     except HTTPException:
         raise
     except Exception as err:
+        if "23505" in str(err):  # add_unique_workout_start.sql: a parallel retry saved it first
+            saved_id = _saved_workout_id(supabase, user_id, payload)
+            if saved_id:
+                return WorkoutLogResponse(id=saved_id, status="saved")
         logger.exception("Failed to persist workout and workout sets")
         if workout_id:
             try:

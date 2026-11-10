@@ -50,6 +50,11 @@ def _metrics(**overrides) -> dict:
     return {**base, **overrides}
 
 
+def test_each_gender_gets_its_own_formula():
+    assert calculate_calorie_goal(70, 170, 30, "Male", "Maintenance") == 2022
+    assert calculate_calorie_goal(70, 170, 30, "Female", "Maintenance") == 1814
+
+
 def test_both_weight_loss_labels_get_the_same_deficit():
     profile = (80, 175, 30, "male")
     maintenance = calculate_calorie_goal(*profile, "Maintenance")
@@ -175,7 +180,7 @@ def _supabase(pending: list[dict], metrics_overrides: dict | None = None) -> Mag
     users.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
         data=[{"calorie_goal": 2200, "objective": "lose weight"}]
     )
-    users.update.return_value.eq.return_value.select.return_value.execute.return_value = MagicMock(
+    users.update.return_value.eq.return_value.eq.return_value.select.return_value.execute.return_value = MagicMock(
         data=[{"calorie_goal": 2050}]
     )
     meals = MagicMock()

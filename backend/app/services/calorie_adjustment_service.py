@@ -20,7 +20,7 @@ from app.services.user_profile_service import calculate_calorie_goal
 
 ADJUSTMENTS_TABLE = "ai_calorie_adjustments"
 EVALUATION_DAYS = 7
-REVIEW_COOLDOWN_DAYS = 1
+REVIEW_COOLDOWN_DAYS = EVALUATION_DAYS  # the same week of data must not move the goal twice
 COMPLIANCE_BAND = 0.10
 LOW_COMPLIANCE = 0.50
 HIGH_COMPLIANCE = 0.80
@@ -502,11 +502,17 @@ def decide_adjustment(
         updated_users = _rows(
             session.table("users")
             .update({"calorie_goal": int(row.get("proposed_goal") or 0)})
-            .eq("id", str(user_id)).select("calorie_goal").execute()
+            .eq("id", str(user_id)).eq("calorie_goal", applied_goal).select("calorie_goal").execute()
         )
-        if not updated_users:
-            raise RuntimeError("Could not apply the new calorie goal")
-        applied_goal = int(updated_users[0].get("calorie_goal") or 0)
+        if updated_users:
+            applied_goal = int(updated_users[0].get("calorie_goal") or 0)
+        else:
+            # The goal changed after this proposal was made, so the proposal is out of date.
+            status = "rejected"
+            users = _rows(session.table("users").select("calorie_goal").eq("id", str(user_id)).limit(1).execute())
+            if not users:
+                raise RuntimeError("Could not read the calorie goal")
+            applied_goal = int(users[0].get("calorie_goal") or 0)
 
     flipped = _rows(
         session.table(ADJUSTMENTS_TABLE).update({"status": status})

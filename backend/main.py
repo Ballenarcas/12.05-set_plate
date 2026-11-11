@@ -1,9 +1,12 @@
+import logging
 import threading
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import ai, dashboard, nutrition, premium, routines, users, workouts
 from app.core.config import get_settings
@@ -11,6 +14,7 @@ from app.api.settings import router as settings_router
 from app.db.supabase_client import warm_supabase
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 if "*" in settings.cors_origin_list:
     raise RuntimeError("CORS_ORIGINS must list explicit origins; '*' is not allowed.")
@@ -42,6 +46,24 @@ app.add_middleware(
     expose_headers=["WWW-Authenticate"],
     max_age=600,
 )
+
+
+@app.exception_handler(httpx.ConnectError)
+async def database_unreachable(_request, _exc) -> JSONResponse:
+    logger.warning("Database connection failed")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Could not reach the database. Check your network and try again."},
+    )
+
+
+@app.exception_handler(httpx.TimeoutException)
+async def database_timeout(_request, _exc) -> JSONResponse:
+    logger.warning("Database request timed out")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "The database took too long to answer. Try again."},
+    )
 
 
 @app.get("/")

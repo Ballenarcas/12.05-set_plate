@@ -3,9 +3,10 @@ from datetime import datetime
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from app.core.auth import current_user
+from app.schemas.meal_scan import MealScanResult
 from app.schemas.nutrition import (
     DailyNutritionResponse,
     FoodSearchItem,
@@ -14,10 +15,14 @@ from app.schemas.nutrition import (
     MealUpdateRequest,
 )
 from app.facades.nutrition_facade import nutrition_facade
+from app.services.meal_scan_service import MealScanFailed, MealScanNoFood, MealScanUnavailable
 from app.services.nutrition_service import MealIngredientStorageUnavailable
 
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 logger = logging.getLogger(__name__)
+
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 @router.get("/search-foods", response_model=list[FoodSearchItem])
@@ -43,6 +48,42 @@ def get_today_nutrition(
     except Exception as err:
         logger.exception("Failed to load today's nutrition")
         raise HTTPException(status_code=500, detail="Could not load today's nutrition.") from err
+
+
+def _looks_like_image(data: bytes) -> bool:
+    if data.startswith(b"\xff\xd8\xff"):
+        return True
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+
+
+@router.post("/scan", response_model=MealScanResult)
+def scan_meal_photo(
+    file: UploadFile = File(...),
+    user_id: UUID = Depends(current_user),
+) -> MealScanResult:
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail="Use a JPEG, PNG, or WebP photo.")
+    data = file.file.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="That photo is too large. Use one under 8 MB.")
+    if not data or not _looks_like_image(data):
+        raise HTTPException(status_code=415, detail="That file is not a supported photo.")
+
+    try:
+        return nutrition_facade.scan_meal(data, content_type)
+    except MealScanNoFood as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
+    except MealScanUnavailable as err:
+        raise HTTPException(status_code=503, detail=str(err)) from err
+    except MealScanFailed as err:
+        logger.exception("Meal scan failed")
+        raise HTTPException(status_code=502, detail=str(err)) from err
+    except Exception as err:
+        logger.exception("Unexpected meal scan failure")
+        raise HTTPException(status_code=502, detail="Could not analyze that photo. Try again.") from err
 
 
 @router.post("/meals", response_model=MealItem)

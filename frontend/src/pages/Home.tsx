@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AiTipCard from '../components/home/AiTipCard'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
+import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, isPremiumActive, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
 
 function formatMacro(value: number): string {
@@ -151,7 +151,13 @@ function Home() {
           >
             <Plus size={17} aria-hidden="true" /> Manual Register
           </button>
-          <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">PRO</span></button>
+          <button
+            className="action-button"
+            type="button"
+            onClick={() => navigate(isPremiumActive(user) ? '/scan-meal' : '/premium')}
+          >
+            <Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">PRO</span>
+          </button>
         </div>
       </section>
 

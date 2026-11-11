@@ -12,6 +12,7 @@ const LogMeals = lazy(() => import('./pages/LogMeals'))
 const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Premium = lazy(() => import('./pages/Premium'))
+const ScanMeal = lazy(() => import('./pages/ScanMeal'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Faq = lazy(() => import('./pages/Faq')) // <-- Ajout de l'import FAQ
 const Welcome = lazy(() => import('./pages/Welcome'))
@@ -39,6 +40,7 @@ function App() {
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
             <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/scan-meal" element={<ScanMeal />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/faq" element={<Faq />} /> {/* <-- Ajout de la route FAQ */}

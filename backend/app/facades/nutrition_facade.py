@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from app.schemas.meal_scan import MealScanResult
 from app.schemas.nutrition import (
     DailyNutritionResponse,
     FoodSearchItem,
@@ -7,7 +8,7 @@ from app.schemas.nutrition import (
     MealItem,
     MealUpdateRequest,
 )
-from app.services import nutrition_service
+from app.services import meal_scan_service, nutrition_service
 
 
 def _resolve_window(today_start: datetime | None, today_end: datetime | None) -> tuple[datetime, datetime]:
@@ -28,6 +29,9 @@ class NutritionFacade:
     ) -> DailyNutritionResponse:
         start, end = _resolve_window(today_start, today_end)
         return nutrition_service.get_user_nutrition_today(user_id, start, end)
+
+    def scan_meal(self, image: bytes, content_type: str) -> MealScanResult:
+        return meal_scan_service.estimate_meal_from_image(image, content_type)
 
     def create_meal(self, payload: MealCreateRequest) -> MealItem:
         return nutrition_service.create_user_meal(payload)

@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     ai_model: str = Field("openai/gpt-oss-20b", validation_alias=AliasChoices("AI_MODEL", "GROQ_MODEL"))
     ai_tips_model: str = Field("openai/gpt-oss-120b", validation_alias=AliasChoices("AI_TIPS_MODEL", "GROQ_TIPS_MODEL"))
     ai_tips_model_enabled: bool = False
+    # Photo meal scanning needs an image-capable model. It may use a different
+    # OpenAI-compatible provider from the text model, so the keys are separate.
+    ai_vision_model: str = Field("", validation_alias=AliasChoices("AI_VISION_MODEL"))
+    ai_vision_base_url: str = Field("", validation_alias=AliasChoices("AI_VISION_BASE_URL"))
+    ai_vision_api_key: str = Field("", validation_alias=AliasChoices("AI_VISION_API_KEY"))
     cors_origins: str = "http://localhost:5173"
 
     # Session signing. Falls back to the Supabase service-role key when no

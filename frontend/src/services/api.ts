@@ -4,6 +4,7 @@ const API_URL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL ?? '')
 const REQUEST_TIMEOUT_MS = 5000
 const PURCHASE_TIMEOUT_MS = 10_000
 const WRITE_TIMEOUT_MS = 15000
+const SCAN_TIMEOUT_MS = 70000
 const LOGIN_TIMEOUT_MS = 15000
 const DASHBOARD_TIMEOUT_MS = 15000
 const LLM_TIMEOUT_MS = 20000
@@ -1071,6 +1072,43 @@ export interface MealCreateRequest {
   ingredients?: MealIngredient[]
 }
 
+export interface MealScanItem {
+  name: string
+  grams: number
+  calories: number
+  protein_g: number
+  carbs_g: number
+  fat_g: number
+}
+
+export interface MealScanResult {
+  items: MealScanItem[]
+  total_calories: number
+  notes: string | null
+}
+
+export async function scanMealPhoto(image: Blob): Promise<MealScanResult> {
+  const file = image instanceof File
+    ? image
+    : new File([image], 'meal.jpg', { type: 'image/jpeg' })
+  const form = new FormData()
+  form.append('file', file)
+  const response = await apiFetch(`${API_URL}/api/v1/nutrition/scan`, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(SCAN_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't analyze that photo. Please try again.",
+    )
+  }
+  return response.json() as Promise<MealScanResult>
+}
+
 export async function addMealLog(payload: MealCreateRequest): Promise<MealLogItem> {
   const response = await apiFetch(`${API_URL}/api/v1/nutrition/meals`, {
     method: 'POST',
@@ -1082,6 +1120,13 @@ export async function addMealLog(payload: MealCreateRequest): Promise<MealLogIte
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this meal. Please try again.")
   }
   clearDashboardCache()
+  try {
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith(NUTRITION_CACHE_PREFIX))
+      .forEach((key) => sessionStorage.removeItem(key))
+  } catch {
+    // The fresh server response remains authoritative when storage is unavailable.
+  }
   return response.json()
 }
 

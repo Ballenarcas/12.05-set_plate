@@ -13,6 +13,8 @@ from app.services import workout_adjustment_service as service
 def short_routines_are_usable(monkeypatch):
     """Most tests here use a one-exercise routine; the minimum has its own tests."""
     monkeypatch.setattr(service, "MIN_PLAN_EXERCISES", 1)
+    # Each test brings its own fake catalog, so none may reuse another test's cached one.
+    monkeypatch.setattr(service, "_catalog_cache", None)
 
 
 class FakeQuery:
@@ -505,3 +507,14 @@ async def test_ai_request_uses_example_model_and_unwraps_suggestion_array(monkey
     assert calls["model"] == "llama-3.3-70b-versatile"
     assert calls["response_format"] == {"type": "json_object"}
     assert calls["closed"] is True
+
+
+def test_exercise_catalog_is_loaded_once_and_reused(monkeypatch):
+    loads = []
+    monkeypatch.setattr(service, "_fetch_exercise_catalog", lambda _db: loads.append(1) or [{"id": "1", "name": "Squat"}])
+
+    first = service._load_exercise_catalog(object())
+    second = service._load_exercise_catalog(object())
+
+    assert first == second == [{"id": "1", "name": "Squat"}]
+    assert len(loads) == 1

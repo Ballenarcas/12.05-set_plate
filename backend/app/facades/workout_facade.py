@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from app.core.local_day import LocalDay
@@ -19,7 +20,9 @@ class WorkoutFacade:
         supabase = get_supabase(admin=True)
         if supabase is None:
             raise HTTPException(status_code=503, detail="Supabase is not configured")
-        return await plan_daily_workout(user_id, supabase, day)
+        # Planning makes many blocking Supabase calls. Running it on a worker thread (with its own
+        # event loop for the AI call) keeps the server answering every other request meanwhile.
+        return await asyncio.to_thread(asyncio.run, plan_daily_workout(user_id, supabase, day))
 
     async def suggest_adjustment(self, payload: LiveWorkoutAdjustmentRequest) -> list[LiveWorkoutAdjustmentSuggestion]:
         return await suggest_live_adjustment(payload.model_dump(mode="json"))

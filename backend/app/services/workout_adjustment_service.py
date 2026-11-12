@@ -1,7 +1,9 @@
 import json
 import logging
 import random
+import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -153,7 +155,22 @@ def _exercise_muscle_group(row: dict[str, Any]) -> str | None:
     return group.strip() if isinstance(group, str) and group.strip() else None
 
 
+_CATALOG_TTL_SECONDS = 3600
+_catalog_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+
 def _load_exercise_catalog(db_session: Any) -> list[dict[str, Any]]:
+    """The exercise catalog, kept for an hour: it only changes when the dataset is re-imported."""
+    global _catalog_cache
+    if _catalog_cache and time.monotonic() - _catalog_cache[0] < _CATALOG_TTL_SECONDS:
+        return _catalog_cache[1]
+    catalog = _fetch_exercise_catalog(db_session)
+    if catalog:
+        _catalog_cache = (time.monotonic(), catalog)
+    return catalog
+
+
+def _fetch_exercise_catalog(db_session: Any) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     page_size = 1000
     start = 0
@@ -368,48 +385,75 @@ async def plan_daily_workout(user_id: UUID, db_session: Any, day: LocalDay | Non
     start, end = (day.start, day.end) if day else _today_window()
     today = (day.local_date if day else start.date()).isoformat()
     since = datetime.now(timezone.utc) - timedelta(hours=48)
-    try:
-        users = _data(db_session.table("users").select("*").eq("id", str(user_id)).limit(1).execute())
-        if not users:
-            raise HTTPException(status_code=404, detail="User not found")
-        user = users[0]
-        meals = _data(
-            db_session.table("meals").select("*").eq("user_id", str(user_id))
-            .gte("consumed_at", since.isoformat()).lt("consumed_at", end.isoformat()).execute()
+    uid = str(user_id)
+
+    def existing_plan_today() -> list[dict[str, Any]]:
+        return _data(
+            db_session.table("workout_plans").select("id,is_rest_day,ai_adjusted,ai_reasoning")
+            .eq("user_id", uid).eq("plan_date", today).limit(1).execute()
         )
-        workouts = _data(
-            db_session.table("workouts").select("id,end_time").eq("user_id", str(user_id))
+
+    def workouts_today() -> list[dict[str, Any]]:
+        return _data(
+            db_session.table("workouts").select("id,end_time").eq("user_id", uid)
             .gte("start_time", start.isoformat()).lt("start_time", end.isoformat()).execute()
         )
-        recent_exercise_ids: set[str] = set()
-        recent_muscle_groups: set[str] = set()
+
+    def user_row() -> list[dict[str, Any]]:
+        # Only what planning reads: never the password hash.
+        return _data(db_session.table("users").select("id,objective,calorie_goal").eq("id", uid).limit(1).execute())
+
+    def recent_meals() -> list[dict[str, Any]]:
+        return _data(
+            db_session.table("meals").select("calories,proteins,carbs,fats,consumed_at").eq("user_id", uid)
+            .gte("consumed_at", since.isoformat()).lt("consumed_at", end.isoformat()).execute()
+        )
+
+    def user_routines() -> list[dict[str, Any]]:
+        return _data(db_session.table("routines").select("id,name").eq("user_id", uid).execute())
+
+    def recently_trained() -> tuple[set[str], set[str]]:
+        """Exercise ids and muscle groups of the last 48 hours: three steps that depend on each other."""
         recent_workouts = _data(
-            db_session.table("workouts").select("id").eq("user_id", str(user_id))
-            .gte("start_time", (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()).execute()
+            db_session.table("workouts").select("id").eq("user_id", uid)
+            .gte("start_time", since.isoformat()).execute()
         )
-        if recent_workouts:
-            recent_sets = _data(
-                db_session.table("workout_sets").select("exercise_id")
-                .in_("workout_id", [str(row["id"]) for row in recent_workouts]).execute()
-            )
-            recent_exercise_ids = {
-                str(row["exercise_id"]) for row in recent_sets if row.get("exercise_id")
-            }
-        if recent_exercise_ids:
-            recent_rows = _data(
-                db_session.table("exercises").select("id,muscle_group")
-                .in_("id", sorted(recent_exercise_ids)).execute()
-            )
-            recent_muscle_groups = {
-                row["muscle_group"] for row in recent_rows if row.get("muscle_group")
-            }
-        routines = _data(
-            db_session.table("routines").select("id,name").eq("user_id", str(user_id)).execute()
+        if not recent_workouts:
+            return set(), set()
+        recent_sets = _data(
+            db_session.table("workout_sets").select("exercise_id")
+            .in_("workout_id", [str(row["id"]) for row in recent_workouts]).execute()
         )
-        existing_plans = _data(
-            db_session.table("workout_plans").select("id,is_rest_day,ai_adjusted,ai_reasoning")
-            .eq("user_id", str(user_id)).eq("plan_date", today).limit(1).execute()
+        exercise_ids = {str(row["exercise_id"]) for row in recent_sets if row.get("exercise_id")}
+        if not exercise_ids:
+            return exercise_ids, set()
+        recent_rows = _data(
+            db_session.table("exercises").select("id,muscle_group").in_("id", sorted(exercise_ids)).execute()
         )
+        return exercise_ids, {row["muscle_group"] for row in recent_rows if row.get("muscle_group")}
+
+    try:
+        # A plan that already exists, or a workout already finished today, ends the request early,
+        # so check those two first instead of loading everything else for nothing.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            plans_future = pool.submit(existing_plan_today)
+            workouts_future = pool.submit(workouts_today)
+            existing_plans = plans_future.result()
+            workouts = workouts_future.result()
+        if not existing_plans and not any(row.get("end_time") for row in workouts):
+            # Independent reads, run together like the dashboard's.
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                users_future = pool.submit(user_row)
+                meals_future = pool.submit(recent_meals)
+                routines_future = pool.submit(user_routines)
+                recent_future = pool.submit(recently_trained)
+                users = users_future.result()
+                meals = meals_future.result()
+                routines = routines_future.result()
+                recent_exercise_ids, recent_muscle_groups = recent_future.result()
+            if not users:
+                raise HTTPException(status_code=404, detail="User not found")
+            user = users[0]
     except HTTPException:
         raise
     except Exception as err:

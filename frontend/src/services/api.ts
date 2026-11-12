@@ -1131,3 +1131,54 @@ export async function deleteMealLog(userId: string, mealId: string): Promise<voi
     // The server-side deletion remains authoritative when browser storage is unavailable.
   }
 };
+
+export interface HydrationEntry {
+  id: string
+  amount_ml: number
+  unit: 'ml' | 'glass'
+  created_at: string | null
+}
+
+export interface HydrationToday {
+  total_ml: number
+  goal_ml: number
+  progress_percentage: number
+  remaining_ml: number
+  entries: HydrationEntry[]
+}
+
+export async function fetchHydrationToday(): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/today?${localDayQuery()}`, {
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your hydration. Please try again.")
+  }
+  return response.json()
+}
+
+export async function addHydrationEntry(payload: { amount: number; unit: 'ml' | 'glass' }): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/entries?${localDayQuery()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't save this drink. Please try again.")
+  }
+  return response.json()
+}
+
+export async function removeHydrationEntry(entryId: string): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/entries/${encodeURIComponent(entryId)}?${localDayQuery()}`, {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this drink. Please try again.")
+  }
+  return response.json()
+}

@@ -82,6 +82,28 @@
 .action-button:disabled, .primary-button:disabled { cursor: not-allowed; opacity: 0.65; }
 .action-button:active, .primary-button:active { transform: translateY(1px); }
 .primary-button { width: 100%; margin-top: 1rem; border: 0; color: #071c0e; background: var(--green); }
+.hydration-card { padding: 1rem; }
+.hydration-progress-value { background: #4aa3df; }
+.hydration-controls { display: grid; gap: 0.6rem; margin-top: 0.9rem; }
+.hydration-unit-toggle { display: flex; gap: 0.25rem; padding: 0.25rem; border: 1px solid var(--line); border-radius: 0.7rem; background: #151615; }
+.hydration-unit-toggle button { flex: 1; min-height: 2.4rem; padding: 0 0.6rem; border: 0; border-radius: 0.55rem; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 0.75rem; font-weight: 700; }
+.hydration-unit-toggle button[aria-pressed='true'] { color: #071c0e; background: var(--green); }
+.hydration-unit-toggle button:disabled { cursor: not-allowed; opacity: 0.65; }
+.hydration-amount-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.55rem; }
+.hydration-amount-input { width: 100%; min-height: 2.9rem; padding: 0 0.75rem; border: 1px solid var(--line); border-radius: 0.65rem; color: #fff; background: #151615; font: inherit; font-size: 0.9rem; }
+.hydration-amount-input:focus { border-color: var(--green); outline: none; }
+.hydration-amount-input::placeholder { color: #6f6f6f; }
+.hydration-add { min-width: 6.5rem; }
+.hydration-notice { margin-top: 0.7rem; }
+.hydration-empty { margin: 0.9rem 0 0; color: var(--text-muted); font-size: 0.78rem; }
+.hydration-entries { display: grid; gap: 0.45rem; margin: 0.9rem 0 0; padding: 0; list-style: none; }
+.hydration-entry { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.55rem 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 0.6rem; }
+.hydration-entry-meta { display: flex; min-width: 0; align-items: baseline; gap: 0.55rem; }
+.hydration-entry-amount { font-size: 0.82rem; font-weight: 700; }
+.hydration-entry-time { color: var(--text-muted); font-size: 0.72rem; }
+.hydration-entry-remove { display: inline-grid; flex: 0 0 auto; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: 0.5rem; color: var(--text-muted); background: transparent; cursor: pointer; }
+.hydration-entry-remove:hover, .hydration-entry-remove:focus-visible { color: #ff9c9c; background: rgba(255, 156, 156, 0.08); outline: none; }
+.hydration-entry-remove:disabled { cursor: not-allowed; opacity: 0.6; }
 .training-card { padding: 1.1rem; }
 .training-card h3 { margin: 0 0 0.35rem; font-size: 1.3rem; }
 .scheduled-training-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }

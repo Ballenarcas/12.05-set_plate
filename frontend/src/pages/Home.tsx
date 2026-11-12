@@ -1,7 +1,8 @@
-import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, Plus } from 'lucide-react'
+import { Apple, CalendarDays, Camera, CircleUserRound, Dumbbell, GlassWater, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AiTipCard from '../components/home/AiTipCard'
+import HydrationCard from '../components/home/HydrationCard'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
 import { fetchDashboardSummary, getCachedDashboardSummary, getCurrentUser, planTodaysWorkout, type DashboardSummary } from '../services/api'
 import { describeError } from '../utils/errors.js'
@@ -153,6 +154,11 @@ function Home() {
           </button>
           <button className="action-button" type="button" disabled><Camera size={17} aria-hidden="true" /> Scan plate <span className="pro-badge">PRO</span></button>
         </div>
+      </section>
+
+      <section className="section" aria-labelledby="hydration-summary">
+        <h2 className="section-title" id="hydration-summary"><GlassWater size={16} aria-hidden="true" /> Daily hydration</h2>
+        <HydrationCard />
       </section>
 
       <section className="section" aria-labelledby="programmed-training">

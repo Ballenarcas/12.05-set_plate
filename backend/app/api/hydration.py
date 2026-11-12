@@ -1,0 +1,63 @@
+import logging
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.auth import current_user
+from app.core.local_day import LocalDay, local_day
+from app.schemas.hydration import HydrationLogCreate, HydrationToday
+from app.facades.hydration_facade import hydration_facade
+from app.services.hydration_service import HydrationStorageUnavailable
+
+router = APIRouter(prefix="/hydration", tags=["hydration"])
+logger = logging.getLogger(__name__)
+
+
+@router.get("/today", response_model=HydrationToday)
+def hydration_today(
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> HydrationToday:
+    try:
+        return hydration_facade.get_today(user_id, day)
+    except HydrationStorageUnavailable as err:
+        logger.exception("Hydration storage is unavailable")
+        raise HTTPException(status_code=503, detail="Hydration can't be loaded right now.") from err
+    except Exception as err:
+        logger.exception("Failed to load today's hydration")
+        raise HTTPException(status_code=500, detail="Could not load today's hydration.") from err
+
+
+@router.post("/entries", response_model=HydrationToday)
+def add_hydration_entry(
+    payload: HydrationLogCreate,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> HydrationToday:
+    try:
+        # The owner always comes from the signed session, never from the body.
+        return hydration_facade.add_entry(user_id, day, payload)
+    except HydrationStorageUnavailable as err:
+        logger.exception("Hydration storage is unavailable")
+        raise HTTPException(status_code=503, detail="Hydration can't be saved right now.") from err
+    except Exception as err:
+        logger.exception("Failed to save hydration entry")
+        raise HTTPException(status_code=500, detail="Could not save this drink.") from err
+
+
+@router.delete("/entries/{entry_id}", response_model=HydrationToday)
+def delete_hydration_entry(
+    entry_id: UUID,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> HydrationToday:
+    try:
+        return hydration_facade.delete_entry(user_id, entry_id, day)
+    except HydrationStorageUnavailable as err:
+        logger.exception("Hydration storage is unavailable")
+        raise HTTPException(status_code=503, detail="Hydration can't be updated right now.") from err
+    except LookupError as err:
+        raise HTTPException(status_code=404, detail="This drink entry no longer exists.") from err
+    except Exception as err:
+        logger.exception("Failed to delete hydration entry")
+        raise HTTPException(status_code=500, detail="Could not remove this drink.") from err

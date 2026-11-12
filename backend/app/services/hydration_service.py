@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from app.schemas.hydration import (
     CUSTOM_GOAL_MAX_ML,
     CUSTOM_GOAL_MIN_ML,
     HydrationEntry,
+    HydrationHistoryDay,
+    HydrationHistoryWeek,
     HydrationLogCreate,
     HydrationToday,
 )
@@ -129,6 +132,64 @@ def set_goal(user_id: UUID, day: LocalDay, goal_ml: int | None) -> HydrationToda
 
 def get_today(user_id: UUID, day: LocalDay) -> HydrationToday:
     return _summary(user_id, day)
+
+
+def _week_bounds(requested: date | None, today: date) -> tuple[date, date]:
+    """Monday–Sunday of the requested week, never a future week."""
+    anchor = min(requested or today, today)
+    start = anchor - timedelta(days=anchor.weekday())
+    return start, start + timedelta(days=6)
+
+
+def get_history(user_id: UUID, day: LocalDay, week_start: date | None = None) -> HydrationHistoryWeek:
+    """Per-day totals for one local week, compared with the user's current goal."""
+    start, end = _week_bounds(week_start, day.local_date)
+    rows = (
+        _session()
+        .table("hydration_logs")
+        .select("log_date,amount_ml")
+        .eq("user_id", str(user_id))
+        .gte("log_date", start.isoformat())
+        .lte("log_date", end.isoformat())
+        .execute()
+        .data
+        or []
+    )
+    totals: dict[str, int] = defaultdict(int)
+    counts: dict[str, int] = defaultdict(int)
+    for row in rows:
+        key = str(row.get("log_date") or "")[:10]
+        totals[key] += int(row.get("amount_ml") or 0)
+        counts[key] += 1
+
+    goal, recommended = _user_hydration(user_id)
+    days: list[HydrationHistoryDay] = []
+    for offset in range(7):
+        current = start + timedelta(days=offset)
+        key = current.isoformat()
+        total = totals.get(key, 0)
+        days.append(
+            HydrationHistoryDay(
+                date=current,
+                total_ml=total,
+                goal_ml=goal,
+                progress_percentage=min(100, round((total / goal) * 100)) if goal > 0 else 0,
+                met_goal=goal > 0 and total >= goal,
+            )
+        )
+
+    week_total = sum(item.total_ml for item in days)
+    return HydrationHistoryWeek(
+        week_start=start,
+        week_end=end,
+        goal_ml=goal,
+        default_goal_ml=recommended,
+        total_ml=week_total,
+        daily_average_ml=round(week_total / 7),
+        days_met_goal=sum(1 for item in days if item.met_goal),
+        entries_count=sum(counts.get(item.date.isoformat(), 0) for item in days),
+        days=days,
+    )
 
 
 def add_entry(user_id: UUID, day: LocalDay, payload: HydrationLogCreate) -> HydrationToday:

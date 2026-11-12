@@ -1,11 +1,17 @@
 import logging
+from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import current_user
 from app.core.local_day import LocalDay, local_day
-from app.schemas.hydration import HydrationGoalUpdate, HydrationLogCreate, HydrationToday
+from app.schemas.hydration import (
+    HydrationGoalUpdate,
+    HydrationHistoryWeek,
+    HydrationLogCreate,
+    HydrationToday,
+)
 from app.facades.hydration_facade import hydration_facade
 from app.services.hydration_service import HydrationStorageUnavailable
 
@@ -26,6 +32,25 @@ def hydration_today(
     except Exception as err:
         logger.exception("Failed to load today's hydration")
         raise HTTPException(status_code=500, detail="Could not load today's hydration.") from err
+
+
+@router.get("/history", response_model=HydrationHistoryWeek)
+def hydration_history(
+    week_start: date | None = Query(
+        None,
+        description="Any date in the requested week; defaults to this week and future weeks are clamped",
+    ),
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> HydrationHistoryWeek:
+    try:
+        return hydration_facade.get_history(user_id, day, week_start)
+    except HydrationStorageUnavailable as err:
+        logger.exception("Hydration storage is unavailable")
+        raise HTTPException(status_code=503, detail="Hydration history can't be loaded right now.") from err
+    except Exception as err:
+        logger.exception("Failed to load hydration history")
+        raise HTTPException(status_code=500, detail="Could not load your hydration history.") from err
 
 
 @router.post("/entries", response_model=HydrationToday)

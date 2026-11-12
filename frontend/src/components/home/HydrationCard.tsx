@@ -1,5 +1,6 @@
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { History, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import {
   addHydrationEntry,
   fetchHydrationToday,
@@ -145,6 +146,9 @@ export default function HydrationCard() {
           >
             <Pencil size={12} aria-hidden="true" /> Edit goal
           </button>
+          <Link className="hydration-goal-edit" to="/hydration/history">
+            <History size={12} aria-hidden="true" /> History
+          </Link>
         </span>
       </div>
       <div

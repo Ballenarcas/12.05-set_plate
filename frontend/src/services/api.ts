@@ -1158,6 +1158,38 @@ export async function fetchHydrationToday(): Promise<HydrationToday> {
   return response.json()
 }
 
+export interface HydrationHistoryDay {
+  date: string
+  total_ml: number
+  goal_ml: number
+  progress_percentage: number
+  met_goal: boolean
+}
+
+export interface HydrationHistoryWeek {
+  week_start: string
+  week_end: string
+  goal_ml: number
+  default_goal_ml: number
+  total_ml: number
+  daily_average_ml: number
+  days_met_goal: number
+  entries_count: number
+  days: HydrationHistoryDay[]
+}
+
+export async function fetchHydrationHistory(weekStart?: string): Promise<HydrationHistoryWeek> {
+  const params = new URLSearchParams(localDayQuery())
+  if (weekStart) params.set('week_start', weekStart)
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/history?${params.toString()}`, {
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw new Error("We couldn't load your hydration history. Please try again.")
+  }
+  return response.json()
+}
+
 export async function addHydrationEntry(payload: { amount: number; unit: 'ml' | 'glass' }): Promise<HydrationToday> {
   const response = await apiFetch(`${API_URL}/api/v1/hydration/entries?${localDayQuery()}`, {
     method: 'POST',

@@ -106,6 +106,7 @@
 .hydration-entry-remove:disabled { cursor: not-allowed; opacity: 0.6; }
 .progress-copy .hydration-goal-side { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem; }
 .hydration-goal-edit { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: 0.45rem; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 0.68rem; font-weight: 700; }
+a.hydration-goal-edit { text-decoration: none; white-space: nowrap; }
 .hydration-goal-edit:hover:not(:disabled) { border-color: #4aa3df; color: #fff; }
 .hydration-goal-edit:disabled { cursor: not-allowed; opacity: 0.6; }
 .progress-copy .hydration-goal-tag { margin-left: 0.35rem; padding: 0.05rem 0.3rem; border-radius: 0.3rem; color: #6fb7e8; background: rgba(74, 163, 223, 0.14); font-size: 0.6rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }

@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -43,3 +44,23 @@ class HydrationToday(BaseModel):
     progress_percentage: int
     remaining_ml: int
     entries: list[HydrationEntry] = Field(default_factory=list)
+
+
+class HydrationHistoryDay(BaseModel):
+    date: date
+    total_ml: int
+    goal_ml: int
+    progress_percentage: int
+    met_goal: bool
+
+
+class HydrationHistoryWeek(BaseModel):
+    week_start: date
+    week_end: date
+    goal_ml: int
+    default_goal_ml: int
+    total_ml: int
+    daily_average_ml: int
+    days_met_goal: int
+    entries_count: int
+    days: list[HydrationHistoryDay] = Field(default_factory=list)

@@ -104,6 +104,18 @@
 .hydration-entry-remove { display: inline-grid; flex: 0 0 auto; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: 0.5rem; color: var(--text-muted); background: transparent; cursor: pointer; }
 .hydration-entry-remove:hover, .hydration-entry-remove:focus-visible { color: #ff9c9c; background: rgba(255, 156, 156, 0.08); outline: none; }
 .hydration-entry-remove:disabled { cursor: not-allowed; opacity: 0.6; }
+.progress-copy .hydration-goal-side { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+.hydration-goal-edit { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: 0.45rem; color: var(--text-muted); background: transparent; cursor: pointer; font-size: 0.68rem; font-weight: 700; }
+.hydration-goal-edit:hover:not(:disabled) { border-color: #4aa3df; color: #fff; }
+.hydration-goal-edit:disabled { cursor: not-allowed; opacity: 0.6; }
+.progress-copy .hydration-goal-tag { margin-left: 0.35rem; padding: 0.05rem 0.3rem; border-radius: 0.3rem; color: #6fb7e8; background: rgba(74, 163, 223, 0.14); font-size: 0.6rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.hydration-goal-editor { display: grid; gap: 0.55rem; margin-top: 0.9rem; padding: 0.75rem; border: 1px solid var(--line); border-radius: 0.7rem; background: #151615; }
+.hydration-goal-title { color: var(--text-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.hydration-goal-editor-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.55rem; }
+.hydration-goal-save { min-width: 5rem; }
+.hydration-goal-links { display: flex; flex-wrap: wrap; gap: 0.9rem; }
+.hydration-goal-links button { padding: 0; border: 0; color: #6fb7e8; background: transparent; cursor: pointer; font-size: 0.72rem; font-weight: 600; text-align: left; }
+.hydration-goal-links button:disabled { cursor: not-allowed; opacity: 0.6; }
 .training-card { padding: 1.1rem; }
 .training-card h3 { margin: 0 0 0.35rem; font-size: 1.3rem; }
 .scheduled-training-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }

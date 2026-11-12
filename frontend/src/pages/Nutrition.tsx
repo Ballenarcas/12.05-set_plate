@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, ArrowLeft, Calendar, Camera, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, Camera, GlassWater, Loader2, Pencil, Plus, Scale, Search, Utensils, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { deleteMealLog, fetchTodayNutrition, getCurrentUser, searchFoodItems, updateMealLog } from '../services/api';
 import type { FoodSearchItem, MealIngredient, MealLogItem } from '../services/api';
+import HydrationCard from '../components/home/HydrationCard';
 import '../styles/log-meals.css';
 
 const DEFAULT_FOOD_DENSITY = {
@@ -365,6 +366,16 @@ export default function Nutrition() {
           <span style={{ padding: '3px 7px', borderRadius: '6px', color: '#161616', backgroundColor: '#b99a45', fontSize: '10px', fontWeight: 800 }}>PRO</span>
         </button>
       </div>
+
+      <section style={{ marginBottom: '20px' }} aria-labelledby="nutrition-hydration">
+        <h2
+          id="nutrition-hydration"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#8e8e93', fontSize: '12.5px', marginBottom: '12px', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}
+        >
+          <GlassWater size={16} aria-hidden="true" /> Hydration today
+        </h2>
+        <HydrationCard />
+      </section>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {isLoading ? (

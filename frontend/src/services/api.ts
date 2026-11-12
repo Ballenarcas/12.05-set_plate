@@ -1142,6 +1142,7 @@ export interface HydrationEntry {
 export interface HydrationToday {
   total_ml: number
   goal_ml: number
+  default_goal_ml: number
   progress_percentage: number
   remaining_ml: number
   entries: HydrationEntry[]
@@ -1179,6 +1180,20 @@ export async function removeHydrationEntry(entryId: string): Promise<HydrationTo
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: unknown } | null
     throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't remove this drink. Please try again.")
+  }
+  return response.json()
+}
+
+export async function updateHydrationGoal(goalMl: number | null): Promise<HydrationToday> {
+  const response = await apiFetch(`${API_URL}/api/v1/hydration/goal?${localDayQuery()}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal_ml: goalMl }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(typeof body?.detail === 'string' ? body.detail : "We couldn't update your hydration goal. Please try again.")
   }
   return response.json()
 }

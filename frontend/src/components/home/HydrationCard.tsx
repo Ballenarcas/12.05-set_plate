@@ -1,15 +1,18 @@
-import { Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   addHydrationEntry,
   fetchHydrationToday,
   removeHydrationEntry,
+  updateHydrationGoal,
   type HydrationEntry,
   type HydrationToday,
 } from '../../services/api'
 
 const GLASS_ML = 250
 const UNIT_LIMITS = { ml: 5000, glass: 20 } as const
+const GOAL_MIN_ML = 500
+const GOAL_MAX_ML = 10000
 
 function formatMl(value: number): string {
   return value.toLocaleString('de-DE')
@@ -38,6 +41,8 @@ export default function HydrationCard() {
   const [amount, setAmount] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [editingGoal, setEditingGoal] = useState(false)
+  const [goalInput, setGoalInput] = useState('')
 
   useEffect(() => {
     let mounted = true
@@ -85,13 +90,62 @@ export default function HydrationCard() {
     }
   }
 
+  function startEditingGoal() {
+    if (!data) return
+    setGoalInput(String(data.goal_ml))
+    setNotice(null)
+    setEditingGoal(true)
+  }
+
+  async function applyGoal(value: number | null) {
+    if (busy) return
+    if (value !== null && (!Number.isFinite(value) || value < GOAL_MIN_ML || value > GOAL_MAX_ML)) {
+      setNotice(`Enter a goal between ${formatMl(GOAL_MIN_ML)} and ${formatMl(GOAL_MAX_ML)} ml.`)
+      return
+    }
+    setBusy(true)
+    setNotice(null)
+    try {
+      setData(await updateHydrationGoal(value))
+      setEditingGoal(false)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "We couldn't update your hydration goal.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function saveGoal(event: FormEvent) {
+    event.preventDefault()
+    if (busy) return
+    const value = Math.round(Number(goalInput.replace(',', '.')))
+    if (!Number.isFinite(value)) {
+      setNotice(`Enter a goal between ${formatMl(GOAL_MIN_ML)} and ${formatMl(GOAL_MAX_ML)} ml.`)
+      return
+    }
+    void applyGoal(value)
+  }
+
   const progress = data?.progress_percentage ?? 0
 
   return (
     <div className="card hydration-card" aria-busy={!loaded}>
       <div className="progress-copy">
         <strong>{data ? `${formatMl(data.total_ml)} / ${formatMl(data.goal_ml)} ml` : '—'}</strong>
-        <span>{data ? `${progress}% of daily goal` : loaded ? 'Hydration unavailable' : 'Loading…'}</span>
+        <span className="hydration-goal-side">
+          <span>
+            {data ? `${progress}% of daily goal` : loaded ? 'Hydration unavailable' : 'Loading…'}
+            {data && data.goal_ml !== data.default_goal_ml && <span className="hydration-goal-tag">Custom</span>}
+          </span>
+          <button
+            type="button"
+            className="hydration-goal-edit"
+            onClick={startEditingGoal}
+            disabled={!data || busy}
+          >
+            <Pencil size={12} aria-hidden="true" /> Edit goal
+          </button>
+        </span>
       </div>
       <div
         className="progress-track"
@@ -104,6 +158,36 @@ export default function HydrationCard() {
         <div className="progress-value hydration-progress-value" style={{ width: `${progress}%` }} />
       </div>
 
+      {editingGoal && data && (
+        <form className="hydration-goal-editor" onSubmit={saveGoal}>
+          <label className="hydration-goal-title" htmlFor="hydration-goal-input">Daily goal (ml)</label>
+          <div className="hydration-goal-editor-row">
+            <input
+              id="hydration-goal-input"
+              className="hydration-amount-input"
+              type="number"
+              inputMode="numeric"
+              min={GOAL_MIN_ML}
+              max={GOAL_MAX_ML}
+              step={50}
+              value={goalInput}
+              onChange={(event) => setGoalInput(event.target.value)}
+              aria-label="Daily hydration goal in milliliters"
+            />
+            <button className="action-button hydration-goal-save" type="submit" disabled={busy || !goalInput.trim()}>
+              Save
+            </button>
+          </div>
+          <div className="hydration-goal-links">
+            <button type="button" onClick={() => { void applyGoal(null) }} disabled={busy}>
+              Use recommended ({formatMl(data.default_goal_ml)} ml)
+            </button>
+            <button type="button" onClick={() => { setEditingGoal(false); setNotice(null) }} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
       <form className="hydration-controls" onSubmit={logDrink}>
         <div className="hydration-unit-toggle" role="group" aria-label="Log water in">
           <button

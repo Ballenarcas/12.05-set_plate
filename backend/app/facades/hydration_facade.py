@@ -12,6 +12,9 @@ class HydrationFacade:
     def add_entry(self, user_id: UUID, day: LocalDay, payload: HydrationLogCreate) -> HydrationToday:
         return hydration_service.add_entry(user_id, day, payload)
 
+    def set_goal(self, user_id: UUID, day: LocalDay, goal_ml: int | None) -> HydrationToday:
+        return hydration_service.set_goal(user_id, day, goal_ml)
+
     def delete_entry(self, user_id: UUID, entry_id: UUID, day: LocalDay) -> HydrationToday:
         return hydration_service.delete_entry(user_id, entry_id, day)
 

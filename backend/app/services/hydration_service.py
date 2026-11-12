@@ -8,7 +8,13 @@ from uuid import UUID
 
 from app.core.local_day import LocalDay
 from app.db.supabase_client import get_supabase
-from app.schemas.hydration import HydrationEntry, HydrationLogCreate, HydrationToday
+from app.schemas.hydration import (
+    CUSTOM_GOAL_MAX_ML,
+    CUSTOM_GOAL_MIN_ML,
+    HydrationEntry,
+    HydrationLogCreate,
+    HydrationToday,
+)
 
 GLASS_ML = 250
 DEFAULT_GOAL_ML = 2500
@@ -40,18 +46,41 @@ def daily_goal_ml(weight: Any) -> int:
     return int(min(MAX_GOAL_ML, max(MIN_GOAL_ML, goal)))
 
 
-def _user_weight(user_id: UUID) -> Any:
-    rows = (
-        _session()
-        .table("users")
-        .select("weight")
-        .eq("id", str(user_id))
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-    return rows[0].get("weight") if rows else None
+def _custom_goal(value: Any) -> int | None:
+    try:
+        goal = int(value)
+    except (TypeError, ValueError):
+        return None
+    return goal if CUSTOM_GOAL_MIN_ML <= goal <= CUSTOM_GOAL_MAX_ML else None
+
+
+def _user_hydration(user_id: UUID) -> tuple[int, int]:
+    """Return ``(goal, recommended goal)`` for this user; the custom goal lives on the profile."""
+    session = _session()
+    try:
+        rows = (
+            session.table("users")
+            .select("weight,hydration_goal_ml")
+            .eq("id", str(user_id))
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        # Before the goal-column migration runs, the rest of the card must keep working.
+        rows = (
+            session.table("users")
+            .select("weight")
+            .eq("id", str(user_id))
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    row = rows[0] if rows else {}
+    recommended = daily_goal_ml(row.get("weight"))
+    return _custom_goal(row.get("hydration_goal_ml")) or recommended, recommended
 
 
 def _day_rows(user_id: UUID, day: LocalDay) -> list[dict[str, Any]]:
@@ -72,7 +101,7 @@ def _summary(user_id: UUID, day: LocalDay, rows: list[dict[str, Any]] | None = N
     if rows is None:
         rows = _day_rows(user_id, day)
     total = sum(int(row.get("amount_ml") or 0) for row in rows)
-    goal = daily_goal_ml(_user_weight(user_id))
+    goal, recommended = _user_hydration(user_id)
     entries = [
         HydrationEntry(
             id=str(row.get("id")),
@@ -85,10 +114,17 @@ def _summary(user_id: UUID, day: LocalDay, rows: list[dict[str, Any]] | None = N
     return HydrationToday(
         total_ml=total,
         goal_ml=goal,
+        default_goal_ml=recommended,
         progress_percentage=min(100, round((total / goal) * 100)) if goal > 0 else 0,
         remaining_ml=max(0, goal - total),
         entries=entries,
     )
+
+
+def set_goal(user_id: UUID, day: LocalDay, goal_ml: int | None) -> HydrationToday:
+    """Store the custom goal on the profile; ``None`` restores the recommended goal."""
+    _session().table("users").update({"hydration_goal_ml": goal_ml}).eq("id", str(user_id)).execute()
+    return _summary(user_id, day)
 
 
 def get_today(user_id: UUID, day: LocalDay) -> HydrationToday:

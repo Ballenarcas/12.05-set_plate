@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import current_user
 from app.core.local_day import LocalDay, local_day
-from app.schemas.hydration import HydrationLogCreate, HydrationToday
+from app.schemas.hydration import HydrationGoalUpdate, HydrationLogCreate, HydrationToday
 from app.facades.hydration_facade import hydration_facade
 from app.services.hydration_service import HydrationStorageUnavailable
 
@@ -43,6 +43,22 @@ def add_hydration_entry(
     except Exception as err:
         logger.exception("Failed to save hydration entry")
         raise HTTPException(status_code=500, detail="Could not save this drink.") from err
+
+
+@router.put("/goal", response_model=HydrationToday)
+def update_hydration_goal(
+    payload: HydrationGoalUpdate,
+    user_id: UUID = Depends(current_user),
+    day: LocalDay = Depends(local_day),
+) -> HydrationToday:
+    try:
+        return hydration_facade.set_goal(user_id, day, payload.goal_ml)
+    except HydrationStorageUnavailable as err:
+        logger.exception("Hydration storage is unavailable")
+        raise HTTPException(status_code=503, detail="Hydration can't be saved right now.") from err
+    except Exception as err:
+        logger.exception("Failed to update the hydration goal")
+        raise HTTPException(status_code=500, detail="Could not update your hydration goal.") from err
 
 
 @router.delete("/entries/{entry_id}", response_model=HydrationToday)

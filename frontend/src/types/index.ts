@@ -24,6 +24,7 @@ export interface Exercise {
   aliases: string[]
   images: string[]
   muscle_images: string[]
+  is_custom?: boolean // <-- AJOUT
 }
 
 export interface ExerciseListResponse {
@@ -38,15 +39,12 @@ export type FitnessGoal = 'Lose Weight' | 'Strength' | 'Hypertrophy'
 export type PremiumPlan = 'annual' | 'monthly'
 
 export interface UserOnboardingFormData {
-  // Screen 1: Authentication
   firstName: string
   lastName: string
   email: string
   password: string
   confirmPassword: string
   agreedToTerms: boolean
-
-  // Screen 2: Fitness Profile
   birthDate: string
   gender: 'Male' | 'Female' | 'Other'
   weight: string
@@ -73,3 +71,12 @@ export interface UserProfile {
   calorie_goal?: number
 }
 
+// <-- AJOUT DU PAYLOAD CUSTOM EXERCISE
+export interface CustomExercisePayload {
+  name: string
+  muscle_group: string
+  muscles?: string[]
+  muscles_secondary?: string[]
+  equipment?: string[]
+  description?: string
+};

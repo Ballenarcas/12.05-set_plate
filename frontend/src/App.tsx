@@ -6,6 +6,7 @@ import { getCurrentUser } from './services/api'
 const Home = lazy(() => import('./pages/Home'))
 const ActiveWorkout = lazy(() => import('./pages/ActiveWorkout'))
 const CreateRoutine = lazy(() => import('./pages/CreateRoutine'))
+const CustomExercise = lazy(() => import('./pages/CustomExercise')) 
 const ExercisePicker = lazy(() => import('./pages/ExercisePicker'))
 const Login = lazy(() => import('./pages/Login'))
 const LogMeals = lazy(() => import('./pages/LogMeals'))
@@ -13,7 +14,7 @@ const Nutrition = lazy(() => import('./pages/Nutrition'))
 const Onboarding = lazy(() => import('./pages/Onboarding'))
 const Premium = lazy(() => import('./pages/Premium'))
 const Settings = lazy(() => import('./pages/Settings'))
-const Faq = lazy(() => import('./pages/Faq')) // <-- Ajout de l'import FAQ
+const Faq = lazy(() => import('./pages/Faq')) 
 const Welcome = lazy(() => import('./pages/Welcome'))
 const Workouts = lazy(() => import('./pages/Workouts'))
 const WorkoutStatistics = lazy(() => import('./pages/WorkoutStatistics'))
@@ -38,10 +39,12 @@ function App() {
             <Route path="/workouts/create" element={<CreateRoutine />} />
             <Route path="/workouts/active" element={<ActiveWorkout />} />
             <Route path="/workouts/active/exercises" element={<ExercisePicker />} />
+            <Route path="/exercises/custom" element={<CustomExercise />} /> {/* <-- Création d'exercice */}
+            <Route path="/exercises/custom/:id" element={<CustomExercise />} /> {/* <-- Édition d'exercice */}
             <Route path="/nutrition" element={<Nutrition />} />
             <Route path="/premium" element={<Premium />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/faq" element={<Faq />} /> {/* <-- Ajout de la route FAQ */}
+            <Route path="/faq" element={<Faq />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
@@ -50,4 +53,4 @@ function App() {
   )
 }
 
-export default App;;
+export default App;

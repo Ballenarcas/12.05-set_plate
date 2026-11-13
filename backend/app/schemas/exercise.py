@@ -13,10 +13,11 @@ class Exercise(BaseModel):
     equipment: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     images: list[str] = Field(default_factory=list)
+    is_custom: bool = False
 
 
 class ExerciseListResponse(BaseModel):
     items: list[Exercise]
     total: int
     page: int = 1
-    limit: int = 50
+    limit: int = 50;

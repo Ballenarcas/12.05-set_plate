@@ -117,7 +117,6 @@ function ElapsedTime({ startedAt, format }: { startedAt: string; format: (second
   return <>{format(seconds)}</>
 }
 
-// Cardio ticking timer - doesn't re-render entire component tree every second
 function CardioTimerDisplay({ startedAt, accumulated }: { startedAt: string | null, accumulated: number }) {
   const [seconds, setSeconds] = useState(() => {
     if (!startedAt) return accumulated;
@@ -365,7 +364,13 @@ function ActiveWorkout() {
   const [aiAdjustment, setAiAdjustment] = useState<AiAdjustmentState>({ status: 'idle' })
   const [adjustmentUndo, setAdjustmentUndo] = useState<AdjustmentUndo | null>(null)
 
-  const [isSelectModalOpen, setIsSelectModalOpen] = useState(false)
+  const [isSelectModalOpen, setIsSelectModalOpen] = useState(() => {
+    if (sessionStorage.getItem('set_plate_reopen_exercise_modal') === 'true') {
+      sessionStorage.removeItem('set_plate_reopen_exercise_modal')
+      return true
+    }
+    return false
+  })
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null)
 
   const removeSetTimer = useRef<number | null>(null)
@@ -481,6 +486,12 @@ function ActiveWorkout() {
           previous_reps: null,
           is_cardio: isCardio
         }
+        const initialSets = isCardio
+          ? [{ ...createSet(1), cardio_status: 'idle' as const }]
+          : selection.is_custom
+            ? [createSet(1), createSet(2), createSet(3)]
+            : [createSet(1)]
+
         if (selection.replaceExerciseIndex !== undefined && current.exercises[selection.replaceExerciseIndex]) {
           return {
             ...current,
@@ -493,7 +504,7 @@ function ActiveWorkout() {
           ...current, 
           exercises: [...current.exercises, { 
             ...replacement, 
-            sets: isCardio ? [{ ...createSet(1), cardio_status: 'idle' }] : [createSet(1)] 
+            sets: initialSets
           }] 
         }
       })
@@ -522,6 +533,11 @@ function ActiveWorkout() {
       previous_reps: null,
       is_cardio: isCardio
     }
+    const initialSets = isCardio
+      ? [{ ...createSet(1), cardio_status: 'idle' as const }]
+      : selected.is_custom
+        ? [createSet(1), createSet(2), createSet(3)]
+        : [createSet(1)]
 
     setSession((current) => {
       if (!current) return current
@@ -537,7 +553,7 @@ function ActiveWorkout() {
         ...current,
         exercises: [...current.exercises, { 
           ...replacement, 
-          sets: isCardio ? [{ ...createSet(1), cardio_status: 'idle' }] : [createSet(1)] 
+          sets: initialSets
         }],
       }
     })
@@ -562,7 +578,6 @@ function ActiveWorkout() {
     }) : current)
   }
 
-  // --- CARDIO HANDLERS ---
   function startCardioTimer(exerciseIndex: number) {
     updateSet(exerciseIndex, 0, { cardio_status: 'running', cardio_started_at: new Date().toISOString(), cardio_accumulated: 0 })
   }
@@ -607,7 +622,6 @@ function ActiveWorkout() {
     });
   }
 
-  // --- STANDARD HANDLERS ---
   function addSet(exerciseIndex: number) {
     setSession((current) => current ? ({
       ...current,
@@ -1303,4 +1317,4 @@ function ActiveWorkout() {
   )
 }
 
-export default ActiveWorkout;;
+export default ActiveWorkout

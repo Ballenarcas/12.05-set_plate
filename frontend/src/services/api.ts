@@ -1130,4 +1130,44 @@ export async function deleteMealLog(userId: string, mealId: string): Promise<voi
   } catch {
     // The server-side deletion remains authoritative when browser storage is unavailable.
   }
+}
+
+export async function createCustomExercise(userId: string, payload: import('../types').CustomExercisePayload): Promise<import('../types').Exercise> {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/custom?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't create this exercise.")
+  }
+  // Invalider le cache de la liste des exercices
+  exerciseListCache.clear()
+  return response.json()
+}
+
+export async function updateCustomExercise(userId: string, exerciseId: string, payload: import('../types').CustomExercisePayload): Promise<import('../types').Exercise> {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/custom/${encodeURIComponent(exerciseId)}?user_id=${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't update this exercise.")
+  }
+  exerciseListCache.clear()
+  return response.json()
+}
+
+export async function deleteCustomExercise(userId: string, exerciseId: string): Promise<void> {
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/custom/${encodeURIComponent(exerciseId)}?user_id=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(body?.detail || "We couldn't delete this exercise.")
+  }
+  exerciseListCache.clear()
 };

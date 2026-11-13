@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from app.db.supabase_client import get_supabase
 from app.schemas.exercise import Exercise
-from app.schemas.workout import RoutineCreate, RoutineExerciseSummary, RoutineSummary
+from app.schemas.workout import CustomExerciseCreate, RoutineCreate, RoutineExerciseSummary, RoutineSummary
 from app.schemas.workout_log import (
     WorkoutHistoryEntry,
     WorkoutHistoryExercise,
@@ -16,6 +16,7 @@ from app.schemas.workout_log import (
     WorkoutLogResponse,
     WorkoutLogUpdate,
 )
+from app.services import exercise_catalog
 from app.services.exercise_catalog import (
     get_cached_exercise,
     load_cached_exercises,
@@ -25,8 +26,124 @@ from app.services.exercise_catalog import (
 
 logger = logging.getLogger(__name__)
 
+# Exercices custom actifs par user_id : { user_id_str: { exercise_id_str: Exercise } }
+_CUSTOM_EXERCISES_BY_USER: dict[str, dict[str, Exercise]] = {}
+# Archive de tous les exercices custom (y compris supprimés) pour l'historique et les stats
+_ARCHIVED_CUSTOM_EXERCISES: dict[str, Exercise] = {}
+# Ensemble des IDs supprimés (soft-deleted) pour ne plus les proposer dans le sélecteur
+_DELETED_CUSTOM_EXERCISES: set[str] = set()
+# Map exercise_id -> owner user_id (pour isoler strictement entre membres A et B)
+_CUSTOM_EXERCISE_OWNER: dict[str, str] = {}
+
+
+def _register_in_catalog_cache(exercise: Exercise) -> None:
+    """Permet à workout_statistics_service et get_cached_exercise de connaître l'exercice custom."""
+    try:
+        index = getattr(exercise_catalog, "_EXERCISE_BY_ID", None)
+        if isinstance(index, dict):
+            index[exercise.id] = exercise
+    except Exception:
+        pass
+
+
+def _persist_exercise_to_supabase(exercise: Exercise, user_id: UUID) -> None:
+    """Insère ou met à jour la ligne dans la table Supabase `exercises` pour satisfaire les clés étrangères."""
+    supabase = get_supabase(admin=True)
+    if supabase is None:
+        return
+
+    mg = exercise.muscle_group or "General"
+    candidates = [
+        {
+            "id": exercise.id,
+            "name": exercise.name,
+            "category": mg,
+            "muscle_group": mg,
+            "description": exercise.description,
+            "muscles": exercise.muscles or [mg],
+            "muscles_secondary": exercise.muscles_secondary or [],
+            "equipment": exercise.equipment or [],
+            "aliases": [],
+            "images": [],
+        },
+        {
+            "id": exercise.id,
+            "name": exercise.name,
+            "category": mg,
+            "muscle_group": mg,
+            "description": exercise.description,
+        },
+        {
+            "id": exercise.id,
+            "name": exercise.name,
+            "category": mg,
+        },
+        {
+            "id": exercise.id,
+            "name": exercise.name,
+        },
+    ]
+    for payload in candidates:
+        try:
+            supabase.table("exercises").upsert(payload).execute()
+            return
+        except Exception:
+            continue
+
+
+def _get_user_custom_exercises(user_id: UUID | None) -> list[Exercise]:
+    if not user_id:
+        return []
+    uid = str(user_id)
+    user_map = _CUSTOM_EXERCISES_BY_USER.setdefault(uid, {})
+    items = [
+        ex
+        for ex_id, ex in user_map.items()
+        if ex_id not in _DELETED_CUSTOM_EXERCISES and _CUSTOM_EXERCISE_OWNER.get(ex_id) == uid
+    ]
+    items.reverse()  # Les plus récents en haut de la liste
+    return items
+
+
+def _resolve_exercise_id_for_user(exercise_id: str, user_id: UUID | None = None) -> str:
+    if exercise_id in _ARCHIVED_CUSTOM_EXERCISES:
+        ex = _ARCHIVED_CUSTOM_EXERCISES[exercise_id]
+        if user_id:
+            _persist_exercise_to_supabase(ex, user_id)
+        return exercise_id
+    try:
+        return resolve_exercise_log_id(exercise_id)
+    except ValueError:
+        supabase = get_supabase(admin=True)
+        if supabase is not None:
+            try:
+                rows = (
+                    supabase.table("exercises")
+                    .select("id")
+                    .eq("id", str(exercise_id))
+                    .limit(1)
+                    .execute()
+                    .data
+                    or []
+                )
+                if rows:
+                    return str(rows[0]["id"])
+            except Exception:
+                pass
+        raise
+
+
+def get_custom_exercise_any(exercise_id: str) -> Exercise | None:
+    """Retourne un exercice custom même s'il a été supprimé (utile pour stats et historique)."""
+    return _ARCHIVED_CUSTOM_EXERCISES.get(str(exercise_id))
+
+
+def is_custom_exercise_deleted(exercise_id: str) -> bool:
+    return str(exercise_id) in _DELETED_CUSTOM_EXERCISES
+
 
 def list_exercises(
+    user_id: UUID | None = None,
     query: str | None = None,
     category: str | None = None,
     muscle_group: str | None = None,
@@ -35,10 +152,18 @@ def list_exercises(
     page: int = 1,
     limit: int = 20,
 ) -> tuple[list[Exercise], int]:
-    """Retrieves and filters exercises from catalog with pagination."""
-    all_exercises = [
-        exercise.model_copy(update={"muscle_group": muscle_group_for(exercise)})
+    """Retrieves and filters exercises from catalog + user's custom exercises with pagination."""
+    catalog_exercises = [
+        exercise.model_copy(update={"muscle_group": muscle_group_for(exercise), "is_custom": False})
         for exercise in load_cached_exercises()
+        if exercise.id not in _CUSTOM_EXERCISE_OWNER
+    ]
+    custom_exercises = _get_user_custom_exercises(user_id)
+    custom_ids = {ex.id for ex in custom_exercises}
+
+    # Les exercices custom du membre connecté apparaissent en haut
+    all_exercises = custom_exercises + [
+        ex for ex in catalog_exercises if ex.id not in custom_ids and ex.id not in _DELETED_CUSTOM_EXERCISES
     ]
 
     filtered = all_exercises
@@ -83,9 +208,139 @@ def list_exercises(
     return filtered[start_idx:end_idx], total
 
 
-def get_exercise_by_id(exercise_id: str) -> Exercise | None:
-    """Find an exercise by ID using the in-memory catalog index."""
-    return get_cached_exercise(exercise_id)
+def get_exercise_by_id(exercise_id: str, user_id: UUID | None = None) -> Exercise | None:
+    """Find an exercise by ID in user's custom exercises or the in-memory catalog."""
+    if exercise_id in _CUSTOM_EXERCISE_OWNER:
+        if not user_id or _CUSTOM_EXERCISE_OWNER.get(exercise_id) != str(user_id):
+            return None
+        if exercise_id in _DELETED_CUSTOM_EXERCISES:
+            return None
+        return _CUSTOM_EXERCISES_BY_USER.get(str(user_id), {}).get(exercise_id)
+
+    cached = get_cached_exercise(exercise_id)
+    if cached:
+        return cached.model_copy(update={"muscle_group": muscle_group_for(cached), "is_custom": False})
+    return None
+
+
+def create_custom_exercise(user_id: UUID, payload: CustomExerciseCreate) -> Exercise:
+    name_clean = payload.name.strip()
+    if len(name_clean) < 2:
+        raise HTTPException(status_code=400, detail="Exercise name must be at least 2 characters.")
+    if len(name_clean) > 50:
+        raise HTTPException(status_code=400, detail="Exercise name is too long.")
+
+    existing_all, _ = list_exercises(user_id=user_id, limit=10000)
+    for ex in existing_all:
+        if ex.name.strip().lower() == name_clean.lower():
+            raise HTTPException(
+                status_code=409,
+                detail=f'The name is already in use by "{ex.name}".',
+            )
+
+    new_id = str(uuid4())
+    mg = payload.muscle_group.strip() or "General"
+    exercise = Exercise(
+        id=new_id,
+        name=name_clean,
+        muscle_group=mg,
+        category=mg,
+        description=payload.description.strip() if payload.description else None,
+        muscles=payload.muscles or [mg],
+        muscles_secondary=payload.muscles_secondary or [],
+        equipment=payload.equipment or [],
+        aliases=[],
+        images=[],
+        is_custom=True,
+    )
+
+    uid = str(user_id)
+    _CUSTOM_EXERCISE_OWNER[new_id] = uid
+    _CUSTOM_EXERCISES_BY_USER.setdefault(uid, {})[new_id] = exercise
+    _ARCHIVED_CUSTOM_EXERCISES[new_id] = exercise
+    _register_in_catalog_cache(exercise)
+    _persist_exercise_to_supabase(exercise, user_id)
+    return exercise
+
+
+def update_custom_exercise(user_id: UUID, exercise_id: str, payload: CustomExerciseCreate) -> Exercise:
+    uid = str(user_id)
+    user_map = _CUSTOM_EXERCISES_BY_USER.setdefault(uid, {})
+
+    if exercise_id not in user_map or _CUSTOM_EXERCISE_OWNER.get(exercise_id) != uid:
+        raise HTTPException(status_code=404, detail="Custom exercise not found")
+
+    name_clean = payload.name.strip()
+    if len(name_clean) < 2:
+        raise HTTPException(status_code=400, detail="Exercise name must be at least 2 characters.")
+    if len(name_clean) > 50:
+        raise HTTPException(status_code=400, detail="Exercise name is too long.")
+
+    existing_all, _ = list_exercises(user_id=user_id, limit=10000)
+    for ex in existing_all:
+        if ex.id != exercise_id and ex.name.strip().lower() == name_clean.lower():
+            raise HTTPException(
+                status_code=409,
+                detail=f'The name is already in use by "{ex.name}".',
+            )
+
+    mg = payload.muscle_group.strip() or "General"
+    updated = user_map[exercise_id].model_copy(
+        update={
+            "name": name_clean,
+            "muscle_group": mg,
+            "category": mg,
+            "description": payload.description.strip() if payload.description else None,
+            "muscles": payload.muscles or [mg],
+            "muscles_secondary": payload.muscles_secondary or [],
+            "equipment": payload.equipment or [],
+            "is_custom": True,
+        }
+    )
+    user_map[exercise_id] = updated
+    _ARCHIVED_CUSTOM_EXERCISES[exercise_id] = updated
+    _register_in_catalog_cache(updated)
+    _persist_exercise_to_supabase(updated, user_id)
+    return updated
+
+
+def delete_custom_exercise(user_id: UUID, exercise_id: str) -> None:
+    uid = str(user_id)
+    user_map = _CUSTOM_EXERCISES_BY_USER.setdefault(uid, {})
+
+    if exercise_id not in user_map or _CUSTOM_EXERCISE_OWNER.get(exercise_id) != uid:
+        raise HTTPException(status_code=404, detail="Custom exercise not found")
+
+    _DELETED_CUSTOM_EXERCISES.add(exercise_id)
+    user_map.pop(exercise_id, None)
+
+    supabase = get_supabase(admin=True)
+    if supabase is not None:
+        try:
+            used_sets = (
+                supabase.table("workout_sets")
+                .select("exercise_id")
+                .eq("exercise_id", exercise_id)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            used_routines = (
+                supabase.table("routine_exercises")
+                .select("exercise_id")
+                .eq("exercise_id", exercise_id)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            # S'il n'a jamais été utilisé ni dans un workout ni dans une routine, suppression complète
+            if not used_sets and not used_routines:
+                _ARCHIVED_CUSTOM_EXERCISES.pop(exercise_id, None)
+                supabase.table("exercises").delete().eq("id", exercise_id).execute()
+        except Exception:
+            pass
 
 
 def get_exercise_categories() -> list[str]:
@@ -127,11 +382,18 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
     )
     grouped: dict[str, list[RoutineExerciseSummary]] = {str(routine_id): [] for routine_id in routine_ids}
     for row in rows:
+        ex_id = str(row["exercise_id"])
         exercise = row.get("exercises") or {}
+        if isinstance(exercise, list):
+            exercise = exercise[0] if exercise else {}
+        archived_custom = _ARCHIVED_CUSTOM_EXERCISES.get(ex_id)
+        name = archived_custom.name if archived_custom else exercise.get("name", "Exercise")
+        if ex_id in _DELETED_CUSTOM_EXERCISES:
+            name = f"{name} (Removed - pick a replacement)"
         grouped.setdefault(str(row["routine_id"]), []).append(
             RoutineExerciseSummary(
-                exercise_id=str(row["exercise_id"]),
-                name=exercise.get("name", "Exercise"),
+                exercise_id=ex_id,
+                name=name,
                 target_sets=row.get("target_sets"),
                 target_reps=row.get("target_reps"),
                 reps_by_set=_routine_reps_by_set(row),
@@ -150,11 +412,14 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
 
     try:
         resolved_exercise_ids = [
-            resolve_exercise_log_id(exercise.exercise_id)
+            _resolve_exercise_id_for_user(exercise.exercise_id, user_id)
             for exercise in payload.exercises
         ]
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
+
+    if any(ex_id in _DELETED_CUSTOM_EXERCISES for ex_id in resolved_exercise_ids):
+        raise HTTPException(status_code=400, detail="Please pick a replacement for removed custom exercises")
 
     if len(set(resolved_exercise_ids)) != len(resolved_exercise_ids):
         raise HTTPException(status_code=400, detail="A routine cannot contain the same exercise more than once")
@@ -175,6 +440,11 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
             str(row["id"]): str(row.get("name", "Exercise"))
             for row in available_exercises
         }
+        for ex_id in resolved_exercise_ids:
+            if ex_id in _ARCHIVED_CUSTOM_EXERCISES:
+                available_ids.add(ex_id)
+                exercise_names[ex_id] = _ARCHIVED_CUSTOM_EXERCISES[ex_id].name
+
         unknown_ids = set(resolved_exercise_ids) - available_ids
         if unknown_ids:
             raise HTTPException(status_code=400, detail="One or more selected exercises are unavailable")
@@ -251,11 +521,14 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
 
     try:
         resolved_exercise_ids = [
-            resolve_exercise_log_id(exercise.exercise_id)
+            _resolve_exercise_id_for_user(exercise.exercise_id, user_id)
             for exercise in payload.exercises
         ]
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
+
+    if any(ex_id in _DELETED_CUSTOM_EXERCISES for ex_id in resolved_exercise_ids):
+        raise HTTPException(status_code=400, detail="Please pick a replacement for removed custom exercises")
 
     if len(set(resolved_exercise_ids)) != len(resolved_exercise_ids):
         raise HTTPException(status_code=400, detail="A routine cannot contain the same exercise more than once")
@@ -268,6 +541,10 @@ def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate)
         .data or []
     )
     exercise_names = {str(row["id"]): str(row.get("name", "Exercise")) for row in exercise_rows}
+    for ex_id in resolved_exercise_ids:
+        if ex_id in _ARCHIVED_CUSTOM_EXERCISES:
+            exercise_names[ex_id] = _ARCHIVED_CUSTOM_EXERCISES[ex_id].name
+
     if set(resolved_exercise_ids) - exercise_names.keys():
         raise HTTPException(status_code=400, detail="One or more selected exercises are unavailable")
 
@@ -380,7 +657,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
     set_records = []
     for position, exercise in enumerate(payload.exercises):
         try:
-            resolved_id = resolve_exercise_log_id(exercise.exercise_id)
+            resolved_id = _resolve_exercise_id_for_user(exercise.exercise_id, user_id)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Unknown exercise '{exercise.exercise_id}'")
         set_records.extend(
@@ -413,7 +690,6 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
 
     routine_id = payload.routine_id or (plan.get("routine_id") if plan else None)
     if routine_id:
-        # Dropping the link keeps a workout whose routine was deleted while it was running.
         owned = (
             supabase.table("routines")
             .select("id")
@@ -456,7 +732,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
     except HTTPException:
         raise
     except Exception as err:
-        if "23505" in str(err):  # add_unique_workout_start.sql: a parallel retry saved it first
+        if "23505" in str(err):
             saved_id = _saved_workout_id(supabase, user_id, payload)
             if saved_id:
                 return WorkoutLogResponse(id=saved_id, status="saved")
@@ -500,9 +776,11 @@ def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryRespon
             exercise = set_row.get("exercises") or {}
             if isinstance(exercise, list):
                 exercise = exercise[0] if exercise else {}
+            archived_custom = _ARCHIVED_CUSTOM_EXERCISES.get(exercise_id)
+            ex_name = archived_custom.name if archived_custom else (exercise.get("name") or "Exercise")
             item = exercises.setdefault(exercise_id, {
                 "exercise_id": exercise_id,
-                "name": exercise.get("name") or "Exercise",
+                "name": ex_name,
                 "sets": [],
             })
             item["sets"].append(WorkoutHistorySet(
@@ -552,7 +830,7 @@ def update_workout_history_entry(
     set_records = []
     for position, exercise in enumerate(payload.exercises):
         try:
-            resolved_id = resolve_exercise_log_id(exercise.exercise_id)
+            resolved_id = _resolve_exercise_id_for_user(exercise.exercise_id, user_id)
         except ValueError as err:
             raise HTTPException(status_code=400, detail=f"Unknown exercise '{exercise.exercise_id}'") from err
         set_records.extend(
@@ -662,4 +940,4 @@ def summarize_today_workouts(user_id: UUID | str, today_start: datetime, today_e
         return int(total)
     except Exception as err:
         logger.warning("Could not summarize today's workouts: %s", err)
-        return 0
+        return 0;

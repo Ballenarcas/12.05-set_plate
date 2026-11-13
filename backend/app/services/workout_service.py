@@ -1,5 +1,7 @@
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -26,18 +28,18 @@ from app.services.exercise_catalog import (
 
 logger = logging.getLogger(__name__)
 
-# Exercices custom actifs par user_id : { user_id_str: { exercise_id_str: Exercise } }
+# Fichier local de persistance pour que les exercices custom survivent aux redémarrages d'uvicorn
+_STORE_FILE = Path(__file__).resolve().parent.parent / "data" / "custom_exercises_store.json"
+
+# Structures en mémoire synchronisées avec _STORE_FILE
 _CUSTOM_EXERCISES_BY_USER: dict[str, dict[str, Exercise]] = {}
-# Archive de tous les exercices custom (y compris supprimés) pour l'historique et les stats
 _ARCHIVED_CUSTOM_EXERCISES: dict[str, Exercise] = {}
-# Ensemble des IDs supprimés (soft-deleted) pour ne plus les proposer dans le sélecteur
 _DELETED_CUSTOM_EXERCISES: set[str] = set()
-# Map exercise_id -> owner user_id (pour isoler strictement entre membres A et B)
 _CUSTOM_EXERCISE_OWNER: dict[str, str] = {}
+_STORE_LOADED = False
 
 
 def _register_in_catalog_cache(exercise: Exercise) -> None:
-    """Permet à workout_statistics_service et get_cached_exercise de connaître l'exercice custom."""
     try:
         index = getattr(exercise_catalog, "_EXERCISE_BY_ID", None)
         if isinstance(index, dict):
@@ -46,8 +48,53 @@ def _register_in_catalog_cache(exercise: Exercise) -> None:
         pass
 
 
-def _persist_exercise_to_supabase(exercise: Exercise, user_id: UUID) -> None:
-    """Insère ou met à jour la ligne dans la table Supabase `exercises` pour satisfaire les clés étrangères."""
+def _load_store_from_disk() -> None:
+    global _STORE_LOADED
+    if _STORE_LOADED:
+        return
+    _STORE_LOADED = True
+    try:
+        if not _STORE_FILE.exists():
+            return
+        raw = json.loads(_STORE_FILE.read_text(encoding="utf-8"))
+        for uid, ex_map in (raw.get("by_user") or {}).items():
+            _CUSTOM_EXERCISES_BY_USER[uid] = {}
+            for ex_id, ex_dict in ex_map.items():
+                ex = Exercise.model_validate(ex_dict)
+                _CUSTOM_EXERCISES_BY_USER[uid][ex_id] = ex
+                _register_in_catalog_cache(ex)
+        for ex_id, ex_dict in (raw.get("archived") or {}).items():
+            ex = Exercise.model_validate(ex_dict)
+            _ARCHIVED_CUSTOM_EXERCISES[ex_id] = ex
+            _register_in_catalog_cache(ex)
+        for ex_id in raw.get("deleted") or []:
+            _DELETED_CUSTOM_EXERCISES.add(str(ex_id))
+        for ex_id, uid in (raw.get("owners") or {}).items():
+            _CUSTOM_EXERCISE_OWNER[str(ex_id)] = str(uid)
+    except Exception as err:
+        logger.warning("Could not load custom exercises store: %s", err)
+
+
+def _save_store_to_disk() -> None:
+    try:
+        _STORE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "by_user": {
+                uid: {ex_id: ex.model_dump(mode="json") for ex_id, ex in ex_map.items()}
+                for uid, ex_map in _CUSTOM_EXERCISES_BY_USER.items()
+            },
+            "archived": {
+                ex_id: ex.model_dump(mode="json") for ex_id, ex in _ARCHIVED_CUSTOM_EXERCISES.items()
+            },
+            "deleted": sorted(_DELETED_CUSTOM_EXERCISES),
+            "owners": _CUSTOM_EXERCISE_OWNER,
+        }
+        _STORE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except Exception as err:
+        logger.warning("Could not save custom exercises store: %s", err)
+
+
+def _persist_exercise_to_supabase(exercise: Exercise) -> None:
     supabase = get_supabase(admin=True)
     if supabase is None:
         return
@@ -92,6 +139,7 @@ def _persist_exercise_to_supabase(exercise: Exercise, user_id: UUID) -> None:
 
 
 def _get_user_custom_exercises(user_id: UUID | None) -> list[Exercise]:
+    _load_store_from_disk()
     if not user_id:
         return []
     uid = str(user_id)
@@ -101,15 +149,15 @@ def _get_user_custom_exercises(user_id: UUID | None) -> list[Exercise]:
         for ex_id, ex in user_map.items()
         if ex_id not in _DELETED_CUSTOM_EXERCISES and _CUSTOM_EXERCISE_OWNER.get(ex_id) == uid
     ]
-    items.reverse()  # Les plus récents en haut de la liste
+    items.reverse()
     return items
 
 
 def _resolve_exercise_id_for_user(exercise_id: str, user_id: UUID | None = None) -> str:
+    _load_store_from_disk()
     if exercise_id in _ARCHIVED_CUSTOM_EXERCISES:
         ex = _ARCHIVED_CUSTOM_EXERCISES[exercise_id]
-        if user_id:
-            _persist_exercise_to_supabase(ex, user_id)
+        _persist_exercise_to_supabase(ex)
         return exercise_id
     try:
         return resolve_exercise_log_id(exercise_id)
@@ -133,15 +181,6 @@ def _resolve_exercise_id_for_user(exercise_id: str, user_id: UUID | None = None)
         raise
 
 
-def get_custom_exercise_any(exercise_id: str) -> Exercise | None:
-    """Retourne un exercice custom même s'il a été supprimé (utile pour stats et historique)."""
-    return _ARCHIVED_CUSTOM_EXERCISES.get(str(exercise_id))
-
-
-def is_custom_exercise_deleted(exercise_id: str) -> bool:
-    return str(exercise_id) in _DELETED_CUSTOM_EXERCISES
-
-
 def list_exercises(
     user_id: UUID | None = None,
     query: str | None = None,
@@ -153,6 +192,7 @@ def list_exercises(
     limit: int = 20,
 ) -> tuple[list[Exercise], int]:
     """Retrieves and filters exercises from catalog + user's custom exercises with pagination."""
+    _load_store_from_disk()
     catalog_exercises = [
         exercise.model_copy(update={"muscle_group": muscle_group_for(exercise), "is_custom": False})
         for exercise in load_cached_exercises()
@@ -161,7 +201,6 @@ def list_exercises(
     custom_exercises = _get_user_custom_exercises(user_id)
     custom_ids = {ex.id for ex in custom_exercises}
 
-    # Les exercices custom du membre connecté apparaissent en haut
     all_exercises = custom_exercises + [
         ex for ex in catalog_exercises if ex.id not in custom_ids and ex.id not in _DELETED_CUSTOM_EXERCISES
     ]
@@ -210,12 +249,14 @@ def list_exercises(
 
 def get_exercise_by_id(exercise_id: str, user_id: UUID | None = None) -> Exercise | None:
     """Find an exercise by ID in user's custom exercises or the in-memory catalog."""
+    _load_store_from_disk()
     if exercise_id in _CUSTOM_EXERCISE_OWNER:
-        if not user_id or _CUSTOM_EXERCISE_OWNER.get(exercise_id) != str(user_id):
-            return None
         if exercise_id in _DELETED_CUSTOM_EXERCISES:
             return None
-        return _CUSTOM_EXERCISES_BY_USER.get(str(user_id), {}).get(exercise_id)
+        if user_id and _CUSTOM_EXERCISE_OWNER.get(exercise_id) != str(user_id):
+            return None
+        owner_id = str(user_id) if user_id else _CUSTOM_EXERCISE_OWNER.get(exercise_id, "")
+        return _CUSTOM_EXERCISES_BY_USER.get(owner_id, {}).get(exercise_id)
 
     cached = get_cached_exercise(exercise_id)
     if cached:
@@ -224,6 +265,7 @@ def get_exercise_by_id(exercise_id: str, user_id: UUID | None = None) -> Exercis
 
 
 def create_custom_exercise(user_id: UUID, payload: CustomExerciseCreate) -> Exercise:
+    _load_store_from_disk()
     name_clean = payload.name.strip()
     if len(name_clean) < 2:
         raise HTTPException(status_code=400, detail="Exercise name must be at least 2 characters.")
@@ -259,11 +301,13 @@ def create_custom_exercise(user_id: UUID, payload: CustomExerciseCreate) -> Exer
     _CUSTOM_EXERCISES_BY_USER.setdefault(uid, {})[new_id] = exercise
     _ARCHIVED_CUSTOM_EXERCISES[new_id] = exercise
     _register_in_catalog_cache(exercise)
-    _persist_exercise_to_supabase(exercise, user_id)
+    _save_store_to_disk()
+    _persist_exercise_to_supabase(exercise)
     return exercise
 
 
 def update_custom_exercise(user_id: UUID, exercise_id: str, payload: CustomExerciseCreate) -> Exercise:
+    _load_store_from_disk()
     uid = str(user_id)
     user_map = _CUSTOM_EXERCISES_BY_USER.setdefault(uid, {})
 
@@ -300,11 +344,13 @@ def update_custom_exercise(user_id: UUID, exercise_id: str, payload: CustomExerc
     user_map[exercise_id] = updated
     _ARCHIVED_CUSTOM_EXERCISES[exercise_id] = updated
     _register_in_catalog_cache(updated)
-    _persist_exercise_to_supabase(updated, user_id)
+    _save_store_to_disk()
+    _persist_exercise_to_supabase(updated)
     return updated
 
 
 def delete_custom_exercise(user_id: UUID, exercise_id: str) -> None:
+    _load_store_from_disk()
     uid = str(user_id)
     user_map = _CUSTOM_EXERCISES_BY_USER.setdefault(uid, {})
 
@@ -313,6 +359,7 @@ def delete_custom_exercise(user_id: UUID, exercise_id: str) -> None:
 
     _DELETED_CUSTOM_EXERCISES.add(exercise_id)
     user_map.pop(exercise_id, None)
+    _save_store_to_disk()
 
     supabase = get_supabase(admin=True)
     if supabase is not None:
@@ -335,9 +382,9 @@ def delete_custom_exercise(user_id: UUID, exercise_id: str) -> None:
                 .data
                 or []
             )
-            # S'il n'a jamais été utilisé ni dans un workout ni dans une routine, suppression complète
             if not used_sets and not used_routines:
                 _ARCHIVED_CUSTOM_EXERCISES.pop(exercise_id, None)
+                _save_store_to_disk()
                 supabase.table("exercises").delete().eq("id", exercise_id).execute()
         except Exception:
             pass
@@ -363,6 +410,7 @@ def _routine_reps_by_set(row: dict) -> list[int]:
 
 
 def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
+    _load_store_from_disk()
     supabase = get_supabase(admin=True)
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
@@ -406,6 +454,7 @@ def list_user_routines(user_id: UUID) -> list[RoutineSummary]:
 
 
 def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary:
+    _load_store_from_disk()
     supabase = get_supabase(admin=True)
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
@@ -504,6 +553,7 @@ def create_user_routine(user_id: UUID, payload: RoutineCreate) -> RoutineSummary
 
 
 def update_user_routine(user_id: UUID, routine_id: UUID, payload: RoutineCreate) -> RoutineSummary:
+    _load_store_from_disk()
     supabase = get_supabase(admin=True)
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
@@ -646,6 +696,7 @@ def _saved_workout_id(supabase, user_id: UUID, payload: WorkoutLogCreate) -> str
 
 
 def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResponse:
+    _load_store_from_disk()
     supabase = get_supabase(admin=True)
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
@@ -748,6 +799,7 @@ def save_workout_log(user_id: UUID, payload: WorkoutLogCreate) -> WorkoutLogResp
 
 
 def list_workout_history(user_id: UUID, limit: int = 30) -> WorkoutHistoryResponse:
+    _load_store_from_disk()
     supabase = get_supabase(admin=True)
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
@@ -811,6 +863,7 @@ def update_workout_history_entry(
     workout_id: UUID,
     payload: WorkoutLogUpdate,
 ) -> WorkoutLogResponse:
+    _load_store_from_disk()
     supabase = get_supabase(admin=True)
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
@@ -940,4 +993,4 @@ def summarize_today_workouts(user_id: UUID | str, today_start: datetime, today_e
         return int(total)
     except Exception as err:
         logger.warning("Could not summarize today's workouts: %s", err)
-        return 0;
+        return 0

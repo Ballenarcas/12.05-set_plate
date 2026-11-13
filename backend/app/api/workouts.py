@@ -1,7 +1,7 @@
 from time import monotonic
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.core.ai_quota import use_ai_call
 from app.core.auth import current_user
@@ -21,26 +21,6 @@ router = APIRouter(prefix="/workouts", tags=["workouts"])
 
 _ADJUSTMENT_COOLDOWN_SECONDS = 60
 _last_adjustment_request: dict[str, float] = {}
-
-
-def _optional_user(
-    request: Request,
-    user_id: UUID | None = Query(default=None),
-) -> UUID | None:
-    """Resolve the current user if credentials or user_id are provided, or None for public catalog requests."""
-    if user_id is not None:
-        return user_id
-    auth_header = request.headers.get("authorization") or ""
-    if auth_header.lower().startswith("bearer "):
-        token = auth_header.split(" ", 1)[1].strip()
-        try:
-            return current_user(user_id=None, authorization=f"Bearer {token}")
-        except Exception:
-            try:
-                return current_user(token)  # type: ignore[arg-type]
-            except Exception:
-                return None
-    return None
 
 
 @router.post("/plan-today")
@@ -125,7 +105,7 @@ def delete_workout_history(
 @router.get("/exercises", response_model=ExerciseListResponse)
 def get_exercises(
     response: Response,
-    user_id: UUID | None = Depends(_optional_user),
+    user_id: UUID | None = Query(None, description="Optional user ID to include custom exercises"),
     q: str | None = Query(None, description="Search term for exercise name or aliases"),
     category: str | None = Query(None, description="Filter by body part category"),
     muscle_group: str | None = Query(None, description="Filter by database muscle group"),
@@ -157,7 +137,7 @@ def get_exercises(
             )
             for item in items
         ]
-    response.headers["Cache-Control"] = "private, max-age=30"
+    response.headers["Cache-Control"] = "private, no-store"
     return ExerciseListResponse(items=items, total=total, page=page, limit=limit)
 
 
@@ -205,7 +185,7 @@ def delete_custom_exercise(
 @router.get("/exercises/{exercise_id}", response_model=Exercise)
 def get_exercise(
     exercise_id: str,
-    user_id: UUID | None = Depends(_optional_user),
+    user_id: UUID | None = Query(None, description="Optional user ID to resolve custom exercises"),
 ) -> Exercise:
     """Retrieve a single exercise by ID."""
     exercise = workout_facade.get_exercise_by_id(exercise_id, user_id=user_id)

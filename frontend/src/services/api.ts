@@ -119,7 +119,8 @@ async function apiFetch(input: string, init: RequestInit = {}): Promise<Response
   return response
 }
 
-function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {  try {
+function readDashboardCache(userId: string): { data: DashboardSummary; at: number } | null {
+  try {
     const saved = sessionStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`)
     if (!saved) return null
     const cached = JSON.parse(saved) as { data: DashboardSummary; at: number }
@@ -660,6 +661,8 @@ const EXERCISE_LIST_TTL_MS = 30_000
 
 export async function fetchExercises(params: FetchExercisesParams = {}) {
   const query = new URLSearchParams()
+  const user = getCurrentUser()
+  if (user?.id) query.set('user_id', user.id)
   if (params.q) query.set('q', params.q)
   if (params.category) query.set('category', params.category)
   if (params.muscle_group) query.set('muscle_group', params.muscle_group)
@@ -676,6 +679,7 @@ export async function fetchExercises(params: FetchExercisesParams = {}) {
   if (inflight) return inflight
 
   const request = apiFetch(`${API_URL}/api/v1/workouts/exercises${queryString ? `?${queryString}` : ''}`, {
+    cache: 'no-store',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
     .then(async (response) => {
@@ -707,7 +711,11 @@ export async function fetchExerciseMuscleGroups(): Promise<string[]> {
 }
 
 export async function fetchExerciseById(exerciseId: string) {
-  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${exerciseId}`)
+  const user = getCurrentUser()
+  const query = user?.id ? `?user_id=${encodeURIComponent(user.id)}` : ''
+  const response = await apiFetch(`${API_URL}/api/v1/workouts/exercises/${encodeURIComponent(exerciseId)}${query}`, {
+    cache: 'no-store',
+  })
   if (!response.ok) throw new Error("We couldn't load that exercise. Please try again.")
   return response.json()
 }
@@ -948,7 +956,6 @@ export interface TodayNutritionData {
   meals: MealLogItem[]
 }
 
-// Fonction modifiée pour accepter une date optionnelle
 export function localDayWindow(dateString?: string): { today_start: string; today_end: string } {
   const start = new Date()
   if (dateString) {
@@ -988,7 +995,6 @@ export function getCachedTodayNutrition(userId: string, dateString?: string): To
   }
 }
 
-// Fonction modifiée pour transférer les bonnes dates au backend
 export async function fetchTodayNutrition(userId: string, dateString?: string): Promise<TodayNutritionData> {
   const window = localDayWindow(dateString)
   const requestKey = `${userId}:${window.today_start}`
@@ -1223,7 +1229,6 @@ export async function createCustomExercise(userId: string, payload: import('../t
     const body = await response.json().catch(() => null)
     throw new Error(body?.detail || "We couldn't create this exercise.")
   }
-  // Invalider le cache de la liste des exercices
   exerciseListCache.clear()
   return response.json()
 }
@@ -1251,4 +1256,4 @@ export async function deleteCustomExercise(userId: string, exerciseId: string): 
     throw new Error(body?.detail || "We couldn't delete this exercise.")
   }
   exerciseListCache.clear()
-};
+}

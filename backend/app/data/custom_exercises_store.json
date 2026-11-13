@@ -1,0 +1,77 @@
+{
+  "by_user": {
+    "e8da3fce-7f66-40b5-b2a5-545a10a1cda8": {
+      "968df33a-61f1-4a5a-b631-0cfdf3d7578a": {
+        "id": "968df33a-61f1-4a5a-b631-0cfdf3d7578a",
+        "name": "aaaa",
+        "muscle_group": "Abs",
+        "name_es": null,
+        "category": "Abs",
+        "description": null,
+        "muscles": [
+          "Abs"
+        ],
+        "muscles_secondary": [],
+        "equipment": [],
+        "aliases": [],
+        "images": [],
+        "is_custom": true
+      },
+      "7a15e0e3-05e5-472f-bb96-cd4cc81b6397": {
+        "id": "7a15e0e3-05e5-472f-bb96-cd4cc81b6397",
+        "name": "bbbbb",
+        "muscle_group": "Cardio",
+        "name_es": null,
+        "category": "Cardio",
+        "description": null,
+        "muscles": [
+          "Cardio"
+        ],
+        "muscles_secondary": [],
+        "equipment": [],
+        "aliases": [],
+        "images": [],
+        "is_custom": true
+      }
+    }
+  },
+  "archived": {
+    "968df33a-61f1-4a5a-b631-0cfdf3d7578a": {
+      "id": "968df33a-61f1-4a5a-b631-0cfdf3d7578a",
+      "name": "aaaa",
+      "muscle_group": "Abs",
+      "name_es": null,
+      "category": "Abs",
+      "description": null,
+      "muscles": [
+        "Abs"
+      ],
+      "muscles_secondary": [],
+      "equipment": [],
+      "aliases": [],
+      "images": [],
+      "is_custom": true
+    },
+    "7a15e0e3-05e5-472f-bb96-cd4cc81b6397": {
+      "id": "7a15e0e3-05e5-472f-bb96-cd4cc81b6397",
+      "name": "bbbbb",
+      "muscle_group": "Cardio",
+      "name_es": null,
+      "category": "Cardio",
+      "description": null,
+      "muscles": [
+        "Cardio"
+      ],
+      "muscles_secondary": [],
+      "equipment": [],
+      "aliases": [],
+      "images": [],
+      "is_custom": true
+    }
+  },
+  "deleted": [],
+  "owners": {
+    "968df33a-61f1-4a5a-b631-0cfdf3d7578a": "e8da3fce-7f66-40b5-b2a5-545a10a1cda8",
+    "7a15e0e3-05e5-472f-bb96-cd4cc81b6397": "e8da3fce-7f66-40b5-b2a5-545a10a1cda8"
+  }
+}

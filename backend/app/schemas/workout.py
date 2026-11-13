@@ -3,6 +3,20 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+class CustomExerciseCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=50)
+    muscle_group: str = Field(min_length=1)
+    muscles: list[str] = Field(default_factory=list)
+    muscles_secondary: list[str] = Field(default_factory=list)
+    equipment: list[str] = Field(default_factory=list)
+    description: str | None = Field(default=None, max_length=500)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+
 class RoutineExerciseSummary(BaseModel):
     exercise_id: str
     name: str
@@ -94,4 +108,4 @@ class LiveWorkoutAdjustmentSuggestion(BaseModel):
 
 
 class LiveWorkoutAdjustmentResponse(BaseModel):
-    suggestions: list[LiveWorkoutAdjustmentSuggestion]
+    suggestions: list[LiveWorkoutAdjustmentSuggestion];

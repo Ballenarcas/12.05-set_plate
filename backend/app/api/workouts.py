@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from app.core.ai_quota import use_ai_call
 from app.core.auth import current_user
 from app.core.local_day import LocalDay, local_day
-from app.schemas.exercise import Exercise, ExerciseListResponse
 from app.facades.workout_facade import workout_facade
+from app.schemas.exercise import Exercise, ExerciseListResponse
 from app.schemas.workout import (
+    CustomExerciseCreate,
     LiveWorkoutAdjustmentRequest,
     LiveWorkoutAdjustmentResponse,
     LiveWorkoutAdjustmentSuggestion,
@@ -42,7 +43,6 @@ async def suggest_live_adjustment(
     if last_request is not None and monotonic() - last_request < _ADJUSTMENT_COOLDOWN_SECONDS:
         raise HTTPException(status_code=429, detail="Wait a moment before asking for another adjustment")
     use_ai_call(user_id)
-    # Set before the AI call, so parallel requests cannot all pass the check above.
     _last_adjustment_request[str(user_id)] = monotonic()
     try:
         suggestions = await workout_facade.suggest_adjustment(payload)
@@ -105,6 +105,7 @@ def delete_workout_history(
 @router.get("/exercises", response_model=ExerciseListResponse)
 def get_exercises(
     response: Response,
+    user_id: UUID | None = Query(None, description="Optional user ID to include custom exercises"),
     q: str | None = Query(None, description="Search term for exercise name or aliases"),
     category: str | None = Query(None, description="Filter by body part category"),
     muscle_group: str | None = Query(None, description="Filter by database muscle group"),
@@ -116,6 +117,7 @@ def get_exercises(
 ) -> ExerciseListResponse:
     """Retrieve exercises with search and filtering support."""
     items, total = workout_facade.list_exercises(
+        user_id=user_id,
         query=q,
         category=category,
         muscle_group=muscle_group,
@@ -135,7 +137,7 @@ def get_exercises(
             )
             for item in items
         ]
-    response.headers["Cache-Control"] = "private, max-age=30"
+    response.headers["Cache-Control"] = "private, no-store"
     return ExerciseListResponse(items=items, total=total, page=page, limit=limit)
 
 
@@ -151,10 +153,42 @@ def get_muscle_groups() -> dict[str, list[str]]:
     return {"muscle_groups": workout_facade.get_exercise_muscle_groups()}
 
 
+@router.post("/exercises/custom", response_model=Exercise)
+def create_custom_exercise(
+    payload: CustomExerciseCreate,
+    user_id: UUID = Depends(current_user),
+) -> Exercise:
+    """Create a private custom exercise for a premium member."""
+    return workout_facade.create_custom_exercise(user_id, payload)
+
+
+@router.put("/exercises/custom/{exercise_id}", response_model=Exercise)
+def update_custom_exercise(
+    exercise_id: str,
+    payload: CustomExerciseCreate,
+    user_id: UUID = Depends(current_user),
+) -> Exercise:
+    """Update a custom exercise."""
+    return workout_facade.update_custom_exercise(user_id, exercise_id, payload)
+
+
+@router.delete("/exercises/custom/{exercise_id}")
+def delete_custom_exercise(
+    exercise_id: str,
+    user_id: UUID = Depends(current_user),
+) -> dict[str, str]:
+    """Delete (soft-delete) a custom exercise."""
+    workout_facade.delete_custom_exercise(user_id, exercise_id)
+    return {"status": "deleted"}
+
+
 @router.get("/exercises/{exercise_id}", response_model=Exercise)
-def get_exercise(exercise_id: str) -> Exercise:
+def get_exercise(
+    exercise_id: str,
+    user_id: UUID | None = Query(None, description="Optional user ID to resolve custom exercises"),
+) -> Exercise:
     """Retrieve a single exercise by ID."""
-    exercise = workout_facade.get_exercise_by_id(exercise_id)
+    exercise = workout_facade.get_exercise_by_id(exercise_id, user_id=user_id)
     if not exercise:
         raise HTTPException(status_code=404, detail=f"Exercise '{exercise_id}' not found")
     return exercise

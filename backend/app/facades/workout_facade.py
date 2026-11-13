@@ -1,17 +1,21 @@
 from uuid import UUID
 
+from fastapi import HTTPException
+
 from app.core.local_day import LocalDay
-from app.schemas.workout import RoutineCreate, RoutineSummary
-from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
-from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
 from app.db.supabase_client import get_supabase
-from app.services import workout_service, workout_statistics_service
-from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
+from app.schemas.exercise import Exercise
 from app.schemas.workout import (
+    CustomExerciseCreate,
     LiveWorkoutAdjustmentRequest,
     LiveWorkoutAdjustmentSuggestion,
+    RoutineCreate,
+    RoutineSummary,
 )
-from fastapi import HTTPException
+from app.schemas.workout_log import WorkoutHistoryResponse, WorkoutLogCreate, WorkoutLogResponse, WorkoutLogUpdate
+from app.schemas.workout_statistics import WorkoutStatisticsRange, WorkoutStatisticsResponse
+from app.services import workout_service, workout_statistics_service
+from app.services.workout_adjustment_service import plan_daily_workout, suggest_live_adjustment
 
 
 class WorkoutFacade:
@@ -72,8 +76,17 @@ class WorkoutFacade:
     def get_exercise_muscle_groups(self):
         return workout_service.get_exercise_muscle_groups()
 
-    def get_exercise_by_id(self, exercise_id: str):
-        return workout_service.get_exercise_by_id(exercise_id)
+    def get_exercise_by_id(self, exercise_id: str, user_id: UUID | None = None):
+        return workout_service.get_exercise_by_id(exercise_id, user_id=user_id)
+
+    def create_custom_exercise(self, user_id: UUID, payload: CustomExerciseCreate) -> Exercise:
+        return workout_service.create_custom_exercise(user_id, payload)
+
+    def update_custom_exercise(self, user_id: UUID, exercise_id: str, payload: CustomExerciseCreate) -> Exercise:
+        return workout_service.update_custom_exercise(user_id, exercise_id, payload)
+
+    def delete_custom_exercise(self, user_id: UUID, exercise_id: str) -> None:
+        workout_service.delete_custom_exercise(user_id, exercise_id)
 
 
-workout_facade = WorkoutFacade()
+workout_facade = WorkoutFacade();

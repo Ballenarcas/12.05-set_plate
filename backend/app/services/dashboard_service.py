@@ -9,6 +9,7 @@ from app.core.local_day import LocalDay, utc_day
 from app.db.supabase_client import get_supabase
 from app.schemas.dashboard import CompletedWorkoutToday, DashboardSummary, NutritionDashboard, PlanExercise, WorkoutDashboard, WorkoutPlanSummary
 from app.services.ai_tips_service import kcal_bonus
+from app.services.health_service import get_activity_summary
 from app.services.user_profile_service import calculate_calorie_goal
 
 
@@ -147,18 +148,20 @@ def get_dashboard_summary(user_id: UUID, day: LocalDay | None = None) -> Dashboa
     if client is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured")
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=7) as executor:
         bonus_future = executor.submit(kcal_bonus, user_id, day)
         user_future = executor.submit(_query_user, user_id)
         meals_future = executor.submit(_query_today_meals, user_id, day)
         workout_future = executor.submit(_query_workout, user_id)
         plan_future = executor.submit(_query_todays_plan, user_id, day)
         completed_future = executor.submit(_query_completed_workout_today, user_id, day)
+        activity_future = executor.submit(get_activity_summary, user_id)
         user = user_future.result()
         meals = meals_future.result()
         workout = workout_future.result()
         plan = plan_future.result()
         completed_workout = completed_future.result()
+        activity = activity_future.result()
         bonus_kcals = bonus_future.result()
 
     target_kcals = _calculate_target_calories(user) + bonus_kcals
@@ -184,4 +187,5 @@ def get_dashboard_summary(user_id: UUID, day: LocalDay | None = None) -> Dashboa
         workout=workout,
         plan=plan,
         completed_workout_today=completed_workout,
+        activity=activity,
     )

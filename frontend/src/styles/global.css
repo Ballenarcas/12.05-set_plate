@@ -48,6 +48,20 @@
 .ai-banner { display: flex; gap: 0.75rem; padding: 1rem; background: var(--olive); }
 .ai-banner svg { flex: 0 0 auto; color: #f6e86c; }
 .ai-banner p { color: #fffbd0; font-size: 0.84rem; line-height: 1.45; }
+.activity-card { display: grid; gap: 0.9rem; padding: 1rem; }
+.activity-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+.activity-stat { display: grid; gap: 0.2rem; padding: 0.8rem; border: 1px solid var(--line); border-radius: 0.8rem; background: #181818; }
+.activity-stat span { color: var(--text-muted); font-size: 0.7rem; }
+.activity-stat strong { font-size: 1.25rem; line-height: 1.1; }
+.activity-note { margin: 0; color: var(--text-muted); font-size: 0.75rem; line-height: 1.5; }
+.activity-preview { margin: 0; color: #d6b85a; font-size: 0.7rem; line-height: 1.45; }
+.activity-empty { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; }
+.activity-empty h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+.activity-empty p { margin: 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.45; }
+.activity-empty .secondary-action { min-height: 2.5rem; white-space: nowrap; }
+@media (max-width: 360px) {
+  .activity-empty { grid-template-columns: 1fr; }
+}
 .ai-tip-body { display: grid; gap: 0.6rem; flex: 1; min-width: 0; }
 .ai-tip-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; opacity: 0.9; }
 .ai-tip-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }

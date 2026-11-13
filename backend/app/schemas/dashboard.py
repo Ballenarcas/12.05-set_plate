@@ -2,6 +2,8 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from app.schemas.health import HealthActivitySummary
+
 
 class NutritionDashboard(BaseModel):
     remaining_kcals: int = Field(ge=0)
@@ -52,3 +54,4 @@ class DashboardSummary(BaseModel):
     workout: WorkoutDashboard | None
     plan: WorkoutPlanSummary | None = None
     completed_workout_today: CompletedWorkoutToday | None = None
+    activity: HealthActivitySummary = Field(default_factory=HealthActivitySummary)

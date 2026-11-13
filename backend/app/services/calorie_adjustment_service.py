@@ -3,6 +3,10 @@
 Pure rules first (propose_adjustment), then a thin service that reads the
 existing tables, persists one pending proposal per user, and applies the new
 goal to users.calorie_goal when the user accepts.
+
+Health Connect activity is a context and safety input: a high-activity week can
+hold a fat-loss target or raise a maintenance target, but it never deepens a
+deficit.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -10,6 +14,8 @@ from typing import Any, Literal
 from uuid import UUID
 
 from app.db.supabase_client import get_supabase
+from app.schemas.health import HealthActivitySummary
+from app.services.health_service import get_activity_summary
 from app.services.user_profile_service import calculate_calorie_goal
 
 ADJUSTMENTS_TABLE = "ai_calorie_adjustments"
@@ -25,6 +31,15 @@ MIN_GOAL = 1200
 MAX_GOAL = 5000
 MAX_DAILY_DEFICIT = 500
 
+# Health Connect activity is a safety and context input, not a second calorie
+# target: only a quarter of the active burn can raise a goal, capped at 200 kcal.
+ACTIVITY_HIGH_STEPS = 8_000
+ACTIVITY_VERY_HIGH_STEPS = 12_000
+ACTIVITY_HIGH_KCAL = 350
+ACTIVITY_CREDIT_RATE = 0.25
+ACTIVITY_CREDIT_CAP = 200
+MIN_ACTIVITY_CREDIT = 100
+
 ObjectiveBranch = Literal["fat_loss", "muscle_gain", "maintenance"]
 
 
@@ -36,6 +51,68 @@ def classify_objective(objective: str | None) -> ObjectiveBranch:
     if "hypertrophy" in text or "strength" in text or "muscle" in text or "gain" in text:
         return "muscle_gain"
     return "maintenance"
+
+
+def _health(metrics: dict[str, Any]) -> HealthActivitySummary:
+    value = metrics.get("health")
+    if isinstance(value, HealthActivitySummary):
+        return value
+    if isinstance(value, dict):
+        try:
+            return HealthActivitySummary(**value)
+        except ValueError:
+            return HealthActivitySummary()
+    return HealthActivitySummary()
+
+
+def _activity_phrase(health: HealthActivitySummary) -> str:
+    parts = []
+    if health.steps_avg_7d > 0:
+        parts.append(f"{health.steps_avg_7d:,} steps")
+    if health.active_calories_avg_7d > 0:
+        parts.append(f"{health.active_calories_avg_7d} active kcal")
+    return " and ".join(parts)
+
+
+def _activity_sentence(metrics: dict[str, Any]) -> str:
+    health = _health(metrics)
+    if not health.connected:
+        return ""
+    phrase = _activity_phrase(health)
+    if not phrase:
+        return "Health Connect is connected, but no recent activity was synced."
+    return f"You averaged {phrase} per day."
+
+
+def _activity_is_high(metrics: dict[str, Any]) -> bool:
+    health = _health(metrics)
+    return health.connected and (
+        health.active_calories_avg_7d >= ACTIVITY_HIGH_KCAL
+        or health.steps_avg_7d >= ACTIVITY_VERY_HIGH_STEPS
+    )
+
+
+def _activity_is_low(metrics: dict[str, Any]) -> bool:
+    health = _health(metrics)
+    return (
+        health.connected
+        and health.steps_avg_7d < 4_000
+        and health.active_calories_avg_7d < 150
+    )
+
+
+def _activity_credit(metrics: dict[str, Any]) -> int:
+    """Calories an active week can add back, kept deliberately small."""
+    health = _health(metrics)
+    if not health.connected:
+        return 0
+    credit = min(
+        ACTIVITY_CREDIT_CAP,
+        round(health.active_calories_avg_7d * ACTIVITY_CREDIT_RATE),
+    )
+    if health.steps_avg_7d >= ACTIVITY_HIGH_STEPS:
+        credit = max(credit, MIN_ACTIVITY_CREDIT)
+    return max(0, credit)
 
 
 def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
@@ -51,23 +128,29 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
     compliance = float(metrics.get("compliance") or 0.0)
     days_within = int(metrics.get("days_within") or 0)
     if compliance < LOW_COMPLIANCE:
+        reason = (
+            f"Consistency first: only {days_within} of {EVALUATION_DAYS} days landed within "
+            f"10% of your {goal} kcal goal. Log every day for a week before the target moves."
+        )
+        if _health(metrics).connected:
+            reason += f" {_activity_sentence(metrics)}"
         return {
             "has_change": False,
             "proposed_goal": goal,
-            "reason": (
-                f"Consistency first: only {days_within} of {EVALUATION_DAYS} days landed within "
-                f"10% of your {goal} kcal goal. Log every day for a week before the target moves."
-            ),
+            "reason": reason,
         }
 
     if compliance < HIGH_COMPLIANCE:
+        reason = (
+            f"You are close. {days_within} of {EVALUATION_DAYS} days stayed on target; "
+            "reach 6 of 7 before the goal changes."
+        )
+        if _health(metrics).connected:
+            reason += f" {_activity_sentence(metrics)}"
         return {
             "has_change": False,
             "proposed_goal": goal,
-            "reason": (
-                f"You are close. {days_within} of {EVALUATION_DAYS} days stayed on target; "
-                "reach 6 of 7 before the goal changes."
-            ),
+            "reason": reason,
         }
 
     objective = classify_objective(metrics.get("objective"))
@@ -75,12 +158,24 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
 
     if objective == "fat_loss":
         if avg_intake < goal * 0.98:
+            reason = (
+                f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
+                "deficit is working. Hold the target."
+            )
+            if _health(metrics).connected:
+                reason += f" {_activity_sentence(metrics)} Activity is widening the deficit, so no cut is needed."
+            return {
+                "has_change": False,
+                "proposed_goal": goal,
+                "reason": reason,
+            }
+        if _activity_is_high(metrics) and avg_intake <= goal * 1.10:
             return {
                 "has_change": False,
                 "proposed_goal": goal,
                 "reason": (
-                    f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
-                    "deficit is working. Hold the target."
+                    f"{_activity_sentence(metrics)} Activity is already widening the deficit, "
+                    f"so keeping the {goal} kcal target is safer than cutting it."
                 ),
             }
         floor = max(MIN_GOAL, int(metrics.get("deficit_floor") or 0))
@@ -94,13 +189,21 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
                 ),
             }
         proposed = goal - reduction
+        reason = (
+            f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
+            f"deficit is not happening. Lowering the target by {goal - proposed} kcal."
+        )
+        if _activity_is_low(metrics):
+            reason += (
+                f" {_activity_sentence(metrics)} Adding a daily walk would widen the deficit "
+                "without eating less."
+            )
+        elif _health(metrics).connected:
+            reason += f" {_activity_sentence(metrics)} Keep that activity up while the target comes down."
         return {
             "has_change": True,
             "proposed_goal": proposed,
-            "reason": (
-                f"Your average intake is {avg_intake} kcal against a {goal} kcal goal, so the "
-                f"deficit is not happening. Lowering the target by {goal - proposed} kcal."
-            ),
+            "reason": reason,
         }
 
     if objective == "muscle_gain":
@@ -114,30 +217,53 @@ def propose_adjustment(metrics: dict[str, Any]) -> dict[str, Any]:
                     "Training volume is not rising yet, so keep intake steady until it does."
                 ),
             }
-        proposed = min(MAX_GOAL, goal + MUSCLE_GAIN_STEP)
+        activity_bonus = _activity_credit(metrics) if _activity_is_high(metrics) else 0
+        proposed = min(MAX_GOAL, goal + MUSCLE_GAIN_STEP + activity_bonus)
         if proposed <= goal:
             return {
                 "has_change": False,
                 "proposed_goal": goal,
                 "reason": f"Your goal is at the {MAX_GOAL} kcal ceiling, so it stays there.",
             }
+        reason = (
+            f"Training volume rose from {volume_before} kg to {volume_now} kg this week with "
+            f"{days_within} of {EVALUATION_DAYS} days on target. Raising the target by "
+            f"{proposed - goal} kcal."
+        )
+        if activity_bonus:
+            reason += (
+                f" {_activity_sentence(metrics)} That activity raises recovery needs, so the "
+                "increase covers it."
+            )
+        return {
+            "has_change": True,
+            "proposed_goal": proposed,
+            "reason": reason,
+        }
+
+    activity_credit = _activity_credit(metrics)
+    if activity_credit >= MIN_STEP:
+        proposed = min(MAX_GOAL, goal + activity_credit)
         return {
             "has_change": True,
             "proposed_goal": proposed,
             "reason": (
-                f"Training volume rose from {volume_before} kg to {volume_now} kg this week with "
-                f"{days_within} of {EVALUATION_DAYS} days on target. Raising the target by "
-                f"{proposed - goal} kcal."
+                f"Maintenance: {_activity_sentence(metrics)} Raising the target by "
+                f"{proposed - goal} kcal keeps it matched to that activity."
             ),
         }
-
+    reason = (
+        f"Maintenance: {days_within} of {EVALUATION_DAYS} days matched your {goal} kcal goal. "
+        "Keeping the target steady."
+    )
+    if _health(metrics).connected:
+        reason += f" {_activity_sentence(metrics)}"
+        if _activity_is_low(metrics):
+            reason += " A daily walk would give the trainer more to work with."
     return {
         "has_change": False,
         "proposed_goal": goal,
-        "reason": (
-            f"Maintenance: {days_within} of {EVALUATION_DAYS} days matched your {goal} kcal goal. "
-            "Keeping the target steady."
-        ),
+        "reason": reason,
     }
 
 
@@ -230,6 +356,7 @@ def collect_metrics(session: Any, user_id: UUID, today: str | None = None) -> di
         "compliance": round(days_within / EVALUATION_DAYS, 2),
         "volume_this_week": round(volume_this_week),
         "volume_prev_week": round(volume_prev_week),
+        "health": get_activity_summary(user_id, db_session=session, today=day),
     }
 
 
@@ -247,6 +374,7 @@ def _response(row: dict[str, Any], metrics: dict[str, Any] | None = None) -> dic
         "avg_daily_intake": int((metrics or {}).get("avg_intake") or 0),
         "compliance_rate": float((metrics or {}).get("compliance") or 0.0),
         "weekly_volume": int((metrics or {}).get("volume_this_week") or 0),
+        "activity": _health(metrics or {}).model_dump(mode="json"),
     }
     return data
 

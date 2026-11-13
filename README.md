@@ -15,6 +15,7 @@ React 19 · TypeScript · Vite · FastAPI · Supabase · any OpenAI-compatible A
 - **Workouts:** build routines from 1,324 exercises, track sets, reps, weight, RPE and rest timers live, then review history and statistics.
 - **AI coach:** plans today's workout, suggests changes mid-session, and proposes calorie goal changes from the last 7 days.
 - **Premium:** monthly and yearly plans. Checkout is a mock and takes no payment.
+- **Health Connect:** sync daily steps and active calories from Android. They feed the calorie-goal rules and the planner's recovery context. Browser builds use a labelled preview source through the same endpoints.
 
 The calorie goal uses the Mifflin-St Jeor formula and is adjusted for your goal. Tips and calorie changes are decided by rules: a model can only reword them, and it never invents numbers.
 
@@ -50,9 +51,22 @@ Vite forwards `/api` to the backend, so you can also open the dev server from yo
 
 ## Database
 
-Run the SQL files in [`backend/app/db/migrations/`](backend/app/db/migrations) in the Supabase SQL editor. `replace_exercises_with_dataset.sql` loads the exercise catalog, and `harden_rls.sql` closes the tables to everyone except the backend.
+Run the SQL files in [`backend/app/db/migrations/`](backend/app/db/migrations) in the Supabase SQL editor. `replace_exercises_with_dataset.sql` loads the exercise catalog, `harden_rls.sql` closes the tables to everyone except the backend, and `create_health_connect_tables.sql` adds `health_connections` and `health_activity`.
 
 > The repo has no full starting schema. The base tables (`users`, `meals`, `routines`, `workouts` and their child tables) must already exist.
+
+## Health Connect
+
+Four endpoints back the sync. All of them require the bearer token:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/health-connect/status` | Connection, today's activity and the last seven days |
+| `POST` | `/api/v1/health-connect/connect` | Store consent and the first activity sync |
+| `POST` | `/api/v1/health-connect/sync` | Upsert newer daily steps and active calories |
+| `POST` | `/api/v1/health-connect/disconnect` | Revoke consent and delete stored activity |
+
+On Android the host injects `window.SETPLATEHealthConnect` with `requestPermissions`, `readActivity(days)` and an optional `revokePermissions`. Without that bridge the browser build keeps the same flow working with a preview source. If the tables are missing, the endpoints report the feature as not configured and the suggestions fall back to no activity context.
 
 ## Environment variables
 

@@ -66,7 +66,9 @@ function MetricCard({ icon, label, value, note }: MetricCardProps) {
 }
 
 function WeekChart({ data, todayKey }: { data: HydrationHistoryWeek; todayKey: string }) {
-  const highest = Math.max(data.goal_ml, ...data.days.map((day) => day.total_ml), 1)
+  const goalValues = data.days.map((day) => day.goal_ml)
+  const uniformGoal = goalValues.every((goal) => goal === goalValues[0])
+  const highest = Math.max(...data.days.map((day) => Math.max(day.goal_ml, day.total_ml)), 1)
   const step = highest > 3000 ? 1000 : 500
   const axisMax = Math.ceil((highest * 1.12) / step) * step
   const plotWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right
@@ -76,9 +78,12 @@ function WeekChart({ data, todayKey }: { data: HydrationHistoryWeek; todayKey: s
   const barWidth = Math.min(46, slot * 0.56)
   const yFor = (value: number) => CHART_PADDING.top + (1 - value / axisMax) * plotHeight
   const ticks = [0, axisMax / 2, axisMax]
+  const goalDescription = uniformGoal
+    ? `Daily goal ${formatMl(goalValues[0])} milliliters.`
+    : `Daily goal varies between ${formatMl(Math.min(...goalValues))} and ${formatMl(Math.max(...goalValues))} milliliters.`
   const chartLabel = `Hydration chart for ${formatWeekRange(data.week_start, data.week_end)}: ${data.days
     .map((day, index) => `${WEEKDAYS[index]} ${formatMl(day.total_ml)} milliliters`)
-    .join(', ')}. Daily goal ${formatMl(data.goal_ml)} milliliters.`
+    .join(', ')}. ${goalDescription}`
 
   return (
     <div className="hydration-chart-wrap" role="img" aria-label={chartLabel}>
@@ -97,13 +102,29 @@ function WeekChart({ data, todayKey }: { data: HydrationHistoryWeek; todayKey: s
             </text>
           </g>
         ))}
-        <line
-          className="hydration-chart-goal-line"
-          x1={CHART_PADDING.left}
-          x2={CHART_WIDTH - CHART_PADDING.right}
-          y1={yFor(data.goal_ml)}
-          y2={yFor(data.goal_ml)}
-        />
+        {uniformGoal && (
+          <line
+            className="hydration-chart-goal-line"
+            x1={CHART_PADDING.left}
+            x2={CHART_WIDTH - CHART_PADDING.right}
+            y1={yFor(goalValues[0])}
+            y2={yFor(goalValues[0])}
+          />
+        )}
+        {!uniformGoal && data.days.map((day, index) => {
+          const x = CHART_PADDING.left + slot * index + 6
+          const y = yFor(day.goal_ml)
+          return (
+            <line
+              key={`goal-${day.date}`}
+              className="hydration-chart-goal-line hydration-chart-goal-tick"
+              x1={x}
+              x2={x + slot - 12}
+              y1={y}
+              y2={y}
+            />
+          )
+        })}
         {data.days.map((day, index) => {
           const x = CHART_PADDING.left + slot * index + (slot - barWidth) / 2
           const y = yFor(day.total_ml)
@@ -198,6 +219,7 @@ export default function HydrationHistory() {
 
   const isCurrentWeek = weekStart === currentWeekStart
   const rangeLabel = data ? formatWeekRange(data.week_start, data.week_end) : formatWeekRange(weekStart, toDateKey(addDays(parseDateKey(weekStart), 6)))
+  const goalChanged = data ? data.days.some((day) => day.goal_ml !== data.days[0].goal_ml) : false
 
   return (
     <div className="screen hydration-history-screen" aria-busy={isLoading}>
@@ -274,7 +296,7 @@ export default function HydrationHistory() {
               icon={<Target size={18} />}
               label="Goal days"
               value={`${data.days_met_goal} / 7`}
-              note={`Goal is ${formatMl(data.goal_ml)} ml/day`}
+              note={goalChanged ? 'Goal changed this week' : `Goal is ${formatMl(data.goal_ml)} ml/day`}
             />
           </div>
 
@@ -282,13 +304,13 @@ export default function HydrationHistory() {
             <div className="hydration-chart-heading">
               <div>
                 <h2 id="hydration-week-overview">Week overview</h2>
-                <p>{data.days_met_goal} of 7 days met your goal</p>
+                <p>{data.days_met_goal} of 7 days met the daily goal</p>
               </div>
               <span className="hydration-chart-total">{formatLiters(data.total_ml)}</span>
             </div>
 
             <div className="hydration-chart-legend">
-              <span><i className="hydration-legend-swatch is-goal" aria-hidden="true" /> Goal {formatMl(data.goal_ml)} ml/day</span>
+              <span><i className="hydration-legend-swatch is-goal" aria-hidden="true" /> {goalChanged ? 'Daily goal' : `Goal ${formatMl(data.goal_ml)} ml/day`}</span>
               <span><i className="hydration-legend-swatch is-met" aria-hidden="true" /> Goal met</span>
             </div>
 
@@ -318,7 +340,10 @@ export default function HydrationHistory() {
                       <span className="hydration-day-fill" style={{ width: `${day.progress_percentage}%` }} />
                     </span>
                     <span className="hydration-day-amount">
-                      <strong>{formatMl(day.total_ml)} ml</strong>
+                      <strong>
+                        {formatMl(day.total_ml)}
+                        <span className="hydration-day-goal"> / {formatMl(day.goal_ml)} ml</span>
+                      </strong>
                       <span>{day.met_goal ? 'Goal met' : `${day.progress_percentage}%`}</span>
                     </span>
                   </li>

@@ -209,6 +209,11 @@
   opacity: 0.8;
 }
 
+.hydration-chart-goal-tick {
+  stroke-width: 2;
+  opacity: 0.95;
+}
+
 .hydration-chart-bar {
   fill: #3d92c4;
 }
@@ -226,6 +231,10 @@
   fill: #cfcfcf;
   font-size: 14px;
   font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .hydration-chart-weekday {
@@ -258,7 +267,7 @@
 
 .hydration-day-row {
   display: grid;
-  grid-template-columns: 5.4rem minmax(0, 1fr) 5rem;
+  grid-template-columns: 5.4rem minmax(0, 1fr) 6.4rem;
   align-items: center;
   gap: 0.55rem;
   min-height: 2.5rem;
@@ -321,6 +330,11 @@
   font-size: 0.74rem;
 }
 
+.hydration-day-goal {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .hydration-day-amount span {
   color: var(--text-muted);
   font-size: 0.62rem;
@@ -367,6 +381,6 @@
   }
 
   .hydration-day-row {
-    grid-template-columns: 4.6rem minmax(0, 1fr) 4.4rem;
+    grid-template-columns: 4.6rem minmax(0, 1fr) 5.6rem;
   }
 }

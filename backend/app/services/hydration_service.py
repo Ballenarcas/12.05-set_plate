@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -24,6 +25,8 @@ DEFAULT_GOAL_ML = 2500
 ML_PER_KG = 35  # common wellness heuristic, not a medical recommendation
 MIN_GOAL_ML = 1500
 MAX_GOAL_ML = 4000
+
+logger = logging.getLogger(__name__)
 
 
 class HydrationStorageUnavailable(RuntimeError):
@@ -86,6 +89,88 @@ def _user_hydration(user_id: UUID) -> tuple[int, int]:
     return _custom_goal(row.get("hydration_goal_ml")) or recommended, recommended
 
 
+def _earliest_log_date(session: Any, user_id: UUID) -> date | None:
+    rows = (
+        session.table("hydration_logs")
+        .select("log_date")
+        .eq("user_id", str(user_id))
+        .order("log_date", desc=False)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not rows:
+        return None
+    try:
+        return date.fromisoformat(str(rows[0].get("log_date"))[:10])
+    except ValueError:
+        return None
+
+
+def _goal_timeline(session: Any, user_id: UUID) -> list[tuple[date, int]] | None:
+    """Every recorded goal change, oldest first; ``None`` before the migration runs."""
+    try:
+        rows = (
+            session.table("hydration_goal_history")
+            .select("effective_date,goal_ml")
+            .eq("user_id", str(user_id))
+            .order("effective_date", desc=False)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return None
+    timeline: list[tuple[date, int]] = []
+    for row in rows:
+        try:
+            effective = date.fromisoformat(str(row.get("effective_date"))[:10])
+            goal = int(row.get("goal_ml"))
+        except (TypeError, ValueError):
+            continue
+        if CUSTOM_GOAL_MIN_ML <= goal <= CUSTOM_GOAL_MAX_ML:
+            timeline.append((effective, goal))
+    return timeline
+
+
+def _record_goal_change(session: Any, user_id: UUID, changed_on: date, previous_goal: int, new_goal: int) -> None:
+    """Append today's goal and keep a baseline so older days never move."""
+    try:
+        existing = (
+            session.table("hydration_goal_history")
+            .select("effective_date")
+            .eq("user_id", str(user_id))
+            .order("effective_date", desc=False)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not existing:
+            baseline = _earliest_log_date(session, user_id) or changed_on
+            if baseline < changed_on:
+                session.table("hydration_goal_history").upsert(
+                    {
+                        "user_id": str(user_id),
+                        "effective_date": baseline.isoformat(),
+                        "goal_ml": previous_goal,
+                    },
+                    on_conflict="user_id,effective_date",
+                ).execute()
+        session.table("hydration_goal_history").upsert(
+            {
+                "user_id": str(user_id),
+                "effective_date": changed_on.isoformat(),
+                "goal_ml": new_goal,
+            },
+            on_conflict="user_id,effective_date",
+        ).execute()
+    except Exception:
+        # Before the goal-history migration runs, the goal itself still saves.
+        logger.debug("Hydration goal history is unavailable", exc_info=True)
+
+
 def _day_rows(user_id: UUID, day: LocalDay) -> list[dict[str, Any]]:
     return (
         _session()
@@ -125,8 +210,11 @@ def _summary(user_id: UUID, day: LocalDay, rows: list[dict[str, Any]] | None = N
 
 
 def set_goal(user_id: UUID, day: LocalDay, goal_ml: int | None) -> HydrationToday:
-    """Store the custom goal on the profile; ``None`` restores the recommended goal."""
-    _session().table("users").update({"hydration_goal_ml": goal_ml}).eq("id", str(user_id)).execute()
+    """Store the custom goal from today forward; ``None`` restores the recommended goal."""
+    session = _session()
+    previous_goal, recommended = _user_hydration(user_id)
+    session.table("users").update({"hydration_goal_ml": goal_ml}).eq("id", str(user_id)).execute()
+    _record_goal_change(session, user_id, day.local_date, previous_goal, recommended if goal_ml is None else goal_ml)
     return _summary(user_id, day)
 
 
@@ -142,11 +230,11 @@ def _week_bounds(requested: date | None, today: date) -> tuple[date, date]:
 
 
 def get_history(user_id: UUID, day: LocalDay, week_start: date | None = None) -> HydrationHistoryWeek:
-    """Per-day totals for one local week, compared with the user's current goal."""
+    """Per-day totals for one local week, each compared with the goal active that day."""
+    session = _session()
     start, end = _week_bounds(week_start, day.local_date)
     rows = (
-        _session()
-        .table("hydration_logs")
+        session.table("hydration_logs")
         .select("log_date,amount_ml")
         .eq("user_id", str(user_id))
         .gte("log_date", start.isoformat())
@@ -162,12 +250,32 @@ def get_history(user_id: UUID, day: LocalDay, week_start: date | None = None) ->
         totals[key] += int(row.get("amount_ml") or 0)
         counts[key] += 1
 
-    goal, recommended = _user_hydration(user_id)
+    current_goal, recommended = _user_hydration(user_id)
+    timeline = _goal_timeline(session, user_id)
+    if timeline is None:
+        # Before the goal-history migration runs, every day uses the current goal.
+        day_goals = [current_goal] * 7
+    else:
+        # Days before the first recorded change keep the baseline goal, so a
+        # later goal change never rewrites an older week.
+        baseline = timeline[0][1] if timeline else current_goal
+        day_goals = []
+        for offset in range(7):
+            current = start + timedelta(days=offset)
+            goal = baseline
+            for effective, effective_goal in timeline:
+                if effective <= current:
+                    goal = effective_goal
+                else:
+                    break
+            day_goals.append(goal)
+
     days: list[HydrationHistoryDay] = []
     for offset in range(7):
         current = start + timedelta(days=offset)
         key = current.isoformat()
         total = totals.get(key, 0)
+        goal = day_goals[offset]
         days.append(
             HydrationHistoryDay(
                 date=current,
@@ -182,7 +290,7 @@ def get_history(user_id: UUID, day: LocalDay, week_start: date | None = None) ->
     return HydrationHistoryWeek(
         week_start=start,
         week_end=end,
-        goal_ml=goal,
+        goal_ml=day_goals[-1],
         default_goal_ml=recommended,
         total_ml=week_total,
         daily_average_ml=round(week_total / 7),

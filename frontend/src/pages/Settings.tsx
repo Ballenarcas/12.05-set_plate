@@ -1,12 +1,53 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Loader2, LogOut, Save, User, HelpCircle } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle2,
+  Flame,
+  Footprints,
+  HeartPulse,
+  HelpCircle,
+  Loader2,
+  LogOut,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  Unplug,
+  User,
+} from 'lucide-react'
 import PremiumUpsellButton from '../components/premium/PremiumUpsellButton'
-import { cancelPremium, clearDashboardCache, clearSession, getCurrentUser, isPremiumActive, updateUserSettings } from '../services/api'
+import {
+  cancelPremium,
+  clearDashboardCache,
+  clearSession,
+  fetchHealthConnectStatus,
+  getCurrentUser,
+  isPremiumActive,
+  updateUserSettings,
+} from '../services/api'
+import {
+  connectHealthConnect,
+  disconnectHealthConnect,
+  ensureHealthConnectFresh,
+  syncHealthConnect,
+} from '../services/healthConnect'
+import type { HealthConnectStatus } from '../types/health'
 import { describeError } from '../utils/errors.js'
 import { useDialogBehavior } from '../utils/useDialogBehavior'
 
 type Notice = { kind: 'success' | 'error'; text: string }
+
+function formatSyncTime(value: string | null): string {
+  if (!value) return 'not yet'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'not yet'
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 function Settings() {
   const user = getCurrentUser()
@@ -20,6 +61,11 @@ function Settings() {
   const [notice, setNotice] = useState<Notice | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isLogoutOpen, setIsLogoutOpen] = useState(false)
+  const [health, setHealth] = useState<HealthConnectStatus | null>(null)
+  const [healthLoading, setHealthLoading] = useState(true)
+  const [healthBusy, setHealthBusy] = useState<'connecting' | 'syncing' | 'disconnecting' | null>(null)
+  const [healthNotice, setHealthNotice] = useState<Notice | null>(null)
+  const [isConnectOpen, setIsConnectOpen] = useState(false)
   const [isCancelOpen, setIsCancelOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [isCancelled, setIsCancelled] = useState(Boolean(user?.premium_cancel_at_period_end))
@@ -48,6 +94,42 @@ function Settings() {
     const timer = window.setTimeout(() => setNotice(null), notice.kind === 'success' ? 5000 : 8000)
     return () => window.clearTimeout(timer)
   }, [notice])
+
+  useEffect(() => {
+    if (!healthNotice) return
+    const timer = window.setTimeout(() => setHealthNotice(null), healthNotice.kind === 'success' ? 5000 : 8000)
+    return () => window.clearTimeout(timer)
+  }, [healthNotice])
+
+  useEffect(() => {
+    if (!user?.id) {
+      setHealthLoading(false)
+      return
+    }
+    const userId = user.id
+    let isMounted = true
+    fetchHealthConnectStatus()
+      .then(async (initial) => {
+        if (!isMounted) return
+        setHealth(initial)
+        if (!initial.connected) return
+        const refreshed = await ensureHealthConnectFresh(userId, initial)
+        if (isMounted) setHealth(refreshed)
+      })
+      .catch((error: unknown) => {
+        if (!isMounted) return
+        setHealthNotice({
+          kind: 'error',
+          text: describeError(error, "We couldn't load your Health Connect status. Please try again."),
+        })
+      })
+      .finally(() => {
+        if (isMounted) setHealthLoading(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [user?.id])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,6 +174,69 @@ function Settings() {
       setNotice({ kind: 'error', text: describeError(error, "We couldn't save your changes. Please try again.") })
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleConnectHealth = async () => {
+    if (!user?.id) return
+    setIsConnectOpen(false)
+    setHealthBusy('connecting')
+    setHealthNotice(null)
+    try {
+      const next = await connectHealthConnect(user.id)
+      setHealth(next)
+      clearDashboardCache()
+      setHealthNotice({
+        kind: 'success',
+        text: 'Health Connect is connected. Your steps and active calories now shape the AI trainer.',
+      })
+    } catch (error) {
+      setHealthNotice({
+        kind: 'error',
+        text: describeError(error, "We couldn't connect Health Connect. Please try again."),
+      })
+    } finally {
+      setHealthBusy(null)
+    }
+  }
+
+  const handleSyncHealth = async () => {
+    if (!user?.id) return
+    setHealthBusy('syncing')
+    setHealthNotice(null)
+    try {
+      const next = await syncHealthConnect(user.id)
+      setHealth(next)
+      clearDashboardCache()
+      setHealthNotice({ kind: 'success', text: 'Activity synced from Health Connect.' })
+    } catch (error) {
+      setHealthNotice({
+        kind: 'error',
+        text: describeError(error, "We couldn't sync your activity. Please try again."),
+      })
+    } finally {
+      setHealthBusy(null)
+    }
+  }
+
+  const handleDisconnectHealth = async () => {
+    setHealthBusy('disconnecting')
+    setHealthNotice(null)
+    try {
+      const next = await disconnectHealthConnect()
+      setHealth(next)
+      clearDashboardCache()
+      setHealthNotice({
+        kind: 'success',
+        text: 'Health Connect disconnected. The AI trainer no longer uses activity data.',
+      })
+    } catch (error) {
+      setHealthNotice({
+        kind: 'error',
+        text: describeError(error, "We couldn't disconnect Health Connect. Please try again."),
+      })
+    } finally {
+      setHealthBusy(null)
     }
   }
 
@@ -288,6 +433,186 @@ function Settings() {
           border: 1px solid #444;
           box-shadow: inset 0 2px 4px rgba(255,255,255,0.05);
         }
+        .health-header {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.85rem;
+        }
+        .health-icon {
+          display: grid;
+          flex: 0 0 auto;
+          width: 2.75rem;
+          height: 2.75rem;
+          place-items: center;
+          border: 1px solid rgba(40, 205, 98, 0.28);
+          border-radius: 0.85rem;
+          color: #28CD62;
+          background: rgba(40, 205, 98, 0.1);
+        }
+        .health-heading {
+          flex: 1;
+          min-width: 0;
+        }
+        .health-heading h2 {
+          margin: 0 0 0.25rem;
+          color: #FFF;
+          font-size: 1.1rem;
+          font-weight: 650;
+        }
+        .health-heading p {
+          margin: 0;
+          color: #A1A1AA;
+          font-size: 0.82rem;
+          line-height: 1.45;
+        }
+        .health-status {
+          flex: 0 0 auto;
+          padding: 0.28rem 0.55rem;
+          border: 1px solid #3A3A3A;
+          border-radius: 99px;
+          color: #A1A1AA;
+          font-size: 0.66rem;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .health-status.is-connected {
+          border-color: rgba(34, 197, 94, 0.4);
+          color: #86EFAC;
+          background: rgba(34, 197, 94, 0.1);
+        }
+        .health-loading {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-top: 1rem;
+          color: #A1A1AA;
+          font-size: 0.85rem;
+        }
+        .health-stats {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.65rem;
+          margin-top: 1.15rem;
+        }
+        .health-stat {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          grid-template-rows: auto auto;
+          column-gap: 0.55rem;
+          align-items: center;
+          padding: 0.8rem;
+          border: 1px solid #2E2E2E;
+          border-radius: 0.8rem;
+          background: #141414;
+        }
+        .health-stat svg {
+          grid-row: 1 / span 2;
+          color: #8B5CF6;
+        }
+        .health-stat strong {
+          color: #FFF;
+          font-size: 1.2rem;
+          line-height: 1.1;
+        }
+        .health-stat span {
+          color: #A1A1AA;
+          font-size: 0.7rem;
+        }
+        .health-meta {
+          margin: 0.85rem 0 0;
+          color: #A1A1AA;
+          font-size: 0.75rem;
+          line-height: 1.5;
+        }
+        .health-preview-note {
+          margin: 0.55rem 0 0;
+          color: #D6B85A;
+          font-size: 0.72rem;
+          line-height: 1.45;
+        }
+        .health-copy {
+          margin: 1rem 0 0;
+          color: #A1A1AA;
+          font-size: 0.85rem;
+          line-height: 1.5;
+        }
+        .health-actions {
+          display: flex;
+          gap: 0.6rem;
+          margin-top: 1rem;
+        }
+        .health-actions .secondary-action {
+          flex: 1;
+        }
+        .health-disconnect {
+          display: inline-flex;
+          flex: 1;
+          align-items: center;
+          justify-content: center;
+          gap: 0.4rem;
+          min-height: 2.75rem;
+          padding: 0 0.8rem;
+          border: 1px solid rgba(239, 68, 68, 0.35);
+          border-radius: 0.7rem;
+          color: #FCA5A5;
+          background: transparent;
+          cursor: pointer;
+          font-size: 0.72rem;
+          font-weight: 700;
+        }
+        .health-disconnect:disabled {
+          opacity: 0.6;
+          cursor: progress;
+        }
+        .health-connect-btn {
+          margin-top: 1rem;
+        }
+        .health-permission-list {
+          display: grid;
+          gap: 0.55rem;
+          margin: 1rem 0 0;
+          padding: 0;
+          list-style: none;
+        }
+        .health-permission-list li {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          padding: 0.7rem 0.8rem;
+          border: 1px solid #2E2E2E;
+          border-radius: 0.75rem;
+          background: #141414;
+        }
+        .health-permission-list svg {
+          flex: 0 0 auto;
+          color: #8B5CF6;
+        }
+        .health-permission-list strong {
+          display: block;
+          color: #FFF;
+          font-size: 0.85rem;
+        }
+        .health-permission-list span {
+          display: block;
+          color: #A1A1AA;
+          font-size: 0.72rem;
+        }
+        .health-privacy {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.45rem;
+          margin: 1rem 0 0;
+          color: #A1A1AA;
+          font-size: 0.76rem;
+          line-height: 1.45;
+        }
+        .health-privacy svg {
+          flex: 0 0 auto;
+          margin-top: 0.1rem;
+          color: #28CD62;
+        }
       `}</style>
 
       <header className="screen-header">
@@ -400,15 +725,9 @@ function Settings() {
             </button>
           </form>
 
-          {/* Bouton FAQ */}
           <button onClick={() => navigate('/faq')} className="faq-btn">
             <HelpCircle size={20} />
-            FAQ & Support
-          </button>
-
-          <button onClick={() => setIsLogoutOpen(true)} className="logout-btn">
-            <LogOut size={20} />
-            Log Out
+            FAQ &amp; Support
           </button>
 
         </div>
@@ -448,6 +767,156 @@ function Settings() {
           </div>
         )}
       </section>
+
+      <section className="section" aria-labelledby="health-connect-heading">
+        <div className="premium-card">
+          <div className="health-header">
+            <div className="health-icon" aria-hidden="true">
+              <HeartPulse size={22} />
+            </div>
+            <div className="health-heading">
+              <h2 id="health-connect-heading">Health Connect</h2>
+              <p>Steps and active calories that sharpen your AI trainer guidance.</p>
+            </div>
+            <span className={`health-status ${health?.connected ? 'is-connected' : ''}`}>
+              {healthLoading ? 'Checking' : health?.connected ? 'Connected' : 'Not connected'}
+            </span>
+          </div>
+
+          {healthLoading ? (
+            <div className="health-loading" role="status">
+              <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+              Checking Health Connect...
+            </div>
+          ) : health?.connected ? (
+            <>
+              <div className="health-stats">
+                <div className="health-stat">
+                  <Footprints size={18} aria-hidden="true" />
+                  <strong>{health.activity.steps_today.toLocaleString()}</strong>
+                  <span>steps today</span>
+                </div>
+                <div className="health-stat">
+                  <Flame size={18} aria-hidden="true" />
+                  <strong>{health.activity.active_calories_today}</strong>
+                  <span>active kcal today</span>
+                </div>
+              </div>
+              <p className="health-meta">
+                Last synced {formatSyncTime(health.last_sync_at)}. Seven-day average{' '}
+                {health.activity.steps_avg_7d.toLocaleString()} steps and{' '}
+                {health.activity.active_calories_avg_7d} active kcal.
+              </p>
+              {health.source === 'preview' && (
+                <p className="health-preview-note">
+                  Browser preview uses sample activity. The Android app reads Health Connect directly.
+                </p>
+              )}
+              <div className="health-actions">
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={handleSyncHealth}
+                  disabled={healthBusy !== null}
+                >
+                  {healthBusy === 'syncing'
+                    ? <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                    : <RefreshCw size={16} aria-hidden="true" />}
+                  {healthBusy === 'syncing' ? 'Syncing...' : 'Sync now'}
+                </button>
+                <button
+                  type="button"
+                  className="health-disconnect"
+                  onClick={handleDisconnectHealth}
+                  disabled={healthBusy !== null}
+                >
+                  {healthBusy === 'disconnecting'
+                    ? <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+                    : <Unplug size={16} aria-hidden="true" />}
+                  {healthBusy === 'disconnecting' ? 'Disconnecting...' : 'Disconnect'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="health-copy">
+                Health Connect shares steps and active energy from your phone and wearables.
+                SET&PLATE reads only those two data types.
+              </p>
+              <button
+                type="button"
+                className="settings-btn health-connect-btn"
+                onClick={() => setIsConnectOpen(true)}
+                disabled={healthBusy !== null}
+              >
+                {healthBusy === 'connecting'
+                  ? <><Loader2 size={20} className="animate-spin" aria-hidden="true" /> Connecting...</>
+                  : <><HeartPulse size={20} aria-hidden="true" /> Connect Health Connect</>}
+              </button>
+            </>
+          )}
+
+          {healthNotice && (
+            <div
+              className={`settings-notice ${healthNotice.kind}`}
+              role={healthNotice.kind === 'error' ? 'alert' : 'status'}
+            >
+              {healthNotice.kind === 'success'
+                ? <CheckCircle2 size={18} aria-hidden="true" />
+                : <AlertCircle size={18} aria-hidden="true" />}
+              <span>{healthNotice.text}</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="section">
+        <button onClick={() => setIsLogoutOpen(true)} className="logout-btn">
+          <LogOut size={20} />
+          Log Out
+        </button>
+      </section>
+
+      {isConnectOpen && (
+        <div className="modal-backdrop">
+          <div className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="health-connect-title">
+            <p className="eyebrow">Health Connect</p>
+            <h2 id="health-connect-title">Allow SET&PLATE to read your activity?</h2>
+            <p>
+              Your AI trainer uses these daily totals to adapt calorie and training guidance.
+              Nothing else from Health Connect is read.
+            </p>
+            <ul className="health-permission-list">
+              <li>
+                <Footprints size={18} aria-hidden="true" />
+                <div>
+                  <strong>Steps</strong>
+                  <span>Daily step count</span>
+                </div>
+              </li>
+              <li>
+                <Flame size={18} aria-hidden="true" />
+                <div>
+                  <strong>Active calories</strong>
+                  <span>Energy burned above resting</span>
+                </div>
+              </li>
+            </ul>
+            <p className="health-privacy">
+              <ShieldCheck size={16} aria-hidden="true" />
+              Only aggregated daily totals are stored. You can disconnect at any time.
+            </p>
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={() => setIsConnectOpen(false)}>
+                Not now
+              </button>
+              <button className="primary-button" type="button" onClick={handleConnectHealth}>
+                Allow access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isCancelOpen && (
         <div className="modal-backdrop">

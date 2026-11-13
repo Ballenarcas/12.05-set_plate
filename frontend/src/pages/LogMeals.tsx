@@ -868,6 +868,14 @@ export function LogMeals() {
                       {adjustment.weekly_volume} kg.
                     </p>
                   )}
+                  {adjustment.activity?.connected && (
+                    <p className="tip-reasoning">
+                      <strong>Health Connect:</strong>{' '}
+                      {adjustment.activity.steps_avg_7d.toLocaleString()} steps and{' '}
+                      {adjustment.activity.active_calories_avg_7d} active kcal per day. That activity is
+                      included in this suggestion.
+                    </p>
+                  )}
                 </>
               )}
             </div>

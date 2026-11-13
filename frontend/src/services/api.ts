@@ -28,6 +28,12 @@ import type {
 } from '../types/workout'
 import type { WorkoutLogCreate } from '../types/workout'
 import type { PremiumPlan, UserProfile } from '../types'
+import type {
+  HealthActivityDay,
+  HealthActivitySummary,
+  HealthConnectSource,
+  HealthConnectStatus,
+} from '../types/health'
 
 export interface PlanExercise {
   exercise_id: string
@@ -74,6 +80,7 @@ export interface DashboardSummary {
   } | null
   plan: WorkoutPlanSummary | null
   completed_workout_today: CompletedWorkoutToday | null
+  activity: HealthActivitySummary
 }
 
 const SESSION_KEY = 'set_plate_session'
@@ -482,6 +489,79 @@ export async function getHealth(): Promise<{ status: string }> {
   const response = await apiFetch(`${API_URL}/api/v1/health`)
   if (!response.ok) throw new Error("We couldn't reach SET&PLATE. Check your connection and try again.")
   return response.json() as Promise<{ status: string }>
+}
+
+export async function fetchHealthConnectStatus(): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/status`, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't load your Health Connect status. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
+}
+
+export async function connectHealthConnect(
+  source: HealthConnectSource,
+  days: HealthActivityDay[],
+): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/connect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, days }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't connect Health Connect. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
+}
+
+export async function syncHealthConnectActivity(
+  source: HealthConnectSource,
+  days: HealthActivityDay[],
+): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, days }),
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't sync your activity. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
+}
+
+export async function disconnectHealthConnect(): Promise<HealthConnectStatus> {
+  const response = await apiFetch(`${API_URL}/api/v1/health-connect/disconnect`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: unknown } | null
+    throw new Error(
+      typeof body?.detail === 'string'
+        ? body.detail
+        : "We couldn't disconnect Health Connect. Please try again.",
+    )
+  }
+  return response.json() as Promise<HealthConnectStatus>
 }
 
 export async function generateTrainerInsight(
@@ -951,6 +1031,7 @@ export interface CalorieAdjustmentData {
   avg_daily_intake: number
   compliance_rate: number
   weekly_volume: number
+  activity: HealthActivitySummary
 }
 
 export async function fetchCalorieAdjustment(userId: string): Promise<CalorieAdjustmentData> {
